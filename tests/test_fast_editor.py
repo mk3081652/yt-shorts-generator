@@ -252,6 +252,48 @@ class TestFastEditor(unittest.TestCase):
         edit_data = edit_res.json()
         self.assertEqual(edit_data.get("timeline"), {})
 
+    def test_08_sequential_rendering(self):
+        """Tests sequential low-RAM clip generation and B-roll concat."""
+        from PIL import Image
+        from engine.motion import make_blank_clip, create_ken_burns_motion_clip
+        from engine.scene_director import render_broll
+
+        os.makedirs("outputs/test_render", exist_ok=True)
+        img_path = os.path.abspath("outputs/test_render/test_img.jpg")
+        img = Image.new("RGB", (1080, 1920), color=(120, 60, 200))
+        img.save(img_path)
+
+        blank_clip = os.path.abspath("outputs/test_render/test_blank.mp4")
+        ok_blank = make_blank_clip(1.0, blank_clip)
+        self.assertTrue(ok_blank)
+        self.assertTrue(os.path.exists(blank_clip))
+
+        push_clip = os.path.abspath("outputs/test_render/test_push.mp4")
+        ok_push = create_ken_burns_motion_clip(img_path, 1.0, push_clip, motion="push in")
+        self.assertTrue(ok_push)
+        self.assertTrue(os.path.exists(push_clip))
+
+        static_clip = os.path.abspath("outputs/test_render/test_static.mp4")
+        ok_static = create_ken_burns_motion_clip(img_path, 1.0, static_clip, motion="static")
+        self.assertTrue(ok_static)
+        self.assertTrue(os.path.exists(static_clip))
+
+        broll_out = os.path.abspath("outputs/test_render/broll_out.mp4")
+        scenes = [
+            {"image_path": img_path, "media_type": "image", "duration": 1.0, "motion": "push in"},
+            {"image_path": "", "media_type": "blank", "duration": 1.0}
+        ]
+        ok_broll = render_broll(scenes, 2.0, broll_out, "outputs/test_render/temp")
+        self.assertTrue(ok_broll)
+        self.assertTrue(os.path.exists(broll_out))
+
+        # Cleanup
+        try:
+            import shutil
+            shutil.rmtree("outputs/test_render", ignore_errors=True)
+        except Exception:
+            pass
+
 
 if __name__ == "__main__":
     unittest.main()

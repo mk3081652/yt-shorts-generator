@@ -77,13 +77,13 @@ def render_shorts_video(
     voice: str = "en-US-ChristopherNeural",
     voice_rate: str = "+10%",
     subtitle_style: str = "mrbeast",
-    bg_choice: str = "smart_fast",  # Retained for signature backwards compatibility
     bgm_track: str = "mystery_suspense",
     bgm_volume: float = 0.18,
     progress_callback: Optional[Callable[[str, int], None]] = None,
     scene_overrides: Optional[Dict[str, str]] = None,
     preview_scenes: Optional[List[Dict[str, Any]]] = None,
-    session_id: Optional[str] = None
+    session_id: Optional[str] = None,
+    **kwargs
 ) -> Dict[str, Any]:
     """
     Renders 1080x1920 YouTube Short:
@@ -98,7 +98,11 @@ def render_shorts_video(
     final_output_path = os.path.abspath(f"outputs/short_{job_id}.mp4")
 
     try:
-        # Load from session if provided
+        # Check if session has prepared voice timeline matching current voice/rate
+        actual_voice_path = None
+        word_boundaries = None
+        total_duration = None
+
         if session_id:
             sess = load_session(session_id)
             if sess:
@@ -107,20 +111,33 @@ def render_shorts_video(
                 if not preview_scenes:
                     preview_scenes = [s.to_dict() for s in sess.segments]
 
+                tl = getattr(sess, "timeline", {}) or {}
+                if (
+                    tl.get("audio_path") and os.path.exists(tl.get("audio_path")) and
+                    tl.get("voice") == voice and
+                    tl.get("rate") == voice_rate and
+                    tl.get("word_boundaries") and
+                    tl.get("total_duration")
+                ):
+                    actual_voice_path = tl["audio_path"]
+                    word_boundaries = tl["word_boundaries"]
+                    total_duration = float(tl["total_duration"])
+
         # Step 1: Voiceover synthesis
         if progress_callback:
             progress_callback("Generating hyper-realistic AI voiceover...", 15)
 
-        voice_path = os.path.join(work_dir, "voice.mp3")
-        import asyncio
-        actual_voice_path, word_boundaries, total_duration = asyncio.run(
-            generate_speech_with_words(
-                text=script_text,
-                voice=voice,
-                rate=voice_rate,
-                output_audio_path=voice_path
+        if not actual_voice_path:
+            voice_path = os.path.join(work_dir, "voice.mp3")
+            import asyncio
+            actual_voice_path, word_boundaries, total_duration = asyncio.run(
+                generate_speech_with_words(
+                    text=script_text,
+                    voice=voice,
+                    rate=voice_rate,
+                    output_audio_path=voice_path
+                )
             )
-        )
 
         video_duration = total_duration + 0.35
 

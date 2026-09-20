@@ -7,6 +7,7 @@ import os
 import time
 import urllib.request
 import subprocess
+from typing import Any, Union
 import imageio_ffmpeg
 
 FFMPEG_EXE = imageio_ffmpeg.get_ffmpeg_exe()
@@ -35,11 +36,31 @@ def download_image_file(img_url: str, save_path: str, max_retries: int = 3) -> b
     return False
 
 
+MOTION_MAP = {
+    "push in": 0,
+    "zoom in": 0,
+    "push": 0,
+    "pull out": 1,
+    "zoom out": 1,
+    "pull": 1,
+    "pan right": 2,
+    "right": 2,
+    "pan left": 3,
+    "left": 3,
+    "tilt up": 4,
+    "tilt": 4,
+    "up": 4,
+    "static": 5,
+    "none": 5,
+}
+
+
 def create_ken_burns_motion_clip(
     image_path: str,
     duration: float,
     output_path: str,
-    motion_index: int = 0
+    motion_index: int = 0,
+    motion: Any = None
 ) -> bool:
     """
     Turns an image into a 1080x1920 9:16 vertical video with continuous cinematic motion:
@@ -48,40 +69,59 @@ def create_ken_burns_motion_clip(
       2: Horizontal Pan-Right + Zoom (Glides from left to right)
       3: Horizontal Pan-Left + Zoom (Glides from right to left)
       4: Vertical Tilt-Up + Zoom (Glides upwards)
+      5: Static (No camera motion, just scale & crop)
     """
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
     total_frames = max(15, int(duration * 30))
     d_str = str(total_frames)
-    m_type = motion_index % 5
 
-    if m_type == 0:
-        zoom_expr = "min(zoom+0.0022,1.25)"
-        x_expr = "iw/2-(iw/zoom/2)"
-        y_expr = "ih/2-(ih/zoom/2)"
-    elif m_type == 1:
-        zoom_expr = "max(1.25-0.0022*on,1.0)"
-        x_expr = "iw/2-(iw/zoom/2)"
-        y_expr = "ih/2-(ih/zoom/2)"
-    elif m_type == 2:
-        zoom_expr = "min(zoom+0.0015,1.20)"
-        x_expr = f"(iw-iw/zoom)*(on/{d_str})"
-        y_expr = "ih/2-(ih/zoom/2)"
-    elif m_type == 3:
-        zoom_expr = "min(zoom+0.0015,1.20)"
-        x_expr = f"(iw-iw/zoom)*(1-on/{d_str})"
-        y_expr = "ih/2-(ih/zoom/2)"
+    if motion is not None:
+        if isinstance(motion, str):
+            m_type = MOTION_MAP.get(motion.strip().lower(), 0)
+        else:
+            try:
+                m_type = int(motion) % 6
+            except (ValueError, TypeError):
+                m_type = 0
     else:
-        zoom_expr = "min(zoom+0.0016,1.22)"
-        x_expr = "iw/2-(iw/zoom/2)"
-        y_expr = f"(ih-ih/zoom)*(1-on/{d_str})"
+        m_type = int(motion_index) % 6
 
-    vf = (
-        f"scale=1080:1920:force_original_aspect_ratio=increase,"
-        f"crop=1080:1920,"
-        f"zoompan=z='{zoom_expr}':d={d_str}:x='{x_expr}':y='{y_expr}':s=1080x1920:fps=30,"
-        f"eq=contrast=1.06:saturation=1.12,"
-        f"format=yuv420p"
-    )
+    if m_type == 5:
+        vf = (
+            "scale=1080:1920:force_original_aspect_ratio=increase,"
+            "crop=1080:1920,"
+            "eq=contrast=1.06:saturation=1.12,"
+            "format=yuv420p"
+        )
+    else:
+        if m_type == 0:
+            zoom_expr = "min(zoom+0.0022,1.25)"
+            x_expr = "iw/2-(iw/zoom/2)"
+            y_expr = "ih/2-(ih/zoom/2)"
+        elif m_type == 1:
+            zoom_expr = "max(1.25-0.0022*on,1.0)"
+            x_expr = "iw/2-(iw/zoom/2)"
+            y_expr = "ih/2-(ih/zoom/2)"
+        elif m_type == 2:
+            zoom_expr = "min(zoom+0.0015,1.20)"
+            x_expr = f"(iw-iw/zoom)*(on/{d_str})"
+            y_expr = "ih/2-(ih/zoom/2)"
+        elif m_type == 3:
+            zoom_expr = "min(zoom+0.0015,1.20)"
+            x_expr = f"(iw-iw/zoom)*(1-on/{d_str})"
+            y_expr = "ih/2-(ih/zoom/2)"
+        else:
+            zoom_expr = "min(zoom+0.0016,1.22)"
+            x_expr = "iw/2-(iw/zoom/2)"
+            y_expr = f"(ih-ih/zoom)*(1-on/{d_str})"
+
+        vf = (
+            f"scale=1080:1920:force_original_aspect_ratio=increase,"
+            f"crop=1080:1920,"
+            f"zoompan=z='{zoom_expr}':d={d_str}:x='{x_expr}':y='{y_expr}':s=1080x1920:fps=30,"
+            f"eq=contrast=1.06:saturation=1.12,"
+            f"format=yuv420p"
+        )
 
     cmd = [
         FFMPEG_EXE, "-y",
@@ -89,6 +129,7 @@ def create_ken_burns_motion_clip(
         "-i", os.path.abspath(image_path),
         "-vf", vf,
         "-t", f"{duration:.2f}",
+        "-r", "30",
         "-c:v", "libx264",
         "-preset", "ultrafast",
         "-threads", "2",
@@ -122,12 +163,13 @@ def make_blank_clip(duration: float, output_path: str) -> bool:
 def make_video_scene_clip(src_video_path: str, duration: float, output_path: str) -> bool:
     """Scales, crops to 1080x1920, and trims or loops video to exact duration."""
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-    vf = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p"
+    vf = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,format=yuv420p"
     cmd = [
         FFMPEG_EXE, "-y",
         "-stream_loop", "-1",
         "-i", os.path.abspath(src_video_path),
         "-vf", vf,
+        "-r", "30",
         "-t", f"{duration:.2f}",
         "-c:v", "libx264",
         "-preset", "ultrafast",

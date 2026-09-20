@@ -49,10 +49,11 @@ def render_broll(
         )
 
         ok = False
+        motion = sc.get("motion") or sc.get("camera_motion") or idx
         if is_video and img_path and os.path.exists(img_path):
             ok = make_video_scene_clip(img_path, duration, clip_out)
         elif img_path and os.path.exists(img_path):
-            ok = create_ken_burns_motion_clip(img_path, duration, clip_out, motion_index=idx)
+            ok = create_ken_burns_motion_clip(img_path, duration, clip_out, motion=motion)
 
         # If no image or clip generation failed, produce black blank clip
         if not ok or not os.path.exists(clip_out):

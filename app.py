@@ -23,7 +23,7 @@ if hasattr(sys.stderr, 'reconfigure'):
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from engine.tts import get_available_voices, generate_speech_with_words
 from engine.subtitles import STYLE_PRESETS
@@ -149,7 +149,8 @@ class RenderRequest(BaseModel):
     scene_overrides: Optional[Dict[str, str]] = None
     preview_scenes: Optional[List[Dict[str, Any]]] = None
     session_id: Optional[str] = None
-    bg_choice: Optional[str] = None  # Ignored, for backward compatibility
+
+    model_config = ConfigDict(extra="allow")
 
 
 class VoicePreviewRequest(BaseModel):
