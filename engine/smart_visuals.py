@@ -46,7 +46,13 @@ JUNK_IMAGE_PATTERNS = [
     'portal-bullet', 'crystal_clear', 'speaker', 'decrease', 'increase',
     '.pdf', '.djvu', '.svg', '.tif', '.tiff', 'document', 'monograph',
     'magazine', 'journal', 'ia_', 'book', 'text', 'scan', 'treaty',
-    'act', 'letter', 'census', 'transcript', 'page_'
+    'act', 'letter', 'census', 'transcript', 'page_',
+    # Block all technical diagrams, route maps, and charts
+    'map', 'route', 'path', 'chart', 'diagram', 'flight_path', 'atc',
+    'corridor_map', 'inmarsat', 'arc', 'search_area', 'elevation',
+    'graph', 'scheme', 'plan', 'layout', 'blueprint', 'satellite_track',
+    'radar_coverage', 'tarmac', 'danger', 'equipment', 'ladder',
+    'serial_number', 'part_no', 'debris_part', 'investigation_report'
 ]
 
 

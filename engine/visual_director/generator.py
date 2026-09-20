@@ -46,36 +46,40 @@ _POLLINATIONS_EXHAUSTED = False
 
 # Verified, instant, high-resolution 9:16 vertical photos matching core Shorts scenes
 CURATED_SCENE_ASSETS = [
+    # Aviation, Space & Maritime Documentary (domain-specific priority)
+    (["radar", "transponder", "atc", "radar screen", "radar blip"], "https://images.unsplash.com/photo-1508614589041-895b88991e3e?w=720&h=1280&fit=crop"),
+    (["cockpit", "pilot", "flight instrument", "altimeter", "pilot controls"], "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=720&h=1280&fit=crop"),
+    (["passenger cabin", "airline cabin", "passengers", "people on board", "seated in rows"], "https://images.unsplash.com/photo-1542296332-2e4473faf563?w=720&h=1280&fit=crop"),
+    (["black box", "flight recorder", "data recorder", "orange box"], "https://images.unsplash.com/photo-1508614589041-895b88991e3e?w=720&h=1280&fit=crop"),
+    (["sonar", "submarine", "underwater", "seabed", "abyss", "deep sea", "scanned", "ocean floor"], "https://images.unsplash.com/photo-1682687220063-4742bd7fd538?w=720&h=1280&fit=crop"),
+    (["mystery", "unsolved", "silhouette plane", "silhouette"], "https://images.unsplash.com/photo-1519074069444-1ba4ea16e6f7?w=720&h=1280&fit=crop"),
+    (["ocean", "sea", "waves", "indian ocean", "vast water"], "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=720&h=1280&fit=crop"),
+    (["takeoff", "took off", "runway", "departure"], "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=720&h=1280&fit=crop"),
+    (["airplane", "airliner", "aircraft", "boeing"], "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=720&h=1280&fit=crop"),
+
     # Mystery & Hotel Corridor
-    (["room 307", "door", "opening", "creak", "unlocked", "lock"], "https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?w=720&h=1280&fit=crop"),
-    (["guard", "guards", "security", "rushed", "patrol", "officer"], "https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=720&h=1280&fit=crop"),
-    (["corridor", "hallway", "hotel", "quiet", "carpet"], "https://images.unsplash.com/photo-1590490360182-c33d57733427?w=720&h=1280&fit=crop"),
-    (["cctv", "camera", "surveillance", "footage", "monitor", "recording"], "https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=720&h=1280&fit=crop"),
-    (["darkness", "midnight", "night", "shadow", "creepy", "eerie"], "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=720&h=1280&fit=crop"),
+    (["room 307", "hotel door", "brass plaque"], "https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?w=720&h=1280&fit=crop"),
+    (["hotel guard", "security guard", "security rushed", "patrol officer"], "https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=720&h=1280&fit=crop"),
+    (["hotel corridor", "hotel hallway", "carpeted hallway"], "https://images.unsplash.com/photo-1590490360182-c33d57733427?w=720&h=1280&fit=crop"),
+    (["cctv", "surveillance camera", "surveillance footage", "cctv monitor"], "https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=720&h=1280&fit=crop"),
+    (["creepy shadow", "eerie shadow", "dark silhouette"], "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=720&h=1280&fit=crop"),
 
     # Miniature Car Assembly & Workshop
-    (["suspension", "spring", "springs", "absorber"], "https://images.unsplash.com/photo-1486006920555-c77dce18193b?w=720&h=1280&fit=crop"),
-    (["wheel", "wheels", "tire", "tires", "wrench", "bolt", "lug"], "https://images.unsplash.com/photo-1580273916550-e323be2ae537?w=720&h=1280&fit=crop"),
-    (["windshield", "glass", "cockpit", "window"], "https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=720&h=1280&fit=crop"),
-    (["miniature", "scale", "tiny", "mechanic", "mechanics", "model car"], "https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=720&h=1280&fit=crop"),
-    (["workshop", "bench", "assembly", "tools", "wrench"], "https://images.unsplash.com/photo-1581092335397-9583fe92d232?w=720&h=1280&fit=crop"),
-    (["chassis", "car", "sports car", "supercar", "ferrari"], "https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=720&h=1280&fit=crop"),
+    (["suspension", "springs", "shock absorber"], "https://images.unsplash.com/photo-1486006920555-c77dce18193b?w=720&h=1280&fit=crop"),
+    (["car wheel", "lug nut", "tire bolt", "car wrench"], "https://images.unsplash.com/photo-1580273916550-e323be2ae537?w=720&h=1280&fit=crop"),
+    (["car windshield", "sports car window"], "https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=720&h=1280&fit=crop"),
+    (["miniature mechanic", "model car", "scale model"], "https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=720&h=1280&fit=crop"),
+    (["workshop bench", "assembly tools", "mechanic wrench"], "https://images.unsplash.com/photo-1581092335397-9583fe92d232?w=720&h=1280&fit=crop"),
+    (["car chassis", "supercar", "ferrari body"], "https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=720&h=1280&fit=crop"),
 
     # Specific Objects (Suitcase / Key)
-    (["suitcase", "luggage", "red suitcase"], "https://images.unsplash.com/photo-1565026057447-bc90a3dceb87?w=720&h=1280&fit=crop"),
-    (["key", "silver key", "lock"], "https://images.unsplash.com/photo-1582139329536-e7284fece509?w=720&h=1280&fit=crop"),
+    (["suitcase", "red luggage", "red suitcase"], "https://images.unsplash.com/photo-1565026057447-bc90a3dceb87?w=720&h=1280&fit=crop"),
+    (["silver key", "small key", "antique key"], "https://images.unsplash.com/photo-1582139329536-e7284fece509?w=720&h=1280&fit=crop"),
 
     # Location Continuity (Kitchen / Refrigerator)
-    (["kitchen", "countertop", "counter"], "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=720&h=1280&fit=crop"),
-    (["refrigerator", "fridge", "freezer"], "https://images.unsplash.com/photo-1571175443880-49e1d25b2bc5?w=720&h=1280&fit=crop"),
-    (["bottle", "water bottle", "drink"], "https://images.unsplash.com/photo-1523362628745-0c100150b504?w=720&h=1280&fit=crop"),
-
-    # Aviation, Space & Maritime Documentary
-    (["radar", "tracking", "transponder", "atc", "blip", "screen"], "https://images.unsplash.com/photo-1508614589041-895b88991e3e?w=720&h=1280&fit=crop"),
-    (["cockpit", "pilot", "instrument", "altimeter", "controls"], "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=720&h=1280&fit=crop"),
-    (["cabin", "passenger", "passengers", "seated", "seats"], "https://images.unsplash.com/photo-1542296332-2e4473faf563?w=720&h=1280&fit=crop"),
-    (["sonar", "submarine", "underwater", "seabed", "abyss", "deep sea"], "https://images.unsplash.com/photo-1682687220063-4742bd7fd538?w=720&h=1280&fit=crop"),
-    (["black box", "flight recorder", "data recorder", "orange box"], "https://images.unsplash.com/photo-1508614589041-895b88991e3e?w=720&h=1280&fit=crop")
+    (["kitchen countertop", "modern kitchen"], "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=720&h=1280&fit=crop"),
+    (["refrigerator", "fridge interior", "freezer"], "https://images.unsplash.com/photo-1571175443880-49e1d25b2bc5?w=720&h=1280&fit=crop"),
+    (["water bottle", "cold bottle", "drink bottle"], "https://images.unsplash.com/photo-1523362628745-0c100150b504?w=720&h=1280&fit=crop")
 ]
 
 

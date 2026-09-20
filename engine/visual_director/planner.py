@@ -223,31 +223,79 @@ def semantic_fallback_plan(
                 must_show = ["person entering kitchen", "modern kitchen", "countertops"]
                 must_not_show = ["bedroom", "outdoor street"]
 
-        # 5. Domain: Aviation / Documentary
-        elif any(k in s_lower for k in ["radar", "tracking", "transponder", "atc", "blip"]):
+        # 5. Domain: Aviation / Documentary (specific to general)
+        elif any(k in s_lower for k in ["radar", "transponder", "tracking", "atc", "blip", "screen"]):
             shot = "close-up"
             anchor_ref = "radar_screen"
             vis_desc = "Close-up of green glowing radar sweep line and blips in dark air traffic control room."
             p = "Photorealistic vertical 9:16 close-up of glowing green air traffic control radar screen with sweeping line and radar blips in dark control room"
             sq = "air traffic control radar screen glowing green"
             must_show = ["glowing green radar screen", "radar blip", "dark ATC room"]
-            must_not_show = ["airplane exterior", "daylight sky"]
-        elif any(k in s_lower for k in ["black box", "flight recorder", "recorder"]):
+            must_not_show = ["airplane exterior", "daylight sky", "map", "diagram"]
+        elif any(k in s_lower for k in ["cockpit", "pilot", "flight instruments", "controls", "hour into"]):
+            shot = "close-up"
+            anchor_ref = "airplane_cockpit"
+            vis_desc = "Inside airplane cockpit at night, illuminated flight instruments and pilot controls."
+            p = "Photorealistic vertical 9:16 cinematic shot inside commercial airliner cockpit at night, illuminated flight instruments, pilot controls, starry dark clouds outside"
+            sq = "airplane cockpit night flight instruments pilot"
+            must_show = ["cockpit instrument panels", "pilot controls", "night sky outside"]
+            must_not_show = ["map", "diagram", "exterior street"]
+        elif any(k in s_lower for k in ["cabin", "passenger", "passengers", "people on board"]):
+            shot = "medium shot"
+            anchor_ref = "airplane_cabin"
+            vis_desc = "Inside commercial airliner passenger cabin with passengers seated in rows under warm cabin lights."
+            p = "Photorealistic vertical 9:16 medium shot inside commercial airliner passenger cabin, passengers seated in rows under warm cabin lighting, window view"
+            sq = "airliner passenger cabin interior people seated"
+            must_show = ["airplane passenger cabin", "seated passengers", "airplane windows"]
+            must_not_show = ["map", "diagram", "exterior plane"]
+        elif any(k in s_lower for k in ["black box", "flight recorder", "data recorder"]):
             shot = "close-up"
             anchor_ref = "black_box"
             vis_desc = "Bright orange cylindrical flight data recorder resting on the dark ocean floor."
             p = "Photorealistic vertical 9:16 close-up shot of bright orange flight data recorder black box resting on dark seabed, submersible spotlight beam"
             sq = "flight data recorder black box ocean floor"
             must_show = ["bright orange flight recorder", "ocean floor seabed"]
-            must_not_show = ["airplane in sky", "office desk"]
+            must_not_show = ["airplane in sky", "office desk", "map", "diagram"]
+        elif any(k in s_lower for k in ["submarine", "sonar", "underwater", "scanned", "ocean floor", "abyss", "deep sea"]):
+            shot = "close-up"
+            anchor_ref = "deep_sea_search"
+            vis_desc = "Deep-sea research submarine scanning dark ocean floor with powerful spotlights."
+            p = "Photorealistic vertical 9:16 cinematic shot of deep-sea research submarine scanning dark ocean floor with powerful spotlights, deep sea sonar exploration"
+            sq = "deep sea submarine scanning ocean floor searchlights"
+            must_show = ["research submarine", "searchlights", "dark seabed ocean floor"]
+            must_not_show = ["sunny beach", "map", "diagram"]
+        elif any(k in s_lower for k in ["mystery", "unsolved", "what really happened", "remains"]):
+            shot = "cinematic reveal"
+            anchor_ref = "aviation_mystery"
+            vis_desc = "Silhouetted commercial airliner flying through dramatic stormy sunset clouds, mystery atmosphere."
+            p = "Photorealistic vertical 9:16 cinematic silhouette of commercial passenger airplane flying through dramatic stormy sunset clouds, golden hour mystery atmosphere"
+            sq = "airplane silhouette flying sunset clouds"
+            must_show = ["airplane silhouette", "dramatic sunset clouds"]
+            must_not_show = ["map", "diagram", "ground"]
+        elif any(k in s_lower for k in ["ocean", "sea", "waves", "indian ocean", "vast water"]):
+            shot = "wide shot"
+            anchor_ref = "stormy_ocean"
+            vis_desc = "Aerial cinematic view of vast dark stormy ocean waves under ominous night sky."
+            p = "Photorealistic vertical 9:16 aerial wide shot of vast dark ocean waves under stormy night sky, deep turquoise-black water, moody atmosphere"
+            sq = "vast dark ocean waves stormy night"
+            must_show = ["dark stormy ocean", "ocean waves", "night sky"]
+            must_not_show = ["sunny beach", "map", "diagram"]
+        elif any(k in s_lower for k in ["took off", "take off", "takeoff", "departure", "runway", "heading", "flight", "plane", "airliner", "airline", "aircraft"]):
+            shot = "wide establishing shot"
+            anchor_ref = "airplane_takeoff"
+            vis_desc = "Commercial passenger airliner taking off into the night sky from an illuminated runway."
+            p = "Photorealistic vertical 9:16 wide establishing shot of commercial Boeing 777 passenger airliner taking off into night sky from illuminated runway, glowing runway lights, dramatic atmosphere"
+            sq = "commercial passenger airliner takeoff night runway"
+            must_show = ["commercial passenger airplane", "taking off", "night runway"]
+            must_not_show = ["map", "diagram", "daylight beach", "drone"]
         else:
-            primary_topic = find_primary_wikipedia_topic(script_text)
             kws = clean_words(scene_text)
             vis_desc = f"{shot.title()} illustrating {scene_text[:35]}..."
-            p = f"Photorealistic vertical 9:16 cinematic {shot} of {primary_topic}, {' '.join(kws[:3])}, dramatic lighting, 8k, photorealistic"
-            sq = f"{primary_topic} {' '.join(kws[:2])}"
-            must_show = [primary_topic]
-            must_not_show = ["blurry", "watermark"]
+            clean_subject = "commercial airliner in sky" if any(x in script_text.lower() for x in ["flight", "plane", "aviation", "airliner", "aircraft"]) else (' '.join(kws[:3]) if kws else "cinematic scene")
+            p = f"Photorealistic vertical 9:16 cinematic {shot} of {clean_subject}, dramatic lighting, 8k, photorealistic"
+            sq = f"{clean_subject} cinematic"
+            must_show = [clean_subject]
+            must_not_show = ["blurry", "watermark", "map", "diagram"]
 
         # Enforce continuity
         p = enforce_continuity_in_prompt(p, continuity_bible, scene_text)
