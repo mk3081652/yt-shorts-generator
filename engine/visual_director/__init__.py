@@ -24,8 +24,7 @@ from engine.visual_director.generator import (
     generate_and_validate_scene,
     generate_validated_scenes,
     generate_cloudflare_flux_image,
-    generate_pollinations_image,
-    get_instant_curated_visual
+    generate_pollinations_image
 )
 from engine.visual_director.prompts import (
     VISUAL_DIRECTOR_SYSTEM_PROMPT,
@@ -48,7 +47,6 @@ __all__ = [
     "generate_validated_scenes",
     "generate_cloudflare_flux_image",
     "generate_pollinations_image",
-    "get_instant_curated_visual",
     "VISUAL_DIRECTOR_SYSTEM_PROMPT",
     "VALIDATOR_SYSTEM_PROMPT",
     "STORY_ANALYZER_SYSTEM_PROMPT"

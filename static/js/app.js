@@ -464,15 +464,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (score < 60) scoreClass = 'score-low';
             else if (score < 80) scoreClass = 'score-med';
 
-            // Source tier badge if not primary AI
+            // Source tier badge
             const tier = (sc.source_tier || '').toLowerCase();
             let tierBadge = '';
-            if (tier.includes('stock') || tier.includes('curated')) {
-                tierBadge = `<span class="scene-tier-badge tier-stock" title="Source: Curated Stock Photo">STOCK PHOTO</span>`;
-            } else if (tier.includes('openverse') || tier.includes('wikimedia') || tier.includes('archive')) {
-                tierBadge = `<span class="scene-tier-badge tier-archive" title="Source: Authentic Photo Archive">ARCHIVE</span>`;
-            } else if (tier.includes('pollinations') || tier.includes('fallback')) {
-                tierBadge = `<span class="scene-tier-badge tier-fallback" title="Source: Fallback AI">FALLBACK AI</span>`;
+            if (tier.includes('failsafe') || tier.includes('failed') || tier.includes('dark_canvas')) {
+                tierBadge = `<span class="scene-tier-badge tier-failed" title="AI Generation Failed - Dark Canvas Failsafe">⚠️ AI GENERATION FAILED</span>`;
+            } else if (tier.includes('pollinations')) {
+                tierBadge = `<span class="scene-tier-badge tier-fallback" title="Source: Pollinations AI">POLLINATIONS AI</span>`;
+            } else if (tier.includes('flux')) {
+                tierBadge = `<span class="scene-tier-badge tier-primary" title="Source: Cloudflare FLUX">FLUX AI</span>`;
+            } else if (tier.includes('imagen')) {
+                tierBadge = `<span class="scene-tier-badge tier-primary" title="Source: Google Imagen 3">IMAGEN 3</span>`;
             }
 
             card.innerHTML = `
@@ -483,7 +485,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="scene-preview-box">
                     <img src="${displayImgUrl}" class="scene-thumb" id="sceneImg_${sc.scene_id}" alt="Scene ${sc.scene_id + 1}" loading="lazy">
                     <span class="scene-badge ${isCustom ? 'badge-custom' : 'badge-auto'}" id="sceneBadge_${sc.scene_id}" title="${sc.visual_description || ''}">
-                        ${isCustom ? 'CUSTOM' : (sc.shot_type ? sc.shot_type.toUpperCase() : (sc.prompt || bgSelect.value === 'ai_gemini' ? 'AI ULTRA' : 'AUTHENTIC'))}
+                        ${isCustom ? 'CUSTOM' : (tier.includes('failsafe') || tier.includes('failed') || tier.includes('dark_canvas') ? 'DARK CANVAS' : (sc.shot_type ? sc.shot_type.toUpperCase() : 'AI ULTRA'))}
                     </span>
                     <span class="scene-score-badge ${scoreClass}" title="Quality Score: ${score}/100">
                         ${score}%

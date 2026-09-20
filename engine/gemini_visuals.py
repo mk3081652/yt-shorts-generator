@@ -39,10 +39,8 @@ from engine.smart_visuals import (
     download_image_file
 )
 
-# Canonical visual generation and curated assets imported from generator
+# Canonical visual generation imported from generator
 from engine.visual_director.generator import (
-    CURATED_SCENE_ASSETS,
-    get_instant_curated_visual,
     generate_cloudflare_flux_image,
     generate_pollinations_image,
     single_visual_attempt
@@ -51,19 +49,20 @@ from engine.visual_director.generator import (
 
 def generate_scene_image_multi_tier(
     prompt: str,
-    search_query: str,
-    output_path: str,
+    search_query: str = "",
+    output_path: str = "",
     primary_topic: str = "",
     exclude_urls: Optional[Set[str]] = None,
     scene_text: str = ""
 ) -> bool:
-    """Canonical multi-tier visual generator delegating to single_visual_attempt."""
-    return single_visual_attempt(
+    """Canonical AI-only visual generator delegating to single_visual_attempt."""
+    ok, tier = single_visual_attempt(
         prompt=prompt,
         search_query=search_query,
         output_path=output_path,
         scene_text=scene_text
     )
+    return ok and tier != "dark_canvas_failsafe"
 
 
 
@@ -223,15 +222,16 @@ def generate_gemini_ai_broll(
         if not ok and sc.get("image_url") and "pollinations.ai" not in sc.get("image_url", ""):
             ok = download_image_file(sc["image_url"], img_path)
 
-        # 3. Generate multi-tier if still needed
+        # 3. Generate AI if still needed
         if not ok:
             from engine.visual_director.generator import single_visual_attempt
             prompt_to_use = sc.get("prompt") or sc.get("image_prompt") or sc.get("text", "")
             sq_to_use = sc.get("search_query", "")
-            ok = single_visual_attempt(prompt_to_use, sq_to_use, img_path, scene_text=sc.get("text", ""))
+            ok_res, tier = single_visual_attempt(prompt_to_use, sq_to_use, img_path, scene_text=sc.get("text", ""))
+            ok = ok_res and tier != "dark_canvas_failsafe"
 
         # 4. Ultimate failsafe: clean dark cinematic canvas for this cut
-        if not ok or not os.path.exists(img_path):
+        if not ok or not os.path.exists(img_path) or sc.get("source_tier") == "dark_canvas_failsafe":
             print(f"[Failsafe] Creating dark cinematic canvas for Scene {idx+1}...")
             canvas_cmd = [
                 FFMPEG_EXE, "-y",

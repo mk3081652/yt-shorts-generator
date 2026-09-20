@@ -22,6 +22,7 @@ print("=================================================================\n")
 
 total_scenes = 0
 passed_scenes = 0
+failsafe_scenes = 0
 
 for genre, script in scripts.items():
     print(f"\n>>> TESTING GENRE: {genre}")
@@ -38,7 +39,7 @@ for genre, script in scripts.items():
         prompt = sc.get("image_prompt")
         
         out_img = f"outputs/test_genres/{genre.lower().replace(' ', '_')}_{idx}.jpg"
-        ok = single_visual_attempt(
+        ok, tier = single_visual_attempt(
             prompt=prompt,
             search_query=sq,
             output_path=out_img,
@@ -46,16 +47,20 @@ for genre, script in scripts.items():
             used_urls=used_urls
         )
         
-        file_size = os.path.getsize(out_img) if (ok and os.path.exists(out_img)) else 0
-        if ok and file_size > 5000:
+        file_size = os.path.getsize(out_img) if os.path.exists(out_img) else 0
+        if ok and tier != "dark_canvas_failsafe" and file_size > 5000:
             passed_scenes += 1
-            status = f"PASS ({file_size // 1024} KB)"
+            status = f"PASS ({tier}, {file_size // 1024} KB)"
+        elif tier == "dark_canvas_failsafe":
+            failsafe_scenes += 1
+            status = f"FAILSAFE (dark canvas, {file_size // 1024} KB)"
         else:
             status = "FAIL"
             
         print(f"    [{scene_id}] \"{txt[:40]}...\"")
-        print(f"        Query: '{sq}' | Status: {status}")
+        print(f"        Query: '{sq}' | Tier: {tier} | Status: {status}")
 
 print(f"\n=================================================================")
-print(f"FINAL RESULT: {passed_scenes}/{total_scenes} scenes successfully matched and downloaded!")
-print("=================================================================")
+print(f"FINAL RESULT: {passed_scenes}/{total_scenes} AI scenes generated, {failsafe_scenes}/{total_scenes} dark canvas failsafes!")
+print(f"=================================================================")
+

@@ -35,8 +35,7 @@ from engine.visual_director.validator import (
 )
 from engine.smart_visuals import (
     clean_words,
-    download_image_file,
-    search_targeted_scene_image
+    download_image_file
 )
 
 # Load local .env file if it exists
@@ -60,120 +59,19 @@ DEFAULT_GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 _CLOUDFLARE_EXHAUSTED = False
 _POLLINATIONS_EXHAUSTED = False
 
-OPENVERSE_JUNK = [
-    'map', 'route', 'path', 'chart', 'diagram', 'flight_path', 'atc',
-    'corridor_map', 'inmarsat', 'arc', 'search_area', 'elevation',
-    'graph', 'scheme', 'plan', 'layout', 'blueprint', 'satellite_track',
-    'radar_coverage', 'tarmac', 'danger', 'equipment', 'ladder',
-    'serial_number', 'part_no', 'debris_part', 'investigation_report',
-    'flag', 'logo', 'icon', 'symbol', 'question_mark', 'edit-clear', 
-    'commons-logo', 'duplicate', 'aviacion', 'wikiquote', 'disambig',
-    'stub', 'padlock', 'shackle', 'button', 'arrow', 'placeholder',
-    '.pdf', '.djvu', '.svg', '.tif', '.tiff', 'document', 'monograph',
-    'magazine', 'journal', 'book', 'text', 'scan', 'treaty',
-    'act', 'letter', 'census', 'transcript', 'page_'
-]
-
 from engine.log_utils import log_tier_failure
 
-def search_openverse_tall_image(query: str, used_urls: Optional[Set[str]] = None) -> Optional[Dict[str, Any]]:
-    """
-    Directly searches the Openverse catalog of 700M+ CC images for native tall/vertical (9:16) photos.
-    Guarantees no maps, diagrams, or technical schematics.
-    """
-    if not query or len(query.strip()) < 2:
-        return None
-    clean_q = re.sub(r'[^a-zA-Z0-9\s]', ' ', query).strip()
-    words = clean_q.split()
-    candidates = []
-    if len(words) >= 2:
-        candidates.append(" ".join(words[:2]))
-    if words:
-        candidates.append(words[0])
-    if len(words) >= 3:
-        candidates.append(" ".join(words[1:3]))
-        
-    headers = {'User-Agent': 'ViralShortsStudio/1.0 (contact@myshortsapp.com)'}
-    for c in candidates:
-        url = f"https://api.openverse.org/v1/images/?q={urllib.parse.quote(c)}&page_size=8&aspect_ratio=tall"
-        try:
-            req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=6) as r:
-                data = json.loads(r.read().decode('utf-8'))
-                results = data.get('results', [])
-                for item in results:
-                    title = item.get('title', '')
-                    t_lower = title.lower()
-                    if any(j in t_lower for j in OPENVERSE_JUNK):
-                        continue
-                    img_url = item.get('url')
-                    if img_url and (used_urls is None or img_url not in used_urls):
-                        return {
-                            'title': title,
-                            'url': img_url,
-                            'source': 'openverse'
-                        }
-        except Exception as e:
-            log_tier_failure("Openverse Search", e, context=c)
-    return None
-
-# Verified, instant, high-resolution 9:16 vertical photos matching core Shorts scenes
-CURATED_SCENE_ASSETS = [
-    # Aviation, Space & Maritime Documentary (domain-specific priority)
-    (["radar", "transponder", "atc", "radar screen", "radar blip"], "https://images.unsplash.com/photo-1508614589041-895b88991e3e?w=720&h=1280&fit=crop"),
-    (["cockpit", "pilot", "flight instrument", "altimeter", "pilot controls"], "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=720&h=1280&fit=crop"),
-    (["passenger cabin", "airline cabin", "passengers", "people on board", "seated in rows"], "https://images.unsplash.com/photo-1542296332-2e4473faf563?w=720&h=1280&fit=crop"),
-    (["black box", "flight recorder", "data recorder", "orange box"], "https://images.unsplash.com/photo-1508614589041-895b88991e3e?w=720&h=1280&fit=crop"),
-    (["sonar", "submarine", "underwater", "seabed", "abyss", "deep sea", "scanned", "ocean floor"], "https://images.unsplash.com/photo-1682687220063-4742bd7fd538?w=720&h=1280&fit=crop"),
-    (["mystery", "unsolved", "silhouette plane", "silhouette"], "https://images.unsplash.com/photo-1519074069444-1ba4ea16e6f7?w=720&h=1280&fit=crop"),
-    (["ocean", "sea", "waves", "indian ocean", "vast water"], "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=720&h=1280&fit=crop"),
-    (["takeoff", "took off", "runway", "departure"], "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=720&h=1280&fit=crop"),
-    (["airplane", "airliner", "aircraft", "boeing"], "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=720&h=1280&fit=crop"),
-
-    # Mystery & Hotel Corridor
-    (["room 307", "hotel door", "brass plaque"], "https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?w=720&h=1280&fit=crop"),
-    (["hotel guard", "security guard", "security rushed", "patrol officer"], "https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=720&h=1280&fit=crop"),
-    (["hotel corridor", "hotel hallway", "carpeted hallway"], "https://images.unsplash.com/photo-1590490360182-c33d57733427?w=720&h=1280&fit=crop"),
-    (["cctv", "surveillance camera", "surveillance footage", "cctv monitor"], "https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=720&h=1280&fit=crop"),
-    (["creepy shadow", "eerie shadow", "dark silhouette"], "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=720&h=1280&fit=crop"),
-
-    # Miniature Car Assembly & Workshop
-    (["suspension", "springs", "shock absorber"], "https://images.unsplash.com/photo-1486006920555-c77dce18193b?w=720&h=1280&fit=crop"),
-    (["car wheel", "lug nut", "tire bolt", "car wrench"], "https://images.unsplash.com/photo-1580273916550-e323be2ae537?w=720&h=1280&fit=crop"),
-    (["car windshield", "sports car window"], "https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=720&h=1280&fit=crop"),
-    (["miniature mechanic", "model car", "scale model"], "https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=720&h=1280&fit=crop"),
-    (["workshop bench", "assembly tools", "mechanic wrench"], "https://images.unsplash.com/photo-1581092335397-9583fe92d232?w=720&h=1280&fit=crop"),
-    (["car chassis", "supercar", "ferrari body"], "https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=720&h=1280&fit=crop"),
-
-    # Specific Objects (Suitcase / Key)
-    (["suitcase", "red luggage", "red suitcase"], "https://images.unsplash.com/photo-1565026057447-bc90a3dceb87?w=720&h=1280&fit=crop"),
-    (["silver key", "small key", "antique key"], "https://images.unsplash.com/photo-1582139329536-e7284fece509?w=720&h=1280&fit=crop"),
-
-    # Location Continuity (Kitchen / Refrigerator)
-    (["kitchen countertop", "modern kitchen"], "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=720&h=1280&fit=crop"),
-    (["refrigerator", "fridge interior", "freezer"], "https://images.unsplash.com/photo-1571175443880-49e1d25b2bc5?w=720&h=1280&fit=crop"),
-    (["water bottle", "cold bottle", "drink bottle"], "https://images.unsplash.com/photo-1523362628745-0c100150b504?w=720&h=1280&fit=crop")
-]
-
-
-def get_instant_curated_visual(text: str, search_query: str, output_path: str) -> bool:
-    """Matches scene concepts to verified 9:16 vertical photos in ~300ms."""
-    combined = f"{text} {search_query}".lower()
-    for keywords, img_url in CURATED_SCENE_ASSETS:
-        if any(k in combined for k in keywords):
-            try:
-                req = urllib.request.Request(img_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
-                with urllib.request.urlopen(req, timeout=4) as resp:
-                    data = resp.read()
-                    if len(data) > 5000:
-                        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-                        with open(output_path, 'wb') as f:
-                            f.write(data)
-                        print(f"[Instant Visual] Matched '{keywords[0]}' -> downloaded {len(data)} bytes in 0.3s")
-                        return True
-            except Exception as e:
-                print(f"[Instant Visual] Failed to fetch {img_url}: {e}")
-    return False
+def create_dark_canvas_image(output_path: str) -> bool:
+    """Creates a clean 1080x1920 dark cinematic canvas (#0d1117) as failsafe."""
+    try:
+        from PIL import Image
+        img = Image.new("RGB", (1080, 1920), color=(13, 17, 23))
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+        img.save(output_path, "JPEG", quality=90)
+        return True
+    except Exception as e:
+        print(f"[Dark Canvas] Error creating failsafe image: {e}")
+        return False
 
 
 def generate_cloudflare_flux_image(prompt: str, output_path: str, max_retries: int = 1) -> bool:
@@ -294,77 +192,38 @@ def generate_google_imagen_image(prompt: str, output_path: str, api_key: Optiona
 
 def single_visual_attempt(
     prompt: str,
-    search_query: str,
-    output_path: str,
+    search_query: str = "",
+    output_path: str = "",
     scene_text: str = "",
     used_urls: Optional[Set[str]] = None,
     api_key: Optional[str] = None,
     generation_mode: str = "ai_flux_primary"
 ) -> Tuple[bool, str]:
-    """Executes a single visual acquisition attempt across tiers adhering to generation_mode."""
-    if generation_mode in ("ai_flux_primary", "ai_primary"):
-        # Primary Tier 1: Google Imagen 3 (Exact AI generation for script prompt)
-        if generate_google_imagen_image(prompt, output_path, api_key=api_key):
-            return True, "ai_imagen"
+    """
+    Executes a single visual acquisition attempt using AI generation ONLY:
+    1. Google Imagen 3 (if generate_google_imagen_image exists and is configured)
+    2. Cloudflare FLUX (generate_cloudflare_flux_image)
+    3. Pollinations AI (generate_pollinations_image)
+    4. Dark cinematic canvas failsafe (if all AI tiers fail)
+    Zero stock/archive photo fallback tiers.
+    """
+    # Tier 1: Google Imagen 3
+    if generate_google_imagen_image(prompt, output_path, api_key=api_key):
+        return True, "ai_imagen"
 
-        # Primary Tier 2: Cloudflare FLUX
-        if generate_cloudflare_flux_image(prompt, output_path):
-            return True, "ai_flux"
+    # Tier 2: Cloudflare FLUX
+    if generate_cloudflare_flux_image(prompt, output_path):
+        return True, "ai_flux"
 
-        # Fall through ONLY if primary AI models fail outright
-        # Secondary Tier 3: Pollinations AI
-        if generate_pollinations_image(prompt, output_path):
-            return True, "ai_pollinations"
+    # Tier 3: Pollinations AI
+    if generate_pollinations_image(prompt, output_path):
+        return True, "ai_pollinations"
 
-        # Fallback Tier 4: Openverse Native Tall / Vertical Image Search
-        if search_query:
-            if used_urls is None:
-                used_urls = set()
-            openverse_match = search_openverse_tall_image(search_query, used_urls)
-            if openverse_match and openverse_match.get("url"):
-                used_urls.add(openverse_match["url"])
-                if download_image_file(openverse_match["url"], output_path):
-                    print(f"[Openverse 9:16] Found tall photo '{openverse_match.get('title')[:40]}' for '{search_query}'")
-                    return True, "openverse_tall"
+    # Tier 4: Dark cinematic canvas failsafe
+    if create_dark_canvas_image(output_path):
+        return True, "dark_canvas_failsafe"
 
-        # Fallback Tier 5: Targeted authentic photo (Wikimedia Commons)
-        if search_query:
-            if used_urls is None:
-                used_urls = set()
-            auth = search_targeted_scene_image(search_query, used_urls)
-            if auth and auth.get("url"):
-                used_urls.add(auth["url"])
-                if download_image_file(auth["url"], output_path):
-                    return True, "wikimedia"
-
-        # Fallback Tier 6: Instant Curated Visual
-        check_text = f"{scene_text} {prompt}"
-        if get_instant_curated_visual(check_text, search_query, output_path):
-            return True, "curated_stock"
-
-    else:
-        # Authentic primary
-        if search_query:
-            if used_urls is None:
-                used_urls = set()
-            openverse_match = search_openverse_tall_image(search_query, used_urls)
-            if openverse_match and openverse_match.get("url"):
-                used_urls.add(openverse_match["url"])
-                if download_image_file(openverse_match["url"], output_path):
-                    return True, "openverse_tall"
-
-        check_text = f"{scene_text} {prompt}"
-        if get_instant_curated_visual(check_text, search_query, output_path):
-            return True, "curated_stock"
-
-        if generate_google_imagen_image(prompt, output_path, api_key=api_key):
-            return True, "ai_imagen"
-        if generate_cloudflare_flux_image(prompt, output_path):
-            return True, "ai_flux"
-        if generate_pollinations_image(prompt, output_path):
-            return True, "ai_pollinations"
-
-    return False, "none"
+    return False, "ai_failed"
 
 
 def generate_and_validate_scene(
@@ -380,7 +239,7 @@ def generate_and_validate_scene(
     """
     Executes the visual generation, validation, and regeneration loop for a single scene:
     - Checks if manual override exists (source: 'manual'); if so, preserves it completely.
-    - Attempt 1: generate/search with scene['image_prompt'].
+    - Attempt 1: generate with scene['image_prompt'] using AI-only tiers.
     - Validate against narration, must_show, must_not_show.
     - If score < 80: regenerate using correction_prompt (up to 2 retries = 3 attempts total).
     - Best-Image Selection: picks the attempt with the highest validation score.
@@ -414,28 +273,36 @@ def generate_and_validate_scene(
             generation_mode=generation_mode
         )
 
-        # Validate attempt: real Gemini Vision if API key and image file exist, else heuristic
-        resolved_key = api_key or os.environ.get("GEMINI_API_KEY", "")
-        if resolved_key and os.path.exists(attempt_path) and os.path.getsize(attempt_path) > 1000:
-            val_res = validate_image_with_gemini_vision(
-                narration=narration,
-                visual_description=vis_desc,
-                must_show=must_show,
-                must_not_show=must_not_show,
-                image_path=attempt_path,
-                continuity_bible=continuity_bible,
-                api_key=resolved_key,
-                call_stats=call_stats
-            )
+        if tier in ("dark_canvas_failsafe", "ai_failed"):
+            val_res = {
+                "score": 0,
+                "accepted": False,
+                "reason": "AI generation failed across all tiers; dark canvas failsafe used.",
+                "correction_prompt": ""
+            }
         else:
-            val_res = heuristic_validate_scene(
-                narration=narration,
-                prompt=current_prompt,
-                must_show=must_show,
-                must_not_show=must_not_show,
-                continuity_bible=continuity_bible,
-                visual_description=vis_desc
-            )
+            # Validate attempt: real Gemini Vision if API key and image file exist, else heuristic
+            resolved_key = api_key or os.environ.get("GEMINI_API_KEY", "")
+            if resolved_key and os.path.exists(attempt_path) and os.path.getsize(attempt_path) > 1000:
+                val_res = validate_image_with_gemini_vision(
+                    narration=narration,
+                    visual_description=vis_desc,
+                    must_show=must_show,
+                    must_not_show=must_not_show,
+                    image_path=attempt_path,
+                    continuity_bible=continuity_bible,
+                    api_key=resolved_key,
+                    call_stats=call_stats
+                )
+            else:
+                val_res = heuristic_validate_scene(
+                    narration=narration,
+                    prompt=current_prompt,
+                    must_show=must_show,
+                    must_not_show=must_not_show,
+                    continuity_bible=continuity_bible,
+                    visual_description=vis_desc
+                )
         score = val_res["score"]
         attempts.append({
             "attempt": attempt_idx + 1,

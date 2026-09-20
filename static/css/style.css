@@ -1586,4 +1586,71 @@ body {
     color: #ef4444;
 }
 
+/* ==========================================
+   SCENE SCORE & TIER BADGES
+   ========================================== */
+.scene-score-badge {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    z-index: 5;
+    letter-spacing: 0.02em;
+}
+
+.scene-score-badge.score-high {
+    background: rgba(16, 185, 129, 0.9);
+    color: #fff;
+    box-shadow: 0 2px 6px rgba(16, 185, 129, 0.4);
+}
+
+.scene-score-badge.score-med {
+    background: rgba(245, 158, 11, 0.9);
+    color: #fff;
+    box-shadow: 0 2px 6px rgba(245, 158, 11, 0.4);
+}
+
+.scene-score-badge.score-low {
+    background: rgba(239, 68, 68, 0.9);
+    color: #fff;
+    box-shadow: 0 2px 6px rgba(239, 68, 68, 0.4);
+}
+
+.scene-tier-badge {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    z-index: 5;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.scene-tier-badge.tier-failed {
+    background: rgba(220, 38, 38, 0.92);
+    color: #fff;
+    border: 1px solid #f87171;
+    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.5);
+    font-weight: 800;
+}
+
+.scene-tier-badge.tier-fallback {
+    background: rgba(139, 92, 246, 0.85);
+    color: #fff;
+    box-shadow: 0 2px 6px rgba(139, 92, 246, 0.3);
+}
+
+.scene-tier-badge.tier-primary {
+    background: rgba(59, 130, 246, 0.85);
+    color: #fff;
+    box-shadow: 0 2px 6px rgba(59, 130, 246, 0.3);
+}
+
+
 

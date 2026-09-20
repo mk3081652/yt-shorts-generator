@@ -231,59 +231,6 @@ def fetch_authentic_article_media_pool(topic_title: str) -> List[Dict[str, Any]]
     return media_pool
 
 
-def search_targeted_scene_image(query: str, exclude_urls: Set[str]) -> Optional[Dict[str, Any]]:
-    """Search Wikimedia Commons for a specific scene's phrase with compliant headers and tiered queries."""
-    if not query:
-        return None
-    headers = {'User-Agent': 'ViralShortsStudio/1.0 (https://github.com/mk3081652/yt-shorts-generator; contact@example.com)'}
-    
-    clean_words_list = clean_words(query)
-    candidates = []
-    if len(clean_words_list) >= 2:
-        candidates.append(" ".join(clean_words_list[:2]))
-    if clean_words_list:
-        candidates.append(clean_words_list[0])
-    if len(clean_words_list) >= 3:
-        candidates.append(" ".join(clean_words_list[1:3]))
-    if not candidates:
-        candidates = [query[:30]]
-
-    for c in candidates:
-        if len(c) < 3:
-            continue
-        url = (
-            "https://commons.wikimedia.org/w/api.php?action=query"
-            f"&generator=search&gsrsearch={urllib.parse.quote(c)}"
-            "&gsrnamespace=6&gsrlimit=15"
-            "&prop=imageinfo&iiprop=url|size|mime&iiurlwidth=1080&format=json"
-        )
-        try:
-            req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=6) as resp:
-                data = json.loads(resp.read().decode('utf-8'))
-                for k, p in data.get('query', {}).get('pages', {}).items():
-                    title = p.get('title', '')
-                    t_lower = title.lower()
-                    if any(j in t_lower for j in JUNK_IMAGE_PATTERNS):
-                        continue
-                    infos = p.get('imageinfo', [])
-                    if infos:
-                        info = infos[0]
-                        mime = info.get('mime', '').lower()
-                        if not any(m in mime for m in ['jpeg', 'jpg', 'png', 'webp']):
-                            continue
-                        u = info.get('thumburl') or info.get('url')
-                        if u and u not in exclude_urls:
-                            clean_t = title.replace('File:', '').replace('_', ' ')
-                            return {
-                                'title': clean_t,
-                                'url': u,
-                                'keywords': clean_words(clean_t)
-                            }
-        except Exception:
-            pass
-    return None
-
 
 def download_image_file(img_url: str, save_path: str, max_retries: int = 3) -> bool:
     """Download image to disk with browser User-Agent and automatic retries."""
