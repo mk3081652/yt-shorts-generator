@@ -220,20 +220,43 @@ def semantic_fallback_plan(
             must_show = [sq.split()[0]]
             must_not_show = ["map", "route", "chart", "diagram", "technical drawing", "blurry", "watermark", "scanned document", "text overlay"]
         else:
-            # Dynamic semantic fallback for any unmapped sentence
+            # Dynamic semantic fallback grounded in story analysis
+            setting = (story_analysis.get("setting") or "").strip()
+            visual_style = (story_analysis.get("visual_style") or "cinematic realistic").strip()
+            tone = (story_analysis.get("tone") or "dramatic").strip()
+            main_chars = story_analysis.get("main_characters") or []
+            main_char = (main_chars[0].get("description") or main_chars[0].get("name_or_role") or "").strip() if main_chars else ""
+            imp_objs = story_analysis.get("important_objects") or []
+            imp_obj = (imp_objs[0].get("description") or imp_objs[0].get("name") or "").strip() if imp_objs else ""
+
             kws = clean_words(scene_text)
-            # Filter out numbers and common action verbs
             filtered_kws = [
                 w for w in kws 
                 if not w.isdigit() and w not in {
                     'began', 'lay', 'walked', 'rolled', 'turned', 'went', 'came',
                     'thousands', 'millions', 'hundreds', 'year', 'years', 'decade',
-                    'great', 'massive', 'first', 'last', 'really', 'simply', 'later'
+                    'great', 'massive', 'first', 'last', 'really', 'simply', 'later',
+                    'became', 'started', 'taking', 'could', 'would', 'should',
+                    'might', 'must', 'every', 'never', 'their', 'there', 'where'
                 }
             ]
-            primary_nouns = filtered_kws[:2] if len(filtered_kws) >= 2 else (filtered_kws[:1] if filtered_kws else ["cinematic scene"])
-            concrete_subject = " ".join(primary_nouns)
-            
+
+            # Ground subject in story characters, objects, or filtered nouns
+            if main_char and any(w in s_lower for w in clean_words(main_char)):
+                subject_anchor = main_char
+            elif imp_obj and any(w in s_lower for w in clean_words(imp_obj)):
+                subject_anchor = imp_obj
+            elif filtered_kws:
+                subject_anchor = " ".join(filtered_kws[:2])
+            elif main_char:
+                subject_anchor = main_char
+            elif imp_obj:
+                subject_anchor = imp_obj
+            elif setting:
+                subject_anchor = setting
+            else:
+                subject_anchor = "cinematic scene"
+
             # Deduce shot type from text action
             if any(w in s_lower for w in ["in", "outside", "city", "street", "palace", "landscape", "sky", "mountain", "vast", "empty"]):
                 shot = "wide establishing shot"
@@ -247,11 +270,23 @@ def semantic_fallback_plan(
             else:
                 shot = "medium shot"
                 motion = "slow push in"
-                
-            vis_desc = f"{shot.title()} showing {concrete_subject}."
-            p = f"Photorealistic vertical 9:16 cinematic {shot} of {concrete_subject}, dramatic volumetric lighting, cinematic color grading, 8k photorealistic"
-            sq = concrete_subject
-            must_show = [primary_nouns[0] if primary_nouns else "subject"]
+
+            # Formulate grounded prompt and description
+            context_clause = f"in {setting}" if setting and setting.lower() not in subject_anchor.lower() else ""
+            style_clause = f"{visual_style}, {tone} atmosphere" if visual_style else "cinematic lighting"
+
+            vis_desc = f"{shot.title()} showing {subject_anchor} {context_clause}.".strip()
+            p = f"Photorealistic vertical 9:16 cinematic {shot} of {subject_anchor} {context_clause}, {style_clause}, 8k resolution, photorealistic, dramatic volumetric lighting"
+
+            # Clean search query (1-3 words max, grounded in primary entity)
+            if filtered_kws:
+                sq = " ".join(filtered_kws[:2])
+            elif subject_anchor:
+                sq = " ".join(clean_words(subject_anchor)[:2])
+            else:
+                sq = "cinematic scene"
+
+            must_show = [filtered_kws[0] if filtered_kws else (clean_words(subject_anchor)[0] if clean_words(subject_anchor) else "subject")]
             must_not_show = ["map", "route", "chart", "diagram", "technical drawing", "blurry", "watermark", "scanned document", "text overlay"]
 
         # Enforce continuity
@@ -320,7 +355,7 @@ def plan_visual_storyboard(
     resolved_key = api_key or os.environ.get("GEMINI_API_KEY", "")
 
     if not resolved_key:
-        print("[Visual Director] No Gemini API key provided. Using semantic fallback planner.")
+        print("[Visual Director] WARNING: No GEMINI_API_KEY configured. Running in degraded semantic fallback mode.")
         return semantic_fallback_plan(script_clean, total_duration, story_analysis, continuity_bible)
 
     # Step 4: Gemini Flash Visual Director Call

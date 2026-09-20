@@ -376,7 +376,10 @@ def analyze_story(
 
     resolved_key = api_key or os.environ.get("GEMINI_API_KEY", "")
     if not resolved_key:
-        return fallback_story_analysis(clean_text)
+        print("[Story Analyzer] WARNING: No GEMINI_API_KEY configured. Running in degraded semantic fallback mode.")
+        res = fallback_story_analysis(clean_text)
+        res["ai_analyzed"] = False
+        return res
 
     body = {
         "contents": [{
@@ -405,9 +408,12 @@ def analyze_story(
                 parsed = extract_json(raw_text)
                 if parsed and "story_type" in parsed:
                     print(f"[Story Analyzer] Successfully analyzed story with {model_name} (Type: {parsed.get('story_type')})")
+                    parsed["ai_analyzed"] = True
                     return parsed
         except Exception as e:
             print(f"[Story Analyzer] {model_name} attempt failed: {e}")
 
-    print("[Story Analyzer] Gemini analysis unavailable. Using semantic fallback analysis.")
-    return fallback_story_analysis(clean_text)
+    print("[Story Analyzer] WARNING: Gemini analysis unavailable. Using semantic fallback analysis.")
+    res = fallback_story_analysis(clean_text)
+    res["ai_analyzed"] = False
+    return res

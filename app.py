@@ -134,7 +134,8 @@ def get_config():
         "backgrounds": get_available_backgrounds(),
         "bgm_tracks": get_available_bgm(),
         "hooks": get_viral_hooks(),
-        "templates": get_script_templates()
+        "templates": get_script_templates(),
+        "ai_planner_configured": bool(os.environ.get("GEMINI_API_KEY", "").strip())
     }
 
 @app.post("/api/preview_voice")
@@ -178,20 +179,30 @@ def prepare_scenes(req: PrepareScenesRequest):
     est_duration = max(3.0, (len(words) / (2.5 * speed_mult)))
     target_cut = get_target_cut_duration(req.bg_choice)
 
+    ai_configured = bool(os.environ.get("GEMINI_API_KEY", "").strip())
+    warning = None if ai_configured else (
+        "⚠️ GEMINI_API_KEY is not configured on the server. "
+        "Visual beats and image prompts are running in degraded fallback mode. "
+        "To get accurate AI scene prompts for Google Flow, set GEMINI_API_KEY in your environment."
+    )
+
     try:
         from engine.gemini_visuals import prepare_gemini_scenes_data
         scenes = prepare_gemini_scenes_data(
             script_text=script,
             total_duration=est_duration,
             target_cut_duration=target_cut,
-            scene_overrides=req.scene_overrides
+            scene_overrides=req.scene_overrides,
+            api_key=os.environ.get("GEMINI_API_KEY", None)
         )
         primary_topic = "Visual Director"
 
         return {
             "topic": primary_topic,
             "est_duration": round(est_duration, 1),
-            "scenes": scenes
+            "scenes": scenes,
+            "ai_planner_configured": ai_configured,
+            "warning": warning
         }
     except Exception as e:
         import traceback

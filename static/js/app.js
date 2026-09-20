@@ -440,6 +440,13 @@ document.addEventListener('DOMContentLoaded', () => {
             card.className = `scene-card ${isCustom ? 'custom-active' : ''}`;
             card.id = `sceneCard_${sc.scene_id}`;
 
+            // Build coherent Google Flow prompt (never copy raw narration directly)
+            let copyPromptText = sc.image_prompt || sc.prompt;
+            if (!copyPromptText || !copyPromptText.trim()) {
+                const desc = sc.visual_description || sc.text || "cinematic scene";
+                copyPromptText = `Photorealistic vertical 9:16 cinematic shot: ${desc}, 8k, dramatic lighting`;
+            }
+
             card.innerHTML = `
                 <div class="scene-header">
                     <span>Scene ${sc.scene_id + 1}</span>
@@ -454,7 +461,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="scene-body">
                     <div class="scene-script-text" title="${sc.visual_description ? 'Director: ' + sc.visual_description + ' | ' : ''}${sc.text}">"${sc.text}"</div>
                     <div class="scene-actions">
-                        <button class="btn-copy-prompt" data-prompt="${(sc.image_prompt || sc.prompt || sc.visual_description || sc.text).replace(/"/g, '&quot;')}" title="Copy exact prompt for Google Flow">
+                        <button class="btn-copy-prompt" data-prompt="${copyPromptText.replace(/"/g, '&quot;')}" title="Copy exact prompt for Google Flow">
                             📋 Copy Prompt
                         </button>
                         <label class="btn-replace-img" title="Upload your Google Flow image for this scene">
@@ -691,7 +698,27 @@ document.addEventListener('DOMContentLoaded', () => {
             if (storyboardGrid) storyboardGrid.classList.remove('hidden');
 
             renderStoryboard();
-            showToast(`✨ Storyboard ready! Loaded ${currentScenes.length} scenes.`, 'success');
+
+            if (data.warning) {
+                showToast(data.warning, 'warning', 15000);
+                let warningBanner = document.getElementById('storyboardWarningBanner');
+                if (!warningBanner) {
+                    warningBanner = document.createElement('div');
+                    warningBanner.id = 'storyboardWarningBanner';
+                    warningBanner.className = 'storyboard-warning-banner';
+                    const container = document.getElementById('storyboardContainer');
+                    const grid = document.getElementById('storyboardGrid');
+                    if (container && grid) {
+                        container.insertBefore(warningBanner, grid);
+                    }
+                }
+                warningBanner.innerHTML = `<span>${data.warning}</span>`;
+                warningBanner.classList.remove('hidden');
+            } else {
+                const warningBanner = document.getElementById('storyboardWarningBanner');
+                if (warningBanner) warningBanner.classList.add('hidden');
+                showToast(`✨ Storyboard ready! Loaded ${currentScenes.length} scenes.`, 'success');
+            }
         } catch (err) {
             timeouts.forEach(t => clearTimeout(t));
             clearInterval(creepInterval);

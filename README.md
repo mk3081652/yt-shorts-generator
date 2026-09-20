@@ -49,6 +49,21 @@ python -m uvicorn app:app --host 127.0.0.1 --port 8000
 
 Then open your browser to **[http://localhost:8000](http://localhost:8000)**.
 
+### 🔑 Recommended: Configure `GEMINI_API_KEY` for Visual Director AI
+
+For accurate, scene-by-scene visual beat detection and cinematic prompt generation (especially when copying prompts into **Google Flow**):
+1. Get a free API key from **[Google AI Studio](https://aistudio.google.com/apikey)**.
+2. Set the environment variable:
+   - **Windows PowerShell**:
+     ```powershell
+     $env:GEMINI_API_KEY="your_api_key_here"
+     ```
+   - **Linux / macOS / Render Dashboard**:
+     Add `GEMINI_API_KEY` to your Environment Variables in the hosting dashboard (e.g. Render) or in a `.env` file.
+
+> [!NOTE]
+> **Degraded Fallback Mode**: Without `GEMINI_API_KEY`, the app runs in a degraded semantic fallback mode. It will still function using heuristic keyword grounding, but setting the key enables Gemini to write tailored, highly accurate visual prompts for every scene.
+
 ---
 
 ## 💡 How to Make Viral Shorts to Monetize Fast
