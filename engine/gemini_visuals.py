@@ -538,29 +538,20 @@ def generate_gemini_ai_broll(
             ]
             subprocess.run(canvas_cmd, capture_output=True)
 
-    # Render Ken Burns motion clips in parallel with ThreadPoolExecutor
-    def _render_clip_worker(item):
-        _idx, _img_p, _clip_p, _dur = item
-        if not os.path.exists(_clip_p) and os.path.exists(_img_p):
+    # Render Ken Burns motion clips sequentially to stay strictly within 512MB RAM limit on Render
+    for idx, sc in enumerate(scenes_data):
+        img_p = os.path.join(temp_dir, f"ai_scene_{idx}.jpg")
+        clip_p = os.path.join(temp_dir, f"ai_scene_clip_{idx}.mp4")
+        dur = sc["duration"]
+        if not os.path.exists(clip_p) and os.path.exists(img_p):
             create_ken_burns_motion_clip(
-                image_path=_img_p,
-                duration=_dur,
-                output_path=_clip_p,
-                motion_index=_idx
+                image_path=img_p,
+                duration=dur,
+                output_path=clip_p,
+                motion_index=idx
             )
-
-    clip_tasks = [
-        (idx, os.path.join(temp_dir, f"ai_scene_{idx}.jpg"), os.path.join(temp_dir, f"ai_scene_clip_{idx}.mp4"), sc["duration"])
-        for idx, sc in enumerate(scenes_data)
-    ]
-
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        list(executor.map(_render_clip_worker, clip_tasks))
-
-    for idx in range(len(scenes_data)):
-        clip_path = os.path.join(temp_dir, f"ai_scene_clip_{idx}.mp4")
-        if os.path.exists(clip_path):
-            scene_clips.append(clip_path)
+        if os.path.exists(clip_p):
+            scene_clips.append(clip_p)
 
     # Concatenate all generated clips into master b-roll track
     if scene_clips:

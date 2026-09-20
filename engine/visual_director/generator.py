@@ -339,15 +339,19 @@ def generate_validated_scenes(
         _sc, _is_override = item
         if _is_override:
             return _sc
-        return generate_and_validate_scene(
-            scene=_sc,
-            output_dir=output_dir,
-            continuity_bible=continuity_bible,
-            api_key=api_key,
-            used_urls=used_urls
-        )
+        try:
+            return generate_and_validate_scene(
+                scene=_sc,
+                output_dir=output_dir,
+                continuity_bible=continuity_bible,
+                api_key=api_key,
+                used_urls=used_urls
+            )
+        except Exception as err:
+            print(f"[Generator Worker] Error on scene {_sc.get('scene_id')}: {err}")
+            return _sc
 
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=2) as executor:
         final_scenes = list(executor.map(_worker, scenes_to_process))
 
     return final_scenes
