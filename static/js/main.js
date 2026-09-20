@@ -614,13 +614,17 @@ document.addEventListener("DOMContentLoaded", async () => {
         const cfg = await api.fetchConfig();
         state.setConfig(cfg);
 
-        // Populate voices
+        // Populate voices (supports both Array and Object formats)
         if (voiceSelect && cfg.voices) {
             voiceSelect.innerHTML = "";
-            cfg.voices.forEach((v) => {
+            const voiceList = Array.isArray(cfg.voices)
+                ? cfg.voices
+                : Object.entries(cfg.voices).map(([id, info]) => ({ id, ...info }));
+
+            voiceList.forEach((v) => {
                 const opt = document.createElement("option");
                 opt.value = v.id || v.name;
-                opt.textContent = `${v.name} (${v.gender || "Neural"})`;
+                opt.textContent = `${v.name || v.id} (${v.gender || "Neural"})`;
                 if (v.id === "en-US-ChristopherNeural") opt.selected = true;
                 voiceSelect.appendChild(opt);
             });
@@ -629,7 +633,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         // Populate BGM
         if (bgmSelect && cfg.bgm_tracks) {
             bgmSelect.innerHTML = "";
-            cfg.bgm_tracks.forEach((b) => {
+            const bgmList = Array.isArray(cfg.bgm_tracks)
+                ? cfg.bgm_tracks
+                : Object.entries(cfg.bgm_tracks).map(([id, info]) => ({ id, ...info }));
+
+            bgmList.forEach((b) => {
                 const opt = document.createElement("option");
                 opt.value = b.id || b.name;
                 opt.textContent = b.name || b.id;
@@ -638,13 +646,17 @@ document.addEventListener("DOMContentLoaded", async () => {
             });
         }
 
-        // Populate Viral Templates
+        // Populate Viral Templates (supports both Array and Object formats)
         if (templateSelect && cfg.templates) {
             templateSelect.innerHTML = '<option value="">✨ Load Viral Template...</option>';
-            cfg.templates.forEach((t) => {
+            const templateList = Array.isArray(cfg.templates)
+                ? cfg.templates
+                : Object.entries(cfg.templates).map(([key, val]) => ({ key, ...val }));
+
+            templateList.forEach((t) => {
                 const opt = document.createElement("option");
                 opt.value = t.script || t.text;
-                opt.textContent = t.title || t.name;
+                opt.textContent = t.title || t.name || t.key;
                 templateSelect.appendChild(opt);
             });
             templateSelect.addEventListener("change", (e) => {
@@ -656,13 +668,18 @@ document.addEventListener("DOMContentLoaded", async () => {
             });
         }
 
-        // Populate Hooks
+        // Populate Hooks (supports both Array of strings and Array of objects)
         if (hookSelect && cfg.hooks) {
             hookSelect.innerHTML = '<option value="">🪝 Add Viral Hook...</option>';
             cfg.hooks.forEach((h) => {
                 const opt = document.createElement("option");
-                opt.value = h.hook || h.text;
-                opt.textContent = h.title || h.hook;
+                if (typeof h === "string") {
+                    opt.value = h;
+                    opt.textContent = h.length > 55 ? `${h.slice(0, 52)}...` : h;
+                } else {
+                    opt.value = h.hook || h.text || "";
+                    opt.textContent = h.title || h.hook || h.text || "";
+                }
                 hookSelect.appendChild(opt);
             });
             hookSelect.addEventListener("change", (e) => {
