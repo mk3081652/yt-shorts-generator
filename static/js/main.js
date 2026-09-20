@@ -342,8 +342,19 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Background Project Polling (when scenes are generating in background)
     let projectPollTimer = null;
+    let hasNotifiedFinished = false;
     function startProjectPolling(projectId) {
         if (projectPollTimer) clearInterval(projectPollTimer);
+        hasNotifiedFinished = false;
+
+        // Show progress card immediately
+        if (storyboardProgressCard) {
+            storyboardProgressCard.classList.remove("hidden");
+            if (storyboardProgressPct) storyboardProgressPct.textContent = "0%";
+            if (storyboardProgressBar) storyboardProgressBar.style.width = "5%";
+            if (storyboardProgressStatus) storyboardProgressStatus.textContent = "Rendering Visuals via FLUX...";
+            if (storyboardProgressStep) storyboardProgressStep.textContent = "Generating 9:16 images in background...";
+        }
 
         projectPollTimer = setInterval(async () => {
             try {
@@ -355,14 +366,37 @@ document.addEventListener("DOMContentLoaded", async () => {
                     if (isAnyGenerating) {
                         storyboardProgressCard.classList.remove("hidden");
                         const readyCount = proj.scenes.filter(s => s.status === "ready").length;
-                        const pct = Math.round((readyCount / Math.max(1, proj.scenes.length)) * 100);
+                        const failedCount = proj.scenes.filter(s => s.status === "failed").length;
+                        const finishedCount = readyCount + failedCount;
+                        const total = Math.max(1, proj.scenes.length);
+                        const pct = Math.min(95, Math.round(15 + (finishedCount / total) * 80));
                         if (storyboardProgressPct) storyboardProgressPct.textContent = `${pct}%`;
                         if (storyboardProgressBar) storyboardProgressBar.style.width = `${pct}%`;
-                        if (storyboardProgressStatus) storyboardProgressStatus.textContent = `Generating Images (${readyCount}/${proj.scenes.length})...`;
+                        if (storyboardProgressStatus) storyboardProgressStatus.textContent = `Generating Images (${readyCount}/${total})...`;
+                        if (storyboardProgressStep) storyboardProgressStep.textContent = `Completed ${finishedCount} of ${total} scenes...`;
                     } else {
                         storyboardProgressCard.classList.add("hidden");
                         clearInterval(projectPollTimer);
                         projectPollTimer = null;
+
+                        if (!hasNotifiedFinished) {
+                            hasNotifiedFinished = true;
+                            const readyCount = proj.scenes.filter(s => s.status === "ready").length;
+                            const total = proj.scenes.length;
+                            const quotaFailed = proj.scenes.some(s => s.fail_reason === "flux_quota_exhausted");
+                            const rateFailed = proj.scenes.some(s => s.fail_reason === "flux_rate_limited");
+                            const notCfg = proj.scenes.some(s => s.fail_reason === "flux_not_configured");
+
+                            if (quotaFailed) {
+                                showToast("⚠️ Cloudflare daily limit (10,000 neurons) reached. See card tooltips or drop your own media.", "warning", 8000);
+                            } else if (rateFailed) {
+                                showToast("⚠️ Cloudflare rate limit active. Please wait for cooldown or drop media manually.", "warning", 6000);
+                            } else if (notCfg) {
+                                showToast("⚠️ Cloudflare credentials not configured in .env. Drop media manually into scenes.", "warning", 6000);
+                            } else if (readyCount > 0) {
+                                showToast(`✨ Generated ${readyCount}/${total} visuals with FLUX!`, "success", 4000);
+                            }
+                        }
                     }
                 }
 
@@ -373,7 +407,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             } catch (_) {
                 // Ignore polling errors
             }
-        }, 2000);
+        }, 1500);
     }
 
     // ==========================================
@@ -410,10 +444,16 @@ document.addEventListener("DOMContentLoaded", async () => {
             showToast("Director is generating scene visuals...", "info");
 
             try {
-                const proj = await api.createProject(script, "auto", false);
-                state.setProject(proj);
-                showToast("Visual generation started!", "success");
-                startProjectPolling(proj.id);
+                if (state.project && state.project.id) {
+                    await api.generateMissingMedia(state.project.id);
+                    showToast("Visual generation started!", "success");
+                    startProjectPolling(state.project.id);
+                } else {
+                    const proj = await api.createProject(script, "auto", false);
+                    state.setProject(proj);
+                    showToast("Visual generation started!", "success");
+                    startProjectPolling(proj.id);
+                }
             } catch (err) {
                 showToast(`Visual generation failed: ${err.message}`, "error");
             } finally {

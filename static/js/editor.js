@@ -331,7 +331,25 @@ export class StoryboardEditor {
         try {
             const updated = await api.generateSceneMedia(proj.id, sceneId);
             state.setProject(updated);
-            this.showToast("Image generated successfully!", "success");
+            const target = updated.scenes && updated.scenes.find(s => s.id === sceneId);
+            if (target && target.status === "ready") {
+                this.showToast("Image generated successfully!", "success");
+            } else if (target && target.status === "failed") {
+                const isQuota = target.fail_reason === "flux_quota_exhausted";
+                const isRate = target.fail_reason === "flux_rate_limited";
+                const isNotCfg = target.fail_reason === "flux_not_configured";
+                if (isQuota) {
+                    this.showToast("⚠️ Cloudflare daily free limit (10,000 neurons) reached. Drop your own image or update API token.", "warning", 8000);
+                } else if (isRate) {
+                    this.showToast("⚠️ Cloudflare rate limit active. Please wait or drop media manually.", "warning", 6000);
+                } else if (isNotCfg) {
+                    this.showToast("⚠️ Cloudflare credentials not configured in .env. Drop media manually.", "warning", 6000);
+                } else {
+                    this.showToast(`Generation failed: ${target.fail_reason || "FLUX error"}`, "error");
+                }
+            } else {
+                this.showToast("Image generated!", "info");
+            }
         } catch (err) {
             this.showToast(`Generation failed: ${err.message}`, "error");
         }

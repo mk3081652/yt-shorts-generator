@@ -74,7 +74,7 @@ def _post_cf(url: str, headers: dict, payload: dict, timeout: int) -> dict:
         return json.loads(resp.read().decode("utf-8"))
 
 
-def generate(prompt: str, out_path: str) -> Tuple[bool, str]:
+def generate(prompt: str, out_path: str, force: bool = False) -> Tuple[bool, str]:
     """
     Generates an image from prompt using Cloudflare Workers AI FLUX.
     Saves the image to out_path cropped to 9:16.
@@ -83,6 +83,7 @@ def generate(prompt: str, out_path: str) -> Tuple[bool, str]:
         (True, "flux") on success
         (False, reason) on failure, where reason is one of:
             "flux_not_configured"
+            "flux_quota_exhausted"
             "flux_rate_limited"
             "flux_timeout"
             "flux_error"
@@ -94,7 +95,7 @@ def generate(prompt: str, out_path: str) -> Tuple[bool, str]:
     if not account_id or not api_token:
         return False, "flux_not_configured"
 
-    if is_rate_limited():
+    if not force and is_rate_limited():
         return False, "flux_rate_limited"
 
     model = get_flux_model()
@@ -148,10 +149,20 @@ def generate(prompt: str, out_path: str) -> Tuple[bool, str]:
             # Ensure parent dir exists and save
             os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
             cropped.save(out_path, "JPEG", quality=92)
+            clear_cooldown()
             return True, "flux"
 
         except urllib.error.HTTPError as e:
             if e.code == 429:
+                err_body = ""
+                try:
+                    err_body = e.read().decode("utf-8")
+                except Exception:
+                    pass
+                if "daily free allocation" in err_body.lower() or "neurons" in err_body.lower() or "4006" in err_body:
+                    print(f"[FLUX] Cloudflare daily neuron quota (10,000) exhausted: {err_body}")
+                    set_cooldown(3600)  # 1 hour cooldown for quota exhaustion
+                    return False, "flux_quota_exhausted"
                 print(f"[FLUX] Cloudflare rate limit (429), setting cooldown for {cooldown_secs}s")
                 set_cooldown(cooldown_secs)
                 return False, "flux_rate_limited"

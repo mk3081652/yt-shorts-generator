@@ -55,7 +55,22 @@ export function createSceneCard(scene, index, totalScenes, callbacks = {}) {
     } else if (scene.status === "ready") {
         statusBadge.textContent = "✅ Ready";
     } else if (scene.status === "failed") {
-        statusBadge.textContent = "❌ Failed";
+        const isQuota = scene.fail_reason === "flux_quota_exhausted";
+        const isRate = scene.fail_reason === "flux_rate_limited";
+        const isNotCfg = scene.fail_reason === "flux_not_configured";
+        if (isQuota) {
+            statusBadge.textContent = "⚠️ Daily Quota";
+            statusBadge.title = "Cloudflare free daily 10,000 neurons quota exhausted. Upgrade to Workers Paid or drop media manually.";
+        } else if (isRate) {
+            statusBadge.textContent = "⚠️ Rate Limit";
+            statusBadge.title = "Cloudflare rate limit cooldown in progress. Wait or drop media manually.";
+        } else if (isNotCfg) {
+            statusBadge.textContent = "⚠️ No API Key";
+            statusBadge.title = "Cloudflare credentials not configured in .env.";
+        } else {
+            statusBadge.textContent = "❌ Failed";
+            statusBadge.title = scene.fail_reason || "FLUX generation failed";
+        }
     } else {
         statusBadge.textContent = "⚪ Blank";
     }
@@ -127,11 +142,23 @@ export function createSceneCard(scene, index, totalScenes, callbacks = {}) {
 
         const pIcon = document.createElement("span");
         pIcon.className = "placeholder-icon";
-        pIcon.textContent = scene.status === "generating" ? "⏳" : "🖼️";
+        pIcon.textContent = scene.status === "generating" ? "⏳" : (scene.status === "failed" ? "⚠️" : "🖼️");
 
         const pText = document.createElement("span");
         pText.className = "placeholder-text";
-        pText.textContent = scene.status === "generating" ? "Generating..." : "Drop Media or Click Upload";
+        if (scene.status === "generating") {
+            pText.textContent = "Generating...";
+        } else if (scene.status === "failed") {
+            const isQuota = scene.fail_reason === "flux_quota_exhausted";
+            const isRate = scene.fail_reason === "flux_rate_limited";
+            const isNotCfg = scene.fail_reason === "flux_not_configured";
+            if (isQuota) pText.textContent = "Daily Quota Reached (Click/Drop Media)";
+            else if (isRate) pText.textContent = "Rate Limited (Click/Drop Media)";
+            else if (isNotCfg) pText.textContent = "No API Key (Click/Drop Media)";
+            else pText.textContent = "Generation Failed (Click/Drop Media)";
+        } else {
+            pText.textContent = "Drop Media or Click Upload";
+        }
 
         placeholder.appendChild(pIcon);
         placeholder.appendChild(pText);

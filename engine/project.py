@@ -59,6 +59,8 @@ class Scene:
         d["segment_id"] = self.id
         d["camera_motion"] = self.motion
         d["is_custom"] = (self.status == "manual" or self.source_tier == "manual")
+        d["image_url"] = self.media_url
+        d["image_path"] = self.media_path
         return d
 
     @classmethod
@@ -268,6 +270,11 @@ def create_project(
         )
         scenes.append(sc)
 
+    # 3. If auto mode, mark scenes as queued and queue generation in background
+    if start == "auto":
+        for sc in scenes:
+            sc.status = "queued"
+
     project = Project(
         id=p_id,
         script=script.strip(),
@@ -278,7 +285,6 @@ def create_project(
     )
     save_project(project)
 
-    # 3. If auto mode, queue generation in background
     if start == "auto":
         queue_project_generation(project.id)
 
@@ -793,7 +799,7 @@ def generate_scene_media(project_id: str, scene_id: str, api_key: Optional[str] 
     out_name = f"{project_id}_{target.id}.jpg"
     out_path = os.path.join(PREVIEWS_DIR, out_name)
 
-    ok, reason = generate_flux(target.image_prompt, out_path)
+    ok, reason = generate_flux(target.image_prompt, out_path, force=True)
 
     if ok and os.path.exists(out_path):
         target.status = "ready"
