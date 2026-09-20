@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Viral YouTube Shorts Creator - 100% Free Monetization Studio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Montserrat:wght@800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css?v=20260919_v3">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Top Navbar -->
+        <header class="navbar">
+            <div class="brand">
+                <div class="brand-badge">FREE</div>
+                <div class="brand-logo">
+                    <span class="yt-icon">▶</span>
+                    <span class="brand-text">ViralShorts<strong>Studio</strong></span>
+                </div>
+            </div>
+            <div class="navbar-tags">
+                <span class="tag-pill">🔥 100% Free Edge Neural TTS</span>
+                <span class="tag-pill">⚡ MrBeast / Hormozi Subtitles</span>
+                <span class="tag-pill">💰 YouTube Monetization Ready</span>
+            </div>
+        </header>
+
+        <!-- Google Flow Stepper Navigation -->
+        <nav class="google-stepper" id="googleStepper">
+            <button class="step-btn active" data-step="1" id="stepBtn1">
+                <span class="step-circle">1</span>
+                <span class="step-text">
+                    <span class="step-title">Script & Voice</span>
+                    <span class="step-desc">Content & Narration</span>
+                </span>
+            </button>
+            <div class="step-divider"></div>
+            <button class="step-btn" data-step="2" id="stepBtn2">
+                <span class="step-circle">2</span>
+                <span class="step-text">
+                    <span class="step-title">Visual Storyboard</span>
+                    <span class="step-desc">Auto-Match & Scenes</span>
+                </span>
+            </button>
+            <div class="step-divider"></div>
+            <button class="step-btn" data-step="3" id="stepBtn3">
+                <span class="step-circle">3</span>
+                <span class="step-text">
+                    <span class="step-title">Style & Soundtrack</span>
+                    <span class="step-desc">Captions & Music</span>
+                </span>
+            </button>
+            <div class="step-divider"></div>
+            <button class="step-btn" data-step="4" id="stepBtn4">
+                <span class="step-circle">4</span>
+                <span class="step-text">
+                    <span class="step-title">Produce & Export</span>
+                    <span class="step-desc">9:16 Render & SEO</span>
+                </span>
+            </button>
+        </nav>
+
+        <!-- Main Studio Grid -->
+        <main class="studio-grid">
+            <!-- Left Panel: Step Panels -->
+            <section class="controls-panel">
+                
+                <!-- STEP 1: Script & AI Voiceover -->
+                <div class="step-panel" id="stepPanel1">
+                    <!-- Script Editor Box -->
+                    <div class="card script-card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <span class="icon">✍️</span>
+                                <h3>Step 1: Write or Paste Your Script</h3>
+                            </div>
+                            <div class="script-tools">
+                                <select id="templateSelect" class="compact-select">
+                                    <option value="">✨ Load Viral Template...</option>
+                                </select>
+                                <select id="hookSelect" class="compact-select">
+                                    <option value="">🪝 Add Viral Hook...</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="textarea-wrapper">
+                            <textarea id="scriptInput" placeholder="Paste your script here or select a viral template above...&#10;&#10;Tip: The best YouTube Shorts are 20-45 seconds long with a powerful 3-second hook!"></textarea>
+                        </div>
+
+                        <div class="script-stats">
+                            <div class="stat-badge">
+                                <span>Words:</span>
+                                <strong id="wordCount">0</strong>
+                            </div>
+                            <div class="stat-badge">
+                                <span>Est. Duration:</span>
+                                <strong id="estDuration">0s</strong>
+                            </div>
+                            <div class="stat-badge status-good" id="retentionStatus">
+                                <span>Pacing:</span>
+                                <strong id="pacingText">Short & Punchy</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Voice Selection Card -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <span class="icon">🎙️</span>
+                                <h3>AI Voiceover & Speed</h3>
+                            </div>
+                            <button id="previewVoiceBtn" class="btn-secondary btn-sm" title="Listen to Voice">
+                                🔊 Audition Voice
+                            </button>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="voiceSelect">Neural Voice</label>
+                            <select id="voiceSelect" class="form-select"></select>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group flex-1">
+                                <label for="speedSelect">Speed Pacing</label>
+                                <select id="speedSelect" class="form-select">
+                                    <option value="+0%">Normal (1.0x)</option>
+                                    <option value="+10%" selected>Punchy (+10%)</option>
+                                    <option value="+15%">Fast (+15%)</option>
+                                    <option value="+20%">Hyper Viral (+20%)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <audio id="voiceAudioPreview" class="hidden-audio" controls></audio>
+                    </div>
+
+                    <!-- Step 1 Navigation Footer -->
+                    <div class="step-nav-footer">
+                        <div></div>
+                        <button class="btn-google-next" id="toStep2Btn">
+                            Continue to Visual Storyboard ➔
+                        </button>
+                    </div>
+                </div>
+
+                <!-- STEP 2: Visual Storyboard & Scene Image Customizer -->
+                <div class="step-panel hidden" id="stepPanel2">
+                    <!-- Visual Cut Pacing & Motion -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <span class="icon">🎬</span>
+                                <h3>Visual Cut Pacing & Motion</h3>
+                            </div>
+                            <label class="btn-secondary btn-sm upload-label" title="Or upload custom video clip">
+                                📤 Custom Video
+                                <input type="file" id="videoUploadInput" accept="video/mp4,video/quicktime,video/webm" style="display:none;">
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="bgSelect">Cut Pacing & Visual Engine</label>
+                            <select id="bgSelect" class="form-select"></select>
+                        </div>
+                        <div class="broll-features-hint">
+                            <span class="hint-bullet">⚡</span> Auto-matches script words • <strong>Zero repeats</strong> • 5 continuous camera motions
+                        </div>
+                        <div id="uploadNotice" class="upload-notice hidden"></div>
+                    </div>
+
+                    <!-- Visual Storyboard Card -->
+                    <div class="card storyboard-card" id="storyboardCard">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <span class="icon">🖼️</span>
+                                <h3>Visual Storyboard (What You See Is What You Get)</h3>
+                            </div>
+                            <div class="storyboard-actions-row">
+                                <label class="btn-upload-batch" title="Upload multiple photos from computer">
+                                    📥 Upload Images
+                                    <input type="file" id="batchImageInput" accept="image/jpeg,image/png,image/webp" multiple style="display:none;">
+                                </label>
+                                <button id="previewScenesBtn" class="btn-storyboard" title="Auto-match images to script and preview scenes in storyboard">
+                                    🔍 Auto-Match & Preview Scenes
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="storyboardToolbar" class="storyboard-toolbar hidden">
+                            <div class="storyboard-stats">
+                                <span id="storyboardTopic">Topic: <strong>Detecting...</strong></span> • 
+                                <span id="storyboardSceneCount">0 scenes</span> • 
+                                <span id="storyboardCustomCount" style="color:var(--accent-green)">0 custom</span>
+                            </div>
+                            <button id="resetStoryboardBtn" class="btn-secondary btn-sm" title="Re-match all scenes from authentic archive">
+                                🔄 Auto-Match All
+                            </button>
+                        </div>
+
+                        <div id="storyboardContainer">
+                            <!-- Storyboard Loading Progress Card -->
+                            <div id="storyboardProgressCard" class="card progress-card hidden" style="margin: 8px 0 16px 0; background: rgba(13, 17, 28, 0.95); border: 1px solid rgba(139, 92, 246, 0.45); padding: 18px 22px; border-radius: 12px; box-shadow: 0 8px 25px rgba(0,0,0,0.6);">
+                                <div class="progress-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                                    <div style="display: flex; align-items: center; gap: 14px;">
+                                        <div class="spinner" style="width: 22px; height: 22px; border-width: 3px; border-top-color: #a855f7;"></div>
+                                        <div class="progress-info">
+                                            <h4 id="storyboardProgressStatus" style="font-size: 1rem; font-weight: 700; color: #fff; margin: 0;">Auto-Matching Scenes...</h4>
+                                            <span id="storyboardProgressStep" style="font-size: 0.82rem; color: var(--text-muted);">Analyzing script semantics & visual pacing...</span>
+                                        </div>
+                                    </div>
+                                    <span id="storyboardProgressPct" class="progress-pct" style="font-size: 1.35rem; font-weight: 800; color: #a855f7;">0%</span>
+                                </div>
+                                <div class="progress-bar-bg" style="height: 10px; background: rgba(255, 255, 255, 0.1); border-radius: 5px; overflow: hidden;">
+                                    <div id="storyboardProgressBar" class="progress-bar-fill" style="width: 0%; height: 100%; background: linear-gradient(90deg, #8b5cf6, #ec4899); transition: width 0.25s ease; border-radius: 5px;"></div>
+                                </div>
+                            </div>
+
+                            <div class="storyboard-empty" id="storyboardEmptyNotice">
+                                <p>💡 Click <strong>🔍 Auto-Match & Preview Scenes</strong> to see every matched authentic photo, or click <strong>📥 Upload Images</strong> to replace scenes with your own photos!</p>
+                            </div>
+                            <div id="storyboardGrid" class="storyboard-grid hidden"></div>
+                        </div>
+                    </div>
+
+                    <!-- Step 2 Navigation Footer -->
+                    <div class="step-nav-footer">
+                        <button class="btn-google-back" id="backToStep1Btn">
+                            ⬅ Back to Script
+                        </button>
+                        <button class="btn-google-next" id="toStep3Btn">
+                            Continue to Style & Music ➔
+                        </button>
+                    </div>
+                </div>
+
+                <!-- STEP 3: Subtitles & Royalty-Free Music -->
+                <div class="step-panel hidden" id="stepPanel3">
+                    <!-- Subtitle Styling -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <span class="icon">💬</span>
+                                <h3>Viral Subtitles Presets</h3>
+                            </div>
+                        </div>
+
+                        <div class="subtitle-presets">
+                            <label class="preset-option active" data-style="mrbeast">
+                                <input type="radio" name="subtitleStyle" value="mrbeast" checked>
+                                <div class="preset-card mrbeast-card">
+                                    <span class="sample-text mrbeast-text">MRBEAST</span>
+                                    <span class="preset-label">Yellow & Punchy</span>
+                                </div>
+                            </label>
+
+                            <label class="preset-option" data-style="hormozi">
+                                <input type="radio" name="subtitleStyle" value="hormozi">
+                                <div class="preset-card hormozi-card">
+                                    <span class="sample-text hormozi-text">HORMOZI</span>
+                                    <span class="preset-label">Neon Green 1-2 Words</span>
+                                </div>
+                            </label>
+
+                            <label class="preset-option" data-style="cyberpunk">
+                                <input type="radio" name="subtitleStyle" value="cyberpunk">
+                                <div class="preset-card cyberpunk-card">
+                                    <span class="sample-text cyberpunk-text">CYBERPUNK</span>
+                                    <span class="preset-label">Cyan & Magenta Glow</span>
+                                </div>
+                            </label>
+
+                            <label class="preset-option" data-style="clean">
+                                <input type="radio" name="subtitleStyle" value="clean">
+                                <div class="preset-card clean-card">
+                                    <span class="sample-text clean-text">CLEAN</span>
+                                    <span class="preset-label">Modern Aesthetic</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Background Music -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <span class="icon">🎵</span>
+                                <h3>Royalty-Free Soundtrack</h3>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="bgmSelect">Music Mood</label>
+                            <select id="bgmSelect" class="form-select"></select>
+                        </div>
+
+                        <div class="form-group">
+                            <div class="slider-header">
+                                <label for="bgmVolume">Auto-Ducking Volume</label>
+                                <span id="volLabel">18%</span>
+                            </div>
+                            <input type="range" id="bgmVolume" min="0" max="0.4" step="0.02" value="0.18" class="form-slider">
+                        </div>
+                    </div>
+
+                    <!-- Step 3 Navigation Footer -->
+                    <div class="step-nav-footer">
+                        <button class="btn-google-back" id="backToStep2Btn">
+                            ⬅ Back to Storyboard
+                        </button>
+                        <button class="btn-google-next" id="toStep4Btn">
+                            Continue to Produce & Export ➔
+                        </button>
+                    </div>
+                </div>
+
+                <!-- STEP 4: Produce & Export -->
+                <div class="step-panel hidden" id="stepPanel4">
+                    <!-- Ready to Render Summary Card -->
+                    <div class="card ready-card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <span class="icon">⚡</span>
+                                <h3>Ready to Produce Your Viral Short</h3>
+                            </div>
+                        </div>
+                        <p class="ready-desc">All parameters and approved visuals are locked in. Click below to start the high-speed 1080x1920 60FPS vertical rendering pipeline.</p>
+                        
+                        <div class="ready-summary-grid">
+                            <div class="summary-item">
+                                <span class="summary-label">Script Length:</span>
+                                <span class="summary-val" id="sumScriptLength">0 words (~0s)</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Voice:</span>
+                                <span class="summary-val" id="sumVoice">Neural Voice</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Visual Engine:</span>
+                                <span class="summary-val" id="sumPacing">Gemini AI Ultra</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-label">Subtitles:</span>
+                                <span class="summary-val" id="sumSubtitles">MrBeast Yellow</span>
+                            </div>
+                        </div>
+
+                        <!-- Master Generate Button -->
+                        <button id="generateBtn" class="btn-master" style="margin-top: 24px;">
+                            <span class="btn-icon">⚡</span>
+                            <span class="btn-text">GENERATE VIRAL SHORT (1080x1920)</span>
+                        </button>
+                    </div>
+
+                    <!-- Step 4 Navigation Footer -->
+                    <div class="step-nav-footer">
+                        <button class="btn-google-back" id="backToStep3Btn">
+                            ⬅ Back to Style & Music
+                        </button>
+                        <div></div>
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- Right Panel: Preview, Progress & Monetization Kit -->
+            <section class="preview-panel">
+                
+                <!-- Live Progress Card -->
+                <div id="progressCard" class="card progress-card hidden">
+                    <div class="progress-header">
+                        <div class="spinner"></div>
+                        <div class="progress-info">
+                            <h4 id="progressStatus">Rendering Short...</h4>
+                            <span id="progressStep">Initializing</span>
+                        </div>
+                        <span id="progressPct" class="progress-pct">0%</span>
+                    </div>
+                    <div class="progress-bar-bg">
+                        <div id="progressBar" class="progress-bar-fill" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <!-- 9:16 Video Player Container -->
+                <div class="player-wrapper">
+                    <div class="phone-frame">
+                        <div class="phone-speaker"></div>
+                        
+                        <div class="video-display-area">
+                            <video id="finalVideoPlayer" class="video-player" controls playsinline></video>
+                            
+                            <!-- Placeholder when no video yet -->
+                            <div id="playerPlaceholder" class="player-placeholder">
+                                <div class="placeholder-icon">📱</div>
+                                <h3>YouTube Shorts Canvas</h3>
+                                <p>Paste a script on the left and click Generate to see your 9:16 viral short appear here!</p>
+                                <div class="badge-row">
+                                    <span class="badge">9:16 Vertical</span>
+                                    <span class="badge">1080x1920 HD</span>
+                                    <span class="badge">Burned Captions</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Player Overlay Actions -->
+                        <div id="playerActions" class="player-actions hidden">
+                            <a id="downloadVideoBtn" class="btn-download" download="viral_short.mp4" href="#">
+                                ⬇️ Download 1080x1920 MP4
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- YouTube Monetization & SEO Kit -->
+                <div id="seoKitCard" class="card seo-card hidden">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span class="icon">🚀</span>
+                            <h3>YouTube Monetization & SEO Kit</h3>
+                        </div>
+                    </div>
+
+                    <div class="seo-item">
+                        <div class="seo-header">
+                            <label>Viral Title (High CTR)</label>
+                            <button class="btn-copy" data-target="seoTitle">📋 Copy</button>
+                        </div>
+                        <input type="text" id="seoTitle" class="seo-input" readonly>
+                    </div>
+
+                    <div class="seo-item">
+                        <div class="seo-header">
+                            <label>Description & Hashtags</label>
+                            <button class="btn-copy" data-target="seoDesc">📋 Copy</button>
+                        </div>
+                        <textarea id="seoDesc" class="seo-textarea" rows="4" readonly></textarea>
+                    </div>
+
+                    <div class="seo-item">
+                        <div class="seo-header">
+                            <label>Shorts Feed Tags</label>
+                            <button class="btn-copy" data-target="seoTags">📋 Copy</button>
+                        </div>
+                        <input type="text" id="seoTags" class="seo-input" readonly>
+                    </div>
+                </div>
+
+            </section>
+        </main>
+    </div>
+
+    <script src="/static/js/app.js?v=20260919_v4"></script>
+
+    <!-- Google Material Toast Notifications Container -->
+    <div id="toastContainer" class="google-toast-container"></div>
+</body>
+</html>

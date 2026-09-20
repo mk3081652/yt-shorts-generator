@@ -1,0 +1,17 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.git
+.gitignore
+.dockerignore
+outputs/*.mp4
+outputs/*.mp3
+outputs/custom_scenes/*
+outputs/ai_previews/*
+!outputs/custom_scenes/.gitkeep
+!outputs/ai_previews/.gitkeep

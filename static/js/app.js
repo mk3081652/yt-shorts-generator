@@ -1,0 +1,887 @@
+document.addEventListener('DOMContentLoaded', () => {
+    // DOM Elements
+    const scriptInput = document.getElementById('scriptInput');
+    const wordCount = document.getElementById('wordCount');
+    const estDuration = document.getElementById('estDuration');
+    const pacingText = document.getElementById('pacingText');
+    const retentionStatus = document.getElementById('retentionStatus');
+    const templateSelect = document.getElementById('templateSelect');
+    const hookSelect = document.getElementById('hookSelect');
+    
+    const voiceSelect = document.getElementById('voiceSelect');
+    const speedSelect = document.getElementById('speedSelect');
+    const previewVoiceBtn = document.getElementById('previewVoiceBtn');
+    const voiceAudioPreview = document.getElementById('voiceAudioPreview');
+    
+    const bgSelect = document.getElementById('bgSelect');
+    const videoUploadInput = document.getElementById('videoUploadInput');
+    const uploadNotice = document.getElementById('uploadNotice');
+    
+    const bgmSelect = document.getElementById('bgmSelect');
+    const bgmVolume = document.getElementById('bgmVolume');
+    const volLabel = document.getElementById('volLabel');
+
+    // Storyboard Elements
+    const previewScenesBtn = document.getElementById('previewScenesBtn');
+    const batchImageInput = document.getElementById('batchImageInput');
+    const storyboardToolbar = document.getElementById('storyboardToolbar');
+    const storyboardGrid = document.getElementById('storyboardGrid');
+    const storyboardEmptyNotice = document.getElementById('storyboardEmptyNotice');
+    const storyboardTopic = document.getElementById('storyboardTopic');
+    const storyboardSceneCount = document.getElementById('storyboardSceneCount');
+    const storyboardCustomCount = document.getElementById('storyboardCustomCount');
+    const resetStoryboardBtn = document.getElementById('resetStoryboardBtn');
+    const storyboardProgressCard = document.getElementById('storyboardProgressCard');
+    const storyboardProgressStatus = document.getElementById('storyboardProgressStatus');
+    const storyboardProgressStep = document.getElementById('storyboardProgressStep');
+    const storyboardProgressPct = document.getElementById('storyboardProgressPct');
+    const storyboardProgressBar = document.getElementById('storyboardProgressBar');
+    
+    const generateBtn = document.getElementById('generateBtn');
+    const progressCard = document.getElementById('progressCard');
+    const progressStatus = document.getElementById('progressStatus');
+    const progressStep = document.getElementById('progressStep');
+    const progressPct = document.getElementById('progressPct');
+    const progressBar = document.getElementById('progressBar');
+    
+    const finalVideoPlayer = document.getElementById('finalVideoPlayer');
+    const playerPlaceholder = document.getElementById('playerPlaceholder');
+    const playerActions = document.getElementById('playerActions');
+    const downloadVideoBtn = document.getElementById('downloadVideoBtn');
+    
+    const seoKitCard = document.getElementById('seoKitCard');
+    const seoTitle = document.getElementById('seoTitle');
+    const seoDesc = document.getElementById('seoDesc');
+    const seoTags = document.getElementById('seoTags');
+
+    let configData = null;
+    let pollInterval = null;
+
+    // Storyboard state: maps scene_id -> image_url or local_path
+    let currentScenes = [];
+    let sceneOverrides = {};
+    let currentStep = 1;
+
+    // ==========================================
+    // GOOGLE MATERIAL TOAST NOTIFICATIONS
+    // ==========================================
+    function showToast(message, type = 'info', duration = 3500) {
+        const toastContainer = document.getElementById('toastContainer');
+        if (!toastContainer) {
+            console.log(`[Toast ${type}] ${message}`);
+            return;
+        }
+
+        const icons = {
+            success: '✅',
+            error: '❌',
+            warning: '⚠️',
+            info: '💡'
+        };
+
+        const toast = document.createElement('div');
+        toast.className = `google-toast toast-${type}`;
+        toast.innerHTML = `
+            <span class="toast-icon">${icons[type] || '💡'}</span>
+            <span class="toast-message">${message}</span>
+            <button class="toast-close" title="Dismiss">&times;</button>
+        `;
+
+        function removeToast(el) {
+            el.style.animation = 'toastFadeOut 0.25s forwards';
+            setTimeout(() => {
+                if (el.parentNode) el.parentNode.removeChild(el);
+            }, 250);
+        }
+
+        toast.querySelector('.toast-close').addEventListener('click', () => {
+            removeToast(toast);
+        });
+
+        toastContainer.appendChild(toast);
+
+        if (duration > 0) {
+            setTimeout(() => {
+                removeToast(toast);
+            }, duration);
+        }
+    }
+
+    // ==========================================
+    // GOOGLE FLOW STEPPER NAVIGATION
+    // ==========================================
+    function goToStep(stepNum) {
+        if (stepNum < 1 || stepNum > 4) return;
+
+        // Validation when leaving step 1
+        if (currentStep === 1 && stepNum > 1) {
+            const scriptVal = scriptInput.value.trim();
+            if (!scriptVal) {
+                showToast("Please write or paste your script first before proceeding!", "warning");
+                scriptInput.focus();
+                return;
+            }
+        }
+
+        // Update step panels
+        for (let i = 1; i <= 4; i++) {
+            const panel = document.getElementById(`stepPanel${i}`);
+            const btn = document.getElementById(`stepBtn${i}`);
+            if (panel) {
+                if (i === stepNum) {
+                    panel.classList.remove('hidden');
+                } else {
+                    panel.classList.add('hidden');
+                }
+            }
+            if (btn) {
+                btn.classList.remove('active');
+                if (i < stepNum) {
+                    btn.classList.add('completed');
+                } else {
+                    btn.classList.remove('completed');
+                }
+                if (i === stepNum) {
+                    btn.classList.add('active');
+                }
+            }
+        }
+
+        currentStep = stepNum;
+
+        // If entering Step 4, update summary
+        if (stepNum === 4) {
+            updateStep4Summary();
+        }
+
+        // Smooth scroll to top of controls panel
+        const controlsPanel = document.querySelector('.controls-panel');
+        if (controlsPanel) {
+            controlsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+
+    function updateStep4Summary() {
+        const words = scriptInput.value.trim().split(/\s+/).filter(Boolean).length;
+        const dur = estDuration.textContent || "0s";
+        const sumScriptLength = document.getElementById('sumScriptLength');
+        const sumVoice = document.getElementById('sumVoice');
+        const sumPacing = document.getElementById('sumPacing');
+        const sumSubtitles = document.getElementById('sumSubtitles');
+
+        if (sumScriptLength) sumScriptLength.textContent = `${words} words (~${dur})`;
+        if (sumVoice && voiceSelect && voiceSelect.options && voiceSelect.selectedIndex >= 0) {
+            const voiceOpt = voiceSelect.options[voiceSelect.selectedIndex];
+            sumVoice.textContent = voiceOpt ? voiceOpt.text.split('[')[0].trim() : 'Neural Voice';
+        }
+        if (sumPacing && bgSelect && bgSelect.options && bgSelect.selectedIndex >= 0) {
+            const bgOpt = bgSelect.options[bgSelect.selectedIndex];
+            sumPacing.textContent = bgOpt ? bgOpt.text.split('(')[0].trim() : 'AI Ultra';
+        }
+        if (sumSubtitles) {
+            const activePreset = document.querySelector('.preset-option.active .preset-label');
+            sumSubtitles.textContent = activePreset ? activePreset.textContent : 'MrBeast Yellow';
+        }
+    }
+
+    // Step button event listeners
+    for (let i = 1; i <= 4; i++) {
+        const btn = document.getElementById(`stepBtn${i}`);
+        if (btn) {
+            btn.addEventListener('click', () => goToStep(i));
+        }
+    }
+
+    // Continue / Back buttons
+    const toStep2Btn = document.getElementById('toStep2Btn');
+    if (toStep2Btn) toStep2Btn.addEventListener('click', () => goToStep(2));
+
+    const backToStep1Btn = document.getElementById('backToStep1Btn');
+    if (backToStep1Btn) backToStep1Btn.addEventListener('click', () => goToStep(1));
+
+    const toStep3Btn = document.getElementById('toStep3Btn');
+    if (toStep3Btn) toStep3Btn.addEventListener('click', () => goToStep(3));
+
+    const backToStep2Btn = document.getElementById('backToStep2Btn');
+    if (backToStep2Btn) backToStep2Btn.addEventListener('click', () => goToStep(2));
+
+    const toStep4Btn = document.getElementById('toStep4Btn');
+    if (toStep4Btn) toStep4Btn.addEventListener('click', () => goToStep(4));
+
+    const backToStep3Btn = document.getElementById('backToStep3Btn');
+    if (backToStep3Btn) backToStep3Btn.addEventListener('click', () => goToStep(3));
+
+    // 1. Fetch initial configuration
+    async function loadConfig() {
+        try {
+            const res = await fetch('/api/config');
+            configData = await res.json();
+            
+            // Populate voices
+            voiceSelect.innerHTML = '';
+            for (const [id, v] of Object.entries(configData.voices)) {
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = `${v.name} [${v.vibe}]`;
+                if (id === 'en-US-ChristopherNeural') opt.selected = true;
+                voiceSelect.appendChild(opt);
+            }
+
+            // Populate backgrounds
+            bgSelect.innerHTML = '';
+            configData.backgrounds.forEach(bg => {
+                const opt = document.createElement('option');
+                opt.value = bg.id;
+                opt.textContent = `${bg.name} (${bg.description})`;
+                if (bg.id === 'ai_gemini') opt.selected = true;
+                bgSelect.appendChild(opt);
+            });
+
+            // Populate BGM tracks
+            bgmSelect.innerHTML = '';
+            configData.bgm_tracks.forEach(b => {
+                const opt = document.createElement('option');
+                opt.value = b.id;
+                opt.textContent = b.name;
+                if (b.id === 'phonk_energetic') opt.selected = true;
+                bgmSelect.appendChild(opt);
+            });
+
+            // Populate Templates
+            templateSelect.innerHTML = '<option value="">✨ Load Viral Template...</option>';
+            for (const [key, tpl] of Object.entries(configData.templates)) {
+                const opt = document.createElement('option');
+                opt.value = key;
+                opt.textContent = `${tpl.title} (${tpl.category})`;
+                templateSelect.appendChild(opt);
+            }
+
+            // Populate Viral Hooks
+            hookSelect.innerHTML = '<option value="">🪝 Add Viral Hook...</option>';
+            configData.hooks.forEach((hook, i) => {
+                const opt = document.createElement('option');
+                opt.value = hook;
+                opt.textContent = hook.length > 42 ? hook.substring(0, 42) + '...' : hook;
+                hookSelect.appendChild(opt);
+            });
+
+        } catch (err) {
+            console.error('Failed to load configuration:', err);
+        }
+    }
+
+    // 2. Script Stats & Duration Calculator
+    function updateScriptStats() {
+        const text = scriptInput.value.trim();
+        const words = text ? text.split(/\s+/).length : 0;
+        wordCount.textContent = words;
+
+        let speedMult = 1.0;
+        const rateVal = speedSelect.value;
+        if (rateVal === '+10%') speedMult = 1.10;
+        else if (rateVal === '+15%') speedMult = 1.15;
+        else if (rateVal === '+20%') speedMult = 1.20;
+
+        const sec = words > 0 ? Math.max(2, Math.round((words / (2.5 * speedMult)))) : 0;
+        estDuration.textContent = `${sec}s`;
+
+        if (sec === 0) {
+            pacingText.textContent = "Paste Script";
+            retentionStatus.className = "stat-badge";
+        } else if (sec <= 15) {
+            pacingText.textContent = "Super Punchy 🚀";
+            retentionStatus.className = "stat-badge status-good";
+        } else if (sec <= 45) {
+            pacingText.textContent = "Optimal for Shorts Feed ⚡";
+            retentionStatus.className = "stat-badge status-good";
+        } else if (sec <= 58) {
+            pacingText.textContent = "Long Form Short ⚠️";
+            retentionStatus.className = "stat-badge";
+        } else {
+            pacingText.textContent = "Exceeds 60s limit! ❌";
+            retentionStatus.className = "stat-badge";
+            retentionStatus.style.borderColor = "#ff0033";
+        }
+    }
+
+    scriptInput.addEventListener('input', updateScriptStats);
+    speedSelect.addEventListener('change', updateScriptStats);
+    bgSelect.addEventListener('change', () => {
+        if (!storyboardGrid.classList.contains('hidden') && scriptInput.value.trim()) {
+            loadStoryboard(true);
+        }
+    });
+
+    // 3. Template Selection
+    templateSelect.addEventListener('change', (e) => {
+        const key = e.target.value;
+        if (key && configData && configData.templates[key]) {
+            scriptInput.value = configData.templates[key].script;
+            updateScriptStats();
+            sceneOverrides = {};
+            currentScenes = [];
+            storyboardGrid.classList.add('hidden');
+            storyboardToolbar.classList.add('hidden');
+            storyboardEmptyNotice.classList.remove('hidden');
+        }
+    });
+
+    // 4. Hook Selection
+    hookSelect.addEventListener('change', (e) => {
+        const hook = e.target.value;
+        if (hook) {
+            const current = scriptInput.value.trim();
+            if (current) {
+                scriptInput.value = `${hook} ${current}`;
+            } else {
+                scriptInput.value = hook;
+            }
+            updateScriptStats();
+            hookSelect.value = '';
+        }
+    });
+
+    // 5. Subtitle Style Preset Click
+    document.querySelectorAll('.preset-option').forEach(opt => {
+        opt.addEventListener('click', () => {
+            document.querySelectorAll('.preset-option').forEach(o => o.classList.remove('active'));
+            opt.classList.add('active');
+            const radio = opt.querySelector('input[type="radio"]');
+            if (radio) radio.checked = true;
+        });
+    });
+
+    // 6. Volume Slider
+    bgmVolume.addEventListener('input', (e) => {
+        const pct = Math.round(parseFloat(e.target.value) * 100);
+        volLabel.textContent = `${pct}%`;
+    });
+
+    // 7. Voice Audition / Preview
+    previewVoiceBtn.addEventListener('click', async () => {
+        const sampleText = scriptInput.value.trim().substring(0, 100) || "Welcome to the ultimate YouTube Shorts Creator!";
+        const voice = voiceSelect.value;
+        const speed = speedSelect.value;
+
+        previewVoiceBtn.textContent = "⏳ Loading...";
+        previewVoiceBtn.disabled = true;
+
+        try {
+            const res = await fetch('/api/preview_voice', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    text: sampleText,
+                    voice: voice,
+                    voice_rate: speed
+                })
+            });
+            const data = await res.json();
+            if (data.audio_url) {
+                voiceAudioPreview.src = data.audio_url;
+                voiceAudioPreview.play();
+            }
+        } catch (err) {
+            showToast('Voice preview failed: ' + err.message, 'error');
+        } finally {
+            previewVoiceBtn.textContent = "🔊 Audition";
+            previewVoiceBtn.disabled = false;
+        }
+    });
+
+    // 8. Custom Full Video Background Upload
+    videoUploadInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        uploadNotice.textContent = "Uploading video...";
+        uploadNotice.classList.remove('hidden');
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const res = await fetch('/api/upload_background', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            if (data.id) {
+                const opt = document.createElement('option');
+                opt.value = data.id;
+                opt.textContent = `Custom Upload: ${data.name}`;
+                opt.selected = true;
+                bgSelect.insertBefore(opt, bgSelect.firstChild);
+                uploadNotice.textContent = `Uploaded: ${data.name}`;
+            }
+        } catch (err) {
+            uploadNotice.textContent = "Upload failed.";
+        }
+    });
+
+    // ==========================================
+    // 9. VISUAL STORYBOARD & MANUAL SCENE EDITOR
+    // ==========================================
+
+    function updateStoryboardStats() {
+        const customCount = Object.keys(sceneOverrides).length;
+        storyboardSceneCount.textContent = `${currentScenes.length} scenes`;
+        storyboardCustomCount.textContent = `${customCount} custom photo${customCount === 1 ? '' : 's'}`;
+    }
+
+    function renderStoryboard() {
+        storyboardGrid.innerHTML = '';
+        currentScenes.forEach((sc) => {
+            const overrideVal = sceneOverrides[sc.scene_id];
+            const isCustom = Boolean(overrideVal);
+            const displayImgUrl = isCustom ? overrideVal : sc.image_url;
+
+            const card = document.createElement('div');
+            card.className = `scene-card ${isCustom ? 'custom-active' : ''}`;
+            card.id = `sceneCard_${sc.scene_id}`;
+
+            card.innerHTML = `
+                <div class="scene-header">
+                    <span>Scene ${sc.scene_id + 1}</span>
+                    <span class="scene-time">${sc.start_time}s - ${sc.end_time}s (${sc.duration}s)</span>
+                </div>
+                <div class="scene-preview-box">
+                    <img src="${displayImgUrl}" class="scene-thumb" id="sceneImg_${sc.scene_id}" alt="Scene ${sc.scene_id + 1}" loading="lazy">
+                    <span class="scene-badge ${isCustom ? 'badge-custom' : 'badge-auto'}" id="sceneBadge_${sc.scene_id}">
+                        ${isCustom ? 'CUSTOM' : (sc.prompt || bgSelect.value === 'ai_gemini' ? 'AI ULTRA' : 'AUTHENTIC')}
+                    </span>
+                </div>
+                <div class="scene-body">
+                    <div class="scene-script-text" title="${sc.text}">"${sc.text}"</div>
+                    <div class="scene-actions">
+                        <label class="btn-replace-img" title="Upload your own photo for this scene">
+                            📁 Replace
+                            <input type="file" class="scene-file-input" data-scene-id="${sc.scene_id}" accept="image/jpeg,image/png,image/webp" style="display:none;">
+                        </label>
+                        <button class="btn-refresh-scene" data-scene-id="${sc.scene_id}" title="Get alternate authentic photo or re-roll AI image">
+                            🔄 Alt
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            storyboardGrid.appendChild(card);
+        });
+
+        // Hook single scene upload inputs
+        document.querySelectorAll('.scene-file-input').forEach(input => {
+            input.addEventListener('change', async (e) => {
+                const file = e.target.files[0];
+                const sceneId = parseInt(e.target.getAttribute('data-scene-id'));
+                if (!file) return;
+
+                const card = document.getElementById(`sceneCard_${sceneId}`);
+                const img = document.getElementById(`sceneImg_${sceneId}`);
+                const badge = document.getElementById(`sceneBadge_${sceneId}`);
+
+                badge.textContent = "UPLOADING...";
+                badge.className = "scene-badge badge-custom";
+
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('scene_id', sceneId);
+
+                try {
+                    const res = await fetch('/api/upload_scene_image', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await res.json();
+                    if (data.local_path) {
+                        sceneOverrides[sceneId] = data.local_path;
+                        img.src = data.image_url;
+                        badge.textContent = "CUSTOM";
+                        card.classList.add('custom-active');
+                        updateStoryboardStats();
+                    }
+                } catch (err) {
+                    showToast('Image upload failed: ' + err.message, 'error');
+                    badge.textContent = "ERROR";
+                }
+            });
+        });
+
+        // Hook alternate image refresh buttons
+        document.querySelectorAll('.btn-refresh-scene').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const sceneId = parseInt(btn.getAttribute('data-scene-id'));
+                const sc = currentScenes[sceneId];
+                if (!sc) return;
+
+                btn.textContent = "⏳";
+                btn.disabled = true;
+
+                // Collect excluded URLs so it doesn't pick an already used one
+                const excluded = currentScenes.map(s => s.image_url);
+                Object.values(sceneOverrides).forEach(v => excluded.push(v));
+
+                try {
+                    const res = await fetch('/api/refresh_scene_image', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            script: scriptInput.value.trim(),
+                            scene_id: sceneId,
+                            scene_text: sc.text,
+                            exclude_urls: excluded,
+                            bg_choice: bgSelect.value
+                        })
+                    });
+                    const data = await res.json();
+                    if (data.found && data.image_url) {
+                        sceneOverrides[sceneId] = data.image_url;
+                        const img = document.getElementById(`sceneImg_${sceneId}`);
+                        const badge = document.getElementById(`sceneBadge_${sceneId}`);
+                        const card = document.getElementById(`sceneCard_${sceneId}`);
+
+                        img.src = data.image_url;
+                        badge.textContent = bgSelect.value === 'ai_gemini' ? "AI ULTRA" : "AUTHENTIC";
+                        badge.className = "scene-badge badge-auto";
+                        card.classList.remove('custom-active');
+                        updateStoryboardStats();
+                        showToast("✨ Alternative scene image applied!", "success");
+                    } else {
+                        showToast(data.message || 'No additional alternative photo found.', 'warning');
+                    }
+                } catch (err) {
+                    console.error('Alternate failed:', err);
+                    showToast('Failed to get alternative image: ' + err.message, 'error');
+                } finally {
+                    btn.textContent = "🔄 Alt";
+                    btn.disabled = false;
+                }
+            });
+        });
+    }
+
+    async function loadStoryboard(useOverrides = true) {
+        const script = scriptInput.value.trim();
+        if (!script) {
+            showToast("Please write or paste your script first before opening the storyboard!", "warning");
+            scriptInput.focus();
+            return;
+        }
+
+        // Show progress indicator and disable button
+        if (previewScenesBtn) previewScenesBtn.disabled = true;
+        if (storyboardProgressCard) storyboardProgressCard.classList.remove('hidden');
+        if (storyboardEmptyNotice) storyboardEmptyNotice.classList.add('hidden');
+        if (storyboardToolbar) storyboardToolbar.classList.add('hidden');
+        if (storyboardGrid) storyboardGrid.classList.add('hidden');
+
+        const isAi = bgSelect.value === 'ai_gemini';
+        let progress = 5;
+
+        function setProgress(pct, statusText, stepText) {
+            progress = pct;
+            if (storyboardProgressBar) storyboardProgressBar.style.width = `${pct}%`;
+            if (storyboardProgressPct) storyboardProgressPct.textContent = `${pct}%`;
+            if (statusText && storyboardProgressStatus) storyboardProgressStatus.textContent = statusText;
+            if (stepText && storyboardProgressStep) storyboardProgressStep.textContent = stepText;
+            if (previewScenesBtn) {
+                previewScenesBtn.innerHTML = `<span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></span> Auto-Matching (${pct}%)...`;
+            }
+        }
+
+        setProgress(8, "Auto-Matching Scenes...", "Analyzing script structure & visual pacing...");
+
+        // Progress simulation timer calibrated for engine mode
+        const timerSteps = isAi ? [
+            { at: 500, pct: 20, status: "Directing AI Scenes...", step: "Consulting Gemini AI visual director..." },
+            { at: 1500, pct: 38, status: "Generating Prompts...", step: "Crafting photorealistic 9:16 scene prompts..." },
+            { at: 3200, pct: 58, status: "Synthesizing Visuals...", step: "Generating high-definition visual assets..." },
+            { at: 5500, pct: 74, status: "Downloading Assets...", step: "Rendering cinematic scene visuals..." },
+            { at: 8000, pct: 88, status: "Verifying Scenes...", step: "Formatting 9:16 vertical frames & aspect ratios..." }
+        ] : [
+            { at: 250, pct: 25, status: "Detecting Topic...", step: "Identifying historical & encyclopedic entities..." },
+            { at: 650, pct: 52, status: "Querying Archives...", step: "Matching authentic Wikimedia Commons archives..." },
+            { at: 1300, pct: 75, status: "Filtering Visuals...", step: "Verifying high-resolution imagery & licensing..." },
+            { at: 2000, pct: 88, status: "Formatting Storyboard...", step: "Arranging scene cards & timestamps..." }
+        ];
+
+        const timeouts = [];
+        timerSteps.forEach(s => {
+            timeouts.push(setTimeout(() => {
+                setProgress(s.pct, s.status, s.step);
+            }, s.at));
+        });
+
+        const creepInterval = setInterval(() => {
+            if (progress < 94) {
+                setProgress(progress + 1);
+            }
+        }, isAi ? 600 : 250);
+
+        try {
+            const res = await fetch('/api/prepare_scenes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    script: script,
+                    voice_rate: speedSelect.value,
+                    bg_choice: bgSelect.value,
+                    scene_overrides: useOverrides ? sceneOverrides : {}
+                })
+            });
+            if (!res.ok) {
+                let errMsg = `Server returned ${res.status}`;
+                try {
+                    const errData = await res.json();
+                    if (errData && errData.detail) errMsg = errData.detail;
+                } catch (_) {
+                    errMsg = await res.text();
+                }
+                throw new Error(errMsg);
+            }
+            const data = await res.json();
+            currentScenes = data.scenes || [];
+
+            // Clear timers
+            timeouts.forEach(t => clearTimeout(t));
+            clearInterval(creepInterval);
+
+            // 100% completion
+            setProgress(100, "Scenes Matched!", `Ready! Loaded ${currentScenes.length} scenes.`);
+            previewScenesBtn.innerHTML = '✅ Matched (100%)';
+
+            storyboardTopic.innerHTML = `Topic: <strong>${data.topic}</strong>`;
+            updateStoryboardStats();
+
+            // Short delay so user clearly sees 100% completion
+            await new Promise(r => setTimeout(r, 450));
+
+            if (storyboardProgressCard) storyboardProgressCard.classList.add('hidden');
+            if (storyboardToolbar) storyboardToolbar.classList.remove('hidden');
+            if (storyboardGrid) storyboardGrid.classList.remove('hidden');
+
+            renderStoryboard();
+            showToast(`✨ Storyboard ready! Loaded ${currentScenes.length} scenes.`, 'success');
+        } catch (err) {
+            timeouts.forEach(t => clearTimeout(t));
+            clearInterval(creepInterval);
+            if (storyboardProgressCard) storyboardProgressCard.classList.add('hidden');
+            if (storyboardEmptyNotice) storyboardEmptyNotice.classList.remove('hidden');
+            showToast('Failed to prepare storyboard scenes: ' + err.message, 'error');
+        } finally {
+            if (previewScenesBtn) {
+                previewScenesBtn.innerHTML = '🔍 Auto-Match & Preview Scenes';
+                previewScenesBtn.disabled = false;
+            }
+        }
+    }
+
+    previewScenesBtn.addEventListener('click', () => loadStoryboard(true));
+    resetStoryboardBtn.addEventListener('click', () => {
+        sceneOverrides = {};
+        loadStoryboard(false);
+    });
+
+    // Batch Image Upload Handler
+    batchImageInput.addEventListener('change', async (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
+
+        const script = scriptInput.value.trim();
+        if (!script) {
+            showToast("Please write or paste your script first!", "warning");
+            scriptInput.focus();
+            return;
+        }
+
+        previewScenesBtn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span> Uploading...';
+        previewScenesBtn.disabled = true;
+
+        const formData = new FormData();
+        files.forEach(f => formData.append('files', f));
+
+        try {
+            const res = await fetch('/api/upload_batch_images', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            const uploaded = data.uploaded || [];
+
+            if (uploaded.length > 0) {
+                // If scenes are not yet loaded, load them
+                if (currentScenes.length === 0) {
+                    await loadStoryboard(false);
+                }
+
+                // Map uploaded photos sequentially to scenes
+                uploaded.forEach((u, i) => {
+                    if (i < currentScenes.length) {
+                        sceneOverrides[i] = u.local_path;
+                    }
+                });
+
+                updateStoryboardStats();
+                renderStoryboard();
+                showToast(`Successfully assigned ${uploaded.length} custom photo(s) to scenes!`, 'success');
+            }
+        } catch (err) {
+            showToast('Batch upload failed: ' + err.message, 'error');
+        } finally {
+            previewScenesBtn.innerHTML = '🔍 Auto-Match & Preview Scenes';
+            previewScenesBtn.disabled = false;
+            batchImageInput.value = '';
+        }
+    });
+
+    // ==========================================
+    // 10. GENERATE MASTER VIDEO (1080x1920)
+    // ==========================================
+
+    generateBtn.addEventListener('click', async () => {
+        const script = scriptInput.value.trim();
+        if (!script) {
+            showToast("Please enter or paste your script first!", "warning");
+            scriptInput.focus();
+            return;
+        }
+
+        const selectedStyleRadio = document.querySelector('input[name="subtitleStyle"]:checked');
+        const subtitleStyle = selectedStyleRadio ? selectedStyleRadio.value : 'mrbeast';
+
+        // Gather exact previewed scenes from storyboard so the video locks in those approved visuals
+        let previewScenesPayload = null;
+        if (currentScenes && currentScenes.length > 0) {
+            previewScenesPayload = currentScenes.map(sc => {
+                const activeImg = sceneOverrides[sc.scene_id] || sc.image_url;
+                return {
+                    scene_id: sc.scene_id,
+                    text: sc.text,
+                    image_url: activeImg,
+                    duration: sc.duration,
+                    start_time: sc.start_time,
+                    end_time: sc.end_time
+                };
+            });
+        }
+
+        const payload = {
+            script: script,
+            voice: voiceSelect.value,
+            voice_rate: speedSelect.value,
+            subtitle_style: subtitleStyle,
+            bg_choice: bgSelect.value,
+            bgm_track: bgmSelect.value,
+            bgm_volume: parseFloat(bgmVolume.value),
+            scene_overrides: Object.keys(sceneOverrides).length > 0 ? sceneOverrides : null,
+            preview_scenes: previewScenesPayload
+        };
+
+        // UI State: Rendering
+        generateBtn.disabled = true;
+        generateBtn.innerHTML = '<span class="spinner" style="width:20px;height:20px;border-width:2px;"></span> Rendering Viral Short...';
+        progressCard.classList.remove('hidden');
+        progressBar.style.width = '5%';
+        progressPct.textContent = '5%';
+        progressStatus.textContent = 'Initializing Queue...';
+        progressStep.textContent = 'Preparing audio & visual pipeline...';
+
+        try {
+            const res = await fetch('/api/generate_short', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (!res.ok) {
+                let errMsg = `Server returned ${res.status}`;
+                try {
+                    const errData = await res.json();
+                    if (errData && errData.detail) errMsg = errData.detail;
+                } catch (_) {
+                    errMsg = await res.text();
+                }
+                throw new Error(errMsg);
+            }
+            const data = await res.json();
+            const jobId = data.job_id;
+            showToast("🚀 Rendering started! Tracking live progress...", "info", 3500);
+
+            // Poll status
+            if (pollInterval) clearInterval(pollInterval);
+            pollInterval = setInterval(async () => {
+                try {
+                    const sRes = await fetch(`/api/status/${jobId}`);
+                    const status = await sRes.json();
+
+                    if (status.status === 'processing' || status.status === 'queued') {
+                        progressBar.style.width = `${status.progress}%`;
+                        progressPct.textContent = `${status.progress}%`;
+                        progressStatus.textContent = 'Rendering Viral Short...';
+                        progressStep.textContent = status.message || 'Processing frames...';
+                    } else if (status.status === 'completed') {
+                        clearInterval(pollInterval);
+                        progressBar.style.width = '100%';
+                        progressPct.textContent = '100%';
+                        progressStatus.textContent = 'Ready!';
+                        progressStep.textContent = 'Your viral short is finished.';
+
+                        // Reveal video player
+                        playerPlaceholder.style.display = 'none';
+                        finalVideoPlayer.style.display = 'block';
+                        finalVideoPlayer.src = status.video_url;
+                        finalVideoPlayer.play();
+
+                        playerActions.classList.remove('hidden');
+                        downloadVideoBtn.href = status.video_url;
+
+                        // Reveal SEO Kit
+                        if (status.metadata) {
+                            seoTitle.value = status.metadata.title;
+                            seoDesc.value = status.metadata.description;
+                            seoTags.value = status.metadata.tags.join(', ');
+                            seoKitCard.classList.remove('hidden');
+                        }
+
+                        // Reset button
+                        generateBtn.disabled = false;
+                        generateBtn.innerHTML = '<span class="btn-icon">⚡</span><span class="btn-text">GENERATE VIRAL SHORT (1080x1920)</span>';
+                        showToast("🎉 Your viral 1080x1920 Short is ready!", "success", 5000);
+                    } else if (status.status === 'error') {
+                        clearInterval(pollInterval);
+                        showToast('Render error: ' + status.message, 'error');
+                        progressCard.classList.add('hidden');
+                        generateBtn.disabled = false;
+                        generateBtn.innerHTML = '<span class="btn-icon">⚡</span><span class="btn-text">GENERATE VIRAL SHORT (1080x1920)</span>';
+                    }
+                } catch (pErr) {
+                    console.error('Poll error:', pErr);
+                }
+            }, 1000);
+
+        } catch (err) {
+            showToast('Failed to start render: ' + err.message, 'error');
+            generateBtn.disabled = false;
+            generateBtn.innerHTML = '<span class="btn-icon">⚡</span><span class="btn-text">GENERATE VIRAL SHORT (1080x1920)</span>';
+            progressCard.classList.add('hidden');
+        }
+    });
+
+    // 11. Copy SEO Elements
+    document.querySelectorAll('.btn-copy').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.getAttribute('data-target');
+            const el = document.getElementById(targetId);
+            if (el) {
+                el.select();
+                navigator.clipboard.writeText(el.value).then(() => {
+                    const originalText = btn.textContent;
+                    btn.textContent = "✅ Copied!";
+                    setTimeout(() => { btn.textContent = originalText; }, 1800);
+                });
+            }
+        });
+    });
+
+    // Load initial setup
+    loadConfig();
+    updateScriptStats();
+});
