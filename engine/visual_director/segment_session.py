@@ -207,12 +207,29 @@ def redo_session(session_id: str) -> Tuple[Optional[StoryboardSession], Optional
 
 
 def save_session(session: StoryboardSession) -> str:
-    """Persists StoryboardSession to disk as JSON atomically."""
+    """Persists StoryboardSession to disk as JSON atomically with Windows retry."""
     path = os.path.join(SESSIONS_DIR, f"{session.session_id}.json")
     tmp_path = f"{path}.tmp.{uuid.uuid4().hex[:8]}"
     with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(session.to_dict(), f, indent=2)
-    os.replace(tmp_path, path)
+
+    # On Windows, os.replace can raise WinError 5 if the target is momentarily open
+    for attempt in range(6):
+        try:
+            os.replace(tmp_path, path)
+            return path
+        except (PermissionError, OSError):
+            time.sleep(0.05 * (attempt + 1))
+
+    # Fallback to direct write if replace failed after retries
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(session.to_dict(), f, indent=2)
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+    except Exception:
+        pass
+
     return path
 
 

@@ -28,8 +28,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const storyboardEmptyNotice = document.getElementById('storyboardEmptyNotice');
     const storyboardToolbar = document.getElementById('storyboardToolbar');
     const storyboardSceneCount = document.getElementById('storyboardSceneCount');
+    const storyboardBlankCount = document.getElementById('storyboardBlankCount');
     const storyboardTotalDur = document.getElementById('storyboardTotalDur');
     const storyboardVisualsCount = document.getElementById('storyboardVisualsCount');
+
+    const styleLockInput = document.getElementById('styleLockInput');
+    const saveStyleLockBtn = document.getElementById('saveStyleLockBtn');
+    const undoBtn = document.getElementById('undoBtn');
+    const redoBtn = document.getElementById('redoBtn');
+    const copyAllPromptsBtn = document.getElementById('copyAllPromptsBtn');
+    const splitModal = document.getElementById('splitModal');
+    const closeSplitModal = document.getElementById('closeSplitModal');
+    const splitWordChips = document.getElementById('splitWordChips');
+    const suggestModal = document.getElementById('suggestModal');
+    const closeSuggestModal = document.getElementById('closeSuggestModal');
+    const suggestPromptsList = document.getElementById('suggestPromptsList');
 
     const storyboardProgressCard = document.getElementById('storyboardProgressCard');
     const storyboardProgressStatus = document.getElementById('storyboardProgressStatus');
@@ -67,6 +80,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentMode = 'auto'; // 'auto' | 'manual'
     let currentSession = null;
     let activePromptTabs = {}; // segment_id -> 'image' | 'video'
+    let focusedSegmentId = null;
+    let activeSplitSegId = null;
+    let activeSuggestSegId = null;
 
     // ==========================================
     // TOAST NOTIFICATIONS
@@ -479,6 +495,255 @@ document.addEventListener('DOMContentLoaded', () => {
     generateMissingBtn.addEventListener('click', triggerGenerateMissing);
     bannerGenerateMissingBtn.addEventListener('click', triggerGenerateMissing);
 
+    // ==========================================
+    // STEP 2: FAST SCENE EDITOR HELPERS & ACTIONS
+    // ==========================================
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function syncScriptFromSession() {
+        if (currentSession && currentSession.script_text) {
+            scriptInput.value = currentSession.script_text;
+            updateScriptStats();
+        }
+    }
+
+    // Undo & Redo
+    async function triggerUndo() {
+        if (!currentSession || !currentSession.can_undo) return;
+        try {
+            const res = await fetch(`/api/segments/${currentSession.session_id}/undo`, { method: 'POST' });
+            if (res.ok) {
+                currentSession = await res.json();
+                syncScriptFromSession();
+                renderSceneCards();
+                showToast("↩ Undone", "info", 1500);
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    async function triggerRedo() {
+        if (!currentSession || !currentSession.can_redo) return;
+        try {
+            const res = await fetch(`/api/segments/${currentSession.session_id}/redo`, { method: 'POST' });
+            if (res.ok) {
+                currentSession = await res.json();
+                syncScriptFromSession();
+                renderSceneCards();
+                showToast("↪ Redone", "info", 1500);
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    undoBtn?.addEventListener('click', triggerUndo);
+    redoBtn?.addEventListener('click', triggerRedo);
+
+    // Style Lock
+    async function applyStyleLock() {
+        if (!currentSession) return;
+        const styleVal = styleLockInput.value.trim();
+        try {
+            const res = await fetch(`/api/segments/${currentSession.session_id}/edit_meta`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ style_lock: styleVal })
+            });
+            if (res.ok) {
+                currentSession = await res.json();
+                showToast("🔒 Style lock updated!", "success", 2000);
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    saveStyleLockBtn?.addEventListener('click', applyStyleLock);
+    styleLockInput?.addEventListener('blur', applyStyleLock);
+
+    // Copy All Prompts
+    copyAllPromptsBtn?.addEventListener('click', async () => {
+        if (!currentSession) return;
+        try {
+            const res = await fetch(`/api/segments/${currentSession.session_id}/export_prompts`);
+            if (!res.ok) throw new Error("Failed to export prompts");
+            const text = await res.text();
+            await navigator.clipboard.writeText(text);
+            copyAllPromptsBtn.textContent = '✅ Copied!';
+            setTimeout(() => { copyAllPromptsBtn.textContent = '📋 Copy All Prompts'; }, 2000);
+            showToast("All prompts copied to clipboard!", "success");
+        } catch (err) {
+            showToast("Failed to copy prompts: " + err.message, "error");
+        }
+    });
+
+    // Word-Split Modal
+    function openSplitModal(segment) {
+        activeSplitSegId = segment.segment_id;
+        const words = segment.text.trim().split(/\s+/).filter(Boolean);
+        if (words.length < 2) {
+            showToast("Sentence too short to split (needs at least 2 words).", "warning");
+            return;
+        }
+        splitWordChips.innerHTML = '';
+        words.forEach((w, wIdx) => {
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'word-chip';
+            chip.textContent = w;
+            chip.title = `Split after "${w}" (word ${wIdx + 1})`;
+            if (wIdx < words.length - 1) {
+                chip.addEventListener('click', async () => {
+                    splitModal.classList.add('hidden');
+                    try {
+                        const res = await fetch(`/api/segments/${currentSession.session_id}/split`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                segment_id: activeSplitSegId,
+                                split_at_word_index: wIdx + 1
+                            })
+                        });
+                        if (!res.ok) {
+                            const err = await res.json();
+                            throw new Error(err.detail || 'Split failed');
+                        }
+                        currentSession = await res.json();
+                        syncScriptFromSession();
+                        renderSceneCards();
+                        showToast("✂️ Scene split!", "success");
+                    } catch (err) {
+                        showToast(err.message, "error");
+                    }
+                });
+            } else {
+                chip.disabled = true;
+                chip.classList.add('word-chip-last');
+            }
+            splitWordChips.appendChild(chip);
+        });
+        splitModal.classList.remove('hidden');
+    }
+
+    closeSplitModal?.addEventListener('click', () => {
+        splitModal.classList.add('hidden');
+    });
+
+    // Suggest Prompts Modal
+    async function openSuggestModal(segmentId) {
+        activeSuggestSegId = segmentId;
+        suggestPromptsList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);"><span class="spinner" style="width:20px;height:20px;border-width:2px;display:inline-block;margin-right:8px;"></span> Gemini is generating 3 alternative prompts...</div>';
+        suggestModal.classList.remove('hidden');
+
+        try {
+            const res = await fetch(`/api/segments/${currentSession.session_id}/suggest_prompts`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ segment_id: segmentId })
+            });
+            if (!res.ok) throw new Error("Failed to get suggestions");
+            const data = await res.json();
+            const prompts = data.prompts || [];
+            suggestPromptsList.innerHTML = '';
+            prompts.forEach((p, idx) => {
+                const item = document.createElement('div');
+                item.className = 'suggest-prompt-item';
+                item.innerHTML = `
+                    <span class="suggest-num">#${idx + 1}</span>
+                    <p class="suggest-text">${escapeHtml(p)}</p>
+                    <button type="button" class="btn-secondary btn-xs btn-use-suggest">Use This</button>
+                `;
+                item.querySelector('.btn-use-suggest').addEventListener('click', async () => {
+                    suggestModal.classList.add('hidden');
+                    const curKind = activePromptTabs[activeSuggestSegId] || 'image';
+                    try {
+                        const editRes = await fetch(`/api/segments/${currentSession.session_id}/edit_prompt`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                segment_id: activeSuggestSegId,
+                                new_prompt: p,
+                                kind: curKind
+                            })
+                        });
+                        if (editRes.ok) {
+                            currentSession = await editRes.json();
+                            renderSceneCards();
+                            showToast("✨ Prompt updated from suggestion!", "success");
+                        }
+                    } catch (err) {
+                        showToast(err.message, "error");
+                    }
+                });
+                suggestPromptsList.appendChild(item);
+            });
+        } catch (err) {
+            suggestPromptsList.innerHTML = `<div style="padding:16px;color:#ef4444;">Error loading suggestions: ${escapeHtml(err.message)}</div>`;
+        }
+    }
+
+    closeSuggestModal?.addEventListener('click', () => {
+        suggestModal.classList.add('hidden');
+    });
+
+    // Seam boundary shift
+    async function shiftBoundary(segmentId, direction) {
+        if (!currentSession) return;
+        try {
+            const res = await fetch(`/api/segments/${currentSession.session_id}/move_boundary`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    segment_id: segmentId,
+                    direction: direction,
+                    words: 1
+                })
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || 'Boundary shift failed');
+            }
+            currentSession = await res.json();
+            syncScriptFromSession();
+            renderSceneCards();
+            showToast(`Seam shifted ${direction === 'left' ? '◀ left' : '▶ right'}!`, 'info', 1500);
+        } catch (err) {
+            showToast(err.message, 'warning');
+        }
+    }
+
+    // Motion selection
+    async function updateMotion(segmentId, motion) {
+        if (!currentSession) return;
+        try {
+            const res = await fetch(`/api/segments/${currentSession.session_id}/edit_meta`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    segment_id: segmentId,
+                    motion: motion
+                })
+            });
+            if (res.ok) {
+                currentSession = await res.json();
+                showToast(`Camera motion set to "${motion}"`, 'info', 1500);
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
     // Multi-File Upload & Toolbar Dropzone
     async function handleMultiFileUpload(files) {
         if (!files || files.length === 0) return;
@@ -497,36 +762,34 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 currentSession = await cRes.json();
             } catch (err) {
-                showToast("Failed to create session for media: " + err.message, "error");
+                showToast("Failed to create session: " + err.message, "error");
                 return;
             }
         }
 
-        showToast(`Uploading ${files.length} file(s) across scenes...`, 'info');
-        const segs = currentSession.segments || [];
-
-        for (let i = 0; i < files.length && i < segs.length; i++) {
-            const file = files[i];
-            const seg = segs[i];
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('segment_id', seg.segment_id);
-
-            try {
-                const uRes = await fetch(`/api/segments/${currentSession.session_id}/upload_media`, {
-                    method: 'POST',
-                    body: formData
-                });
-                if (uRes.ok) {
-                    currentSession = await uRes.json();
-                }
-            } catch (err) {
-                console.error(`Upload error on scene ${i}:`, err);
-            }
+        showToast(`Processing ${files.length} file(s)...`, 'info');
+        const formData = new FormData();
+        for (const f of files) {
+            formData.append('files', f);
         }
 
-        renderSceneCards();
-        showToast("✨ Files assigned to scenes!", "success");
+        try {
+            const uRes = await fetch(`/api/segments/${currentSession.session_id}/upload_bulk`, {
+                method: 'POST',
+                body: formData
+            });
+            if (!uRes.ok) {
+                const errData = await uRes.json();
+                throw new Error(errData.detail || "Bulk upload failed");
+            }
+            const data = await uRes.json();
+            currentSession = data.session;
+            syncScriptFromSession();
+            renderSceneCards();
+            showToast(`✨ ${files.length} file(s) assigned to scenes!`, "success");
+        } catch (err) {
+            showToast("Upload error: " + err.message, "error");
+        }
     }
 
     multiMediaInput.addEventListener('change', (e) => {
@@ -547,6 +810,54 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         toolbarDropzone.classList.remove('dragover');
         handleMultiFileUpload(Array.from(e.dataTransfer.files));
+    });
+
+    // Global keyboard shortcuts for Undo/Redo and Paste
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+            const tag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+            if (tag === 'textarea' || tag === 'input') return;
+            e.preventDefault();
+            triggerUndo();
+        } else if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') || ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z')) {
+            const tag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+            if (tag === 'textarea' || tag === 'input') return;
+            e.preventDefault();
+            triggerRedo();
+        }
+    });
+
+    document.addEventListener('paste', async (e) => {
+        const tag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+        if (tag === 'input' || tag === 'textarea') return;
+
+        if (!focusedSegmentId || !currentSession) return;
+        const items = e.clipboardData ? e.clipboardData.items : [];
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image') !== -1 || items[i].type.indexOf('video') !== -1) {
+                const file = items[i].getAsFile();
+                if (!file) continue;
+                e.preventDefault();
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('segment_id', focusedSegmentId);
+
+                try {
+                    showToast("Uploading pasted visual to focused scene...", "info");
+                    const res = await fetch(`/api/segments/${currentSession.session_id}/upload_media`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    if (!res.ok) throw new Error("Paste upload failed");
+                    currentSession = await res.json();
+                    renderSceneCards();
+                    showToast("✨ Visual pasted into focused scene!", "success");
+                } catch (err) {
+                    showToast(err.message, "error");
+                }
+                break;
+            }
+        }
     });
 
     // Add Scene Beat
@@ -573,6 +884,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(err.detail || 'Failed to add scene');
             }
             currentSession = await res.json();
+            syncScriptFromSession();
             renderSceneCards();
             showToast("➕ Scene added!", "success");
         } catch (err) {
@@ -584,9 +896,16 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderSceneCards() {
         sceneCardsList.innerHTML = '';
 
+        if (undoBtn) undoBtn.disabled = !currentSession || !currentSession.can_undo;
+        if (redoBtn) redoBtn.disabled = !currentSession || !currentSession.can_redo;
+        if (styleLockInput && currentSession) {
+            styleLockInput.value = currentSession.style_lock || '';
+        }
+
         if (!currentSession || !currentSession.segments || currentSession.segments.length === 0) {
             storyboardEmptyNotice.classList.remove('hidden');
             storyboardSceneCount.textContent = '0 scenes';
+            if (storyboardBlankCount) storyboardBlankCount.classList.add('hidden');
             storyboardTotalDur.textContent = '0.0s total';
             storyboardVisualsCount.textContent = '0 visuals loaded';
             blankScenesWarning.classList.add('hidden');
@@ -607,6 +926,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         storyboardSceneCount.textContent = `${segs.length} scenes`;
+        if (storyboardBlankCount) {
+            if (blankCount > 0) {
+                storyboardBlankCount.textContent = `${blankCount} blank`;
+                storyboardBlankCount.classList.remove('hidden');
+            } else {
+                storyboardBlankCount.classList.add('hidden');
+            }
+        }
         storyboardTotalDur.textContent = `${currentSession.total_duration}s total`;
         storyboardVisualsCount.textContent = `${loadedVisuals} visuals loaded`;
 
@@ -629,30 +956,70 @@ document.addEventListener('DOMContentLoaded', () => {
         segs.forEach((seg, idx) => {
             const card = document.createElement('div');
             const hasMedia = Boolean(seg.image_path || seg.image_url) && seg.media_type !== 'blank';
-            card.className = `scene-editor-card ${hasMedia ? '' : 'blank-card'}`;
+            const isFocused = focusedSegmentId === seg.segment_id;
+            card.className = `scene-editor-card ${hasMedia ? '' : 'blank-card'} ${isFocused ? 'card-focused' : ''}`;
             card.id = `sceneCard_${seg.segment_id}`;
+
+            // Focus card on click for clipboard paste
+            card.addEventListener('click', () => {
+                focusedSegmentId = seg.segment_id;
+                document.querySelectorAll('.scene-editor-card').forEach(c => c.classList.remove('card-focused'));
+                card.classList.add('card-focused');
+            });
 
             const activeTab = activePromptTabs[seg.segment_id] || 'image';
             const promptText = activeTab === 'video' ? (seg.video_prompt || '') : (seg.image_prompt || '');
-
             const isVideo = seg.media_type === 'video' || (typeof seg.image_url === 'string' && (seg.image_url.endsWith('.mp4') || seg.image_url.endsWith('.webm')));
+
+            // Status chip markup
+            let statusChipHtml = '';
+            if (seg.status === 'ready') {
+                statusChipHtml = '<span class="status-chip status-ready">● Ready</span>';
+            } else if (seg.status === 'generating') {
+                statusChipHtml = '<span class="status-chip status-generating"><span class="spinner-mini"></span> Generating...</span>';
+            } else if (seg.status === 'queued') {
+                statusChipHtml = '<span class="status-chip status-queued">⏳ Queued</span>';
+            } else if (seg.status === 'failed') {
+                statusChipHtml = `<span class="status-chip status-failed" title="${escapeHtml(seg.fail_reason || 'FLUX generation failed')}">⚠️ Failed</span>`;
+            } else if (seg.status === 'manual' || seg.is_custom) {
+                statusChipHtml = '<span class="status-chip status-manual">🟣 Manual</span>';
+            } else {
+                statusChipHtml = '<span class="status-chip status-empty">⚪ Empty</span>';
+            }
+
+            // QA warning markup
+            let qaChipHtml = '';
+            if (seg.qa_score !== null && seg.qa_score !== undefined && seg.qa_score < 80) {
+                qaChipHtml = `<span class="badge badge-qa-warning" title="${escapeHtml(seg.qa_note || 'Low visual alignment')}">⚠️ QA: ${seg.qa_score}%</span>`;
+            }
+
+            const motions = ["push in", "pull out", "pan right", "pan left", "tilt up", "static"];
+            const curMotion = seg.motion || seg.camera_motion || "push in";
+            let motionOptionsHtml = '';
+            motions.forEach(m => {
+                motionOptionsHtml += `<option value="${m}" ${m === curMotion ? 'selected' : ''}>${m}</option>`;
+            });
 
             card.innerHTML = `
                 <div class="scene-card-top">
                     <div class="scene-card-badge-group">
                         <span class="scene-idx-badge">SCENE #${idx + 1}</span>
-                        <span class="segment-card-dur">${seg.duration}s</span>
-                        ${seg.source === 'manual' ? '<span class="badge" style="color:var(--accent-green);font-size:0.7rem;font-weight:700;">MANUAL</span>' : ''}
-                        ${!hasMedia ? '<span class="badge" style="color:#f59e0b;font-size:0.7rem;font-weight:700;">BLANK</span>' : ''}
+                        <span class="segment-card-dur">~${seg.duration}s</span>
+                        ${statusChipHtml}
+                        ${qaChipHtml}
                     </div>
                     <div class="segment-card-actions">
-                        <button class="segment-btn btn-split" data-segment-id="${seg.segment_id}" title="Split into two scenes">
+                        <div class="seam-controls">
+                            <button type="button" class="segment-btn btn-seam-left" data-segment-id="${seg.segment_id}" title="Shift 1 word left across seam (◀)">◀</button>
+                            <button type="button" class="segment-btn btn-seam-right" data-segment-id="${seg.segment_id}" title="Shift 1 word right across seam (▶)">▶</button>
+                        </div>
+                        <button type="button" class="segment-btn btn-split" data-segment-id="${seg.segment_id}" title="Interactive click-to-split">
                             ✂️ Split
                         </button>
-                        <button class="segment-btn btn-merge" data-segment-id="${seg.segment_id}" ${idx === segs.length - 1 ? 'disabled' : ''} title="Merge with next scene">
+                        <button type="button" class="segment-btn btn-merge" data-segment-id="${seg.segment_id}" ${idx === segs.length - 1 ? 'disabled' : ''} title="Merge with next scene">
                             🔗 Merge
                         </button>
-                        <button class="segment-btn btn-danger btn-del" data-segment-id="${seg.segment_id}" ${segs.length <= 1 ? 'disabled' : ''} title="Delete scene">
+                        <button type="button" class="segment-btn btn-danger btn-del" data-segment-id="${seg.segment_id}" ${segs.length <= 1 ? 'disabled' : ''} title="Delete scene">
                             🗑️
                         </button>
                     </div>
@@ -660,7 +1027,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 <div class="scene-card-main">
                     <!-- Left: Media Slot -->
-                    <div class="scene-media-slot" id="mediaSlot_${seg.segment_id}" title="Click, drop file, or paste image/video here">
+                    <div class="scene-media-slot" id="mediaSlot_${seg.segment_id}" title="Drop media, click Replace, or Ctrl+V to paste">
                         ${hasMedia ? (
                             isVideo ? `
                                 <video src="${seg.image_url}" class="scene-media-thumb" muted loop playsinline></video>
@@ -684,19 +1051,25 @@ document.addEventListener('DOMContentLoaded', () => {
                                     ✕ Clear
                                 </button>
                             ` : ''}
-                            ${currentMode === 'auto' ? `
-                                <button type="button" class="media-mini-btn btn-reroll-media" data-segment-id="${seg.segment_id}" title="Re-generate via FLUX">
-                                    ↻ Re-roll
-                                </button>
-                            ` : ''}
+                            <button type="button" class="media-mini-btn btn-reroll-media" data-segment-id="${seg.segment_id}" title="Generate or retry via FLUX">
+                                ⚡ Flux
+                            </button>
                         </div>
                     </div>
 
-                    <!-- Right: Text & Prompts -->
+                    <!-- Right: Content & Controls -->
                     <div class="scene-content-col">
                         <div class="segment-field-group">
-                            <label class="segment-field-label">SPOKEN NARRATION</label>
-                            <textarea class="segment-card-textarea narration-textarea" data-segment-id="${seg.segment_id}">${seg.text}</textarea>
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <label class="segment-field-label">SPOKEN NARRATION</label>
+                                <div class="motion-select-group">
+                                    <label class="segment-field-label" style="margin-right:4px;">CAMERA:</label>
+                                    <select class="scene-motion-select" data-segment-id="${seg.segment_id}">
+                                        ${motionOptionsHtml}
+                                    </select>
+                                </div>
+                            </div>
+                            <textarea class="segment-card-textarea narration-textarea" data-segment-id="${seg.segment_id}">${escapeHtml(seg.text)}</textarea>
                         </div>
 
                         <div class="segment-field-group">
@@ -708,17 +1081,20 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <button type="button" class="prompt-tab-btn ${activeTab === 'video' ? 'active' : ''}" data-tab="video" data-segment-id="${seg.segment_id}">
                                     🎬 Video
                                 </button>
-                                <button type="button" class="segment-btn btn-copy-prompt" style="margin-left:auto;" data-segment-id="${seg.segment_id}" title="Copy prompt for external generator">
+                                <button type="button" class="segment-btn btn-suggest-prompt" style="margin-left:auto;margin-right:4px;" data-segment-id="${seg.segment_id}" title="Suggest 3 Gemini prompt alternatives">
+                                    💡 Suggest
+                                </button>
+                                <button type="button" class="segment-btn btn-copy-prompt" data-segment-id="${seg.segment_id}" title="Copy prompt for external generator">
                                     📋 Copy
                                 </button>
                             </div>
-                            <textarea class="segment-card-textarea segment-prompt-textarea prompt-textarea" data-segment-id="${seg.segment_id}">${promptText}</textarea>
+                            <textarea class="segment-card-textarea segment-prompt-textarea prompt-textarea" data-segment-id="${seg.segment_id}">${escapeHtml(promptText)}</textarea>
                         </div>
                     </div>
                 </div>
             `;
 
-            // Setup single media input
+            // Wire up single media input
             const fileInput = card.querySelector('.single-media-input');
             if (fileInput) {
                 fileInput.addEventListener('change', async (e) => {
@@ -743,7 +1119,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
-            // Setup Media Slot Drag & Drop and Paste
+            // Wire up media slot drag & drop
             const mediaSlot = card.querySelector('.scene-media-slot');
             if (mediaSlot) {
                 mediaSlot.addEventListener('dragover', (e) => {
@@ -776,40 +1152,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         showToast(err.message, "error");
                     }
                 });
-
-                // Paste from clipboard
-                mediaSlot.tabIndex = 0;
-                mediaSlot.addEventListener('paste', async (e) => {
-                    const items = e.clipboardData.items;
-                    for (let i = 0; i < items.length; i++) {
-                        if (items[i].type.indexOf('image') !== -1 || items[i].type.indexOf('video') !== -1) {
-                            const file = items[i].getAsFile();
-                            const formData = new FormData();
-                            formData.append('file', file);
-                            formData.append('segment_id', seg.segment_id);
-
-                            try {
-                                const res = await fetch(`/api/segments/${currentSession.session_id}/upload_media`, {
-                                    method: 'POST',
-                                    body: formData
-                                });
-                                if (!res.ok) throw new Error("Paste failed");
-                                currentSession = await res.json();
-                                renderSceneCards();
-                                showToast("Visual pasted from clipboard!", "success");
-                            } catch (err) {
-                                showToast(err.message, "error");
-                            }
-                            break;
-                        }
-                    }
-                });
             }
 
-            // Clear Media
+            // Wire up Clear Media
             const clearBtn = card.querySelector('.btn-clear-media');
             if (clearBtn) {
-                clearBtn.addEventListener('click', async () => {
+                clearBtn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
                     try {
                         const res = await fetch(`/api/segments/${currentSession.session_id}/clear_media`, {
                             method: 'POST',
@@ -826,10 +1175,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
-            // Re-roll single scene via FLUX
+            // Wire up Flux generation / retry
             const rerollBtn = card.querySelector('.btn-reroll-media');
             if (rerollBtn) {
-                rerollBtn.addEventListener('click', async () => {
+                rerollBtn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
                     rerollBtn.textContent = '⏳';
                     rerollBtn.disabled = true;
                     try {
@@ -838,20 +1188,28 @@ document.addEventListener('DOMContentLoaded', () => {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ segment_id: seg.segment_id })
                         });
-                        if (!res.ok) throw new Error("Re-roll failed");
+                        if (!res.ok) throw new Error("Flux generation failed");
                         currentSession = await res.json();
                         renderSceneCards();
-                        showToast("✨ Scene visual regenerated!", "success");
+                        showToast("✨ Scene visual generation enqueued!", "success");
                     } catch (err) {
                         showToast(err.message, "error");
                     } finally {
-                        rerollBtn.textContent = '↻ Re-roll';
+                        rerollBtn.textContent = '⚡ Flux';
                         rerollBtn.disabled = false;
                     }
                 });
             }
 
-            // Inline Narration Edit
+            // Wire up Camera Motion change
+            const motionSelect = card.querySelector('.scene-motion-select');
+            if (motionSelect) {
+                motionSelect.addEventListener('change', (e) => {
+                    updateMotion(seg.segment_id, e.target.value);
+                });
+            }
+
+            // Wire up Narration blur edit
             const narrTextarea = card.querySelector('.narration-textarea');
             narrTextarea.addEventListener('blur', async () => {
                 const newVal = narrTextarea.value.trim();
@@ -864,6 +1222,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                     if (res.ok) {
                         currentSession = await res.json();
+                        syncScriptFromSession();
                         renderSceneCards();
                     }
                 } catch (err) {
@@ -871,7 +1230,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
 
-            // Prompt Tabs (Image vs Video)
+            // Wire up Prompt tabs
             const promptBtns = card.querySelectorAll('.prompt-tab-btn');
             const promptTextarea = card.querySelector('.prompt-textarea');
 
@@ -885,7 +1244,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             });
 
-            // Inline Prompt Edit
+            // Wire up Prompt blur edit
             promptTextarea.addEventListener('blur', async () => {
                 const newPrompt = promptTextarea.value.trim();
                 const curKind = activePromptTabs[seg.segment_id] || 'image';
@@ -911,11 +1270,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
 
-            // Copy Prompt
+            // Wire up Copy Prompt
             const copyBtn = card.querySelector('.btn-copy-prompt');
             copyBtn.addEventListener('click', async () => {
-                const curPrompt = promptTextarea.value.trim();
+                let curPrompt = promptTextarea.value.trim();
                 if (!curPrompt) return;
+                if (currentSession.style_lock && currentSession.style_lock.trim()) {
+                    const prefix = currentSession.style_lock.trim().replace(/,+$/, '');
+                    if (!curPrompt.toLowerCase().includes(prefix.toLowerCase())) {
+                        curPrompt = `${prefix}, ${curPrompt}`;
+                    }
+                }
                 try {
                     await navigator.clipboard.writeText(curPrompt);
                     copyBtn.textContent = '✅ Copied!';
@@ -927,42 +1292,36 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
 
-            // Split Scene
-            const splitBtn = card.querySelector('.btn-split');
-            splitBtn.addEventListener('click', async () => {
-                const words = seg.text.trim().split(/\s+/).filter(Boolean);
-                if (words.length < 2) {
-                    showToast("Sentence too short to split.", "warning");
-                    return;
-                }
-                const defaultSplit = Math.max(1, Math.floor(words.length / 2));
-                const input = prompt(`Split at word index (1 to ${words.length - 1}):\n\n"${seg.text}"`, defaultSplit);
-                if (input === null) return;
-                const splitIdx = parseInt(input.trim());
-                if (isNaN(splitIdx) || splitIdx < 1 || splitIdx >= words.length) return;
-
-                try {
-                    const res = await fetch(`/api/segments/${currentSession.session_id}/split`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ segment_id: seg.segment_id, split_at_word_index: splitIdx })
-                    });
-                    if (!res.ok) {
-                        const err = await res.json();
-                        throw new Error(err.detail || 'Split failed');
-                    }
-                    currentSession = await res.json();
-                    renderSceneCards();
-                    showToast("✂️ Scene split!", "success");
-                } catch (err) {
-                    showToast(err.message, "error");
-                }
+            // Wire up Suggest Prompt
+            const suggestBtn = card.querySelector('.btn-suggest-prompt');
+            suggestBtn.addEventListener('click', () => {
+                openSuggestModal(seg.segment_id);
             });
 
-            // Merge Scene
+            // Wire up Seam boundary shift buttons
+            const seamLeftBtn = card.querySelector('.btn-seam-left');
+            const seamRightBtn = card.querySelector('.btn-seam-right');
+            seamLeftBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                shiftBoundary(seg.segment_id, 'left');
+            });
+            seamRightBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                shiftBoundary(seg.segment_id, 'right');
+            });
+
+            // Wire up Split Scene (opens interactive word-chip modal)
+            const splitBtn = card.querySelector('.btn-split');
+            splitBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openSplitModal(seg);
+            });
+
+            // Wire up Merge Scene
             const mergeBtn = card.querySelector('.btn-merge');
             if (mergeBtn && idx < segs.length - 1) {
-                mergeBtn.addEventListener('click', async () => {
+                mergeBtn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
                     try {
                         const res = await fetch(`/api/segments/${currentSession.session_id}/merge`, {
                             method: 'POST',
@@ -974,6 +1333,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             throw new Error(err.detail || 'Merge failed');
                         }
                         currentSession = await res.json();
+                        syncScriptFromSession();
                         renderSceneCards();
                         showToast("🔗 Scenes merged!", "success");
                     } catch (err) {
@@ -982,10 +1342,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
-            // Delete Scene
+            // Wire up Delete Scene
             const delBtn = card.querySelector('.btn-del');
             if (delBtn && segs.length > 1) {
-                delBtn.addEventListener('click', async () => {
+                delBtn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
                     if (!confirm(`Delete Scene #${idx + 1}?`)) return;
                     try {
                         const res = await fetch(`/api/segments/${currentSession.session_id}/delete`, {
@@ -998,6 +1359,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             throw new Error(err.detail || 'Delete failed');
                         }
                         currentSession = await res.json();
+                        syncScriptFromSession();
                         renderSceneCards();
                         showToast("🗑️ Scene deleted.", "info");
                     } catch (err) {
