@@ -387,9 +387,10 @@ def create_visual_beats(script_text: str, total_duration: float, min_dur: float 
 
     for phrase in phrases:
         p_words = phrase.split()
-        if len(p_words) > 7:
-            for j in range(0, len(p_words), 6):
-                sub = p_words[j:j+6]
+        if len(p_words) > 14:
+            chunk_size = max(7, len(p_words) // 2)
+            for j in range(0, len(p_words), chunk_size):
+                sub = p_words[j:j+chunk_size]
                 if sub:
                     curr_words.extend(sub)
                     est_dur = (len(curr_words) / total_words) * total_duration
@@ -476,75 +477,17 @@ def prepare_scenes_data(
     scene_overrides: Optional[Dict[str, str]] = None
 ) -> List[Dict[str, Any]]:
     """
-    Analyzes script, builds authentic topic media pool, and prepares
-    all scenes with assigned images and timestamps for the frontend storyboard.
+    Bypasses the old automatic keyword/article media pool.
+    Delegates directly to the new Visual Director pipeline for intelligent,
+    continuity-anchored visual scenes that strictly match the spoken narration.
     """
-    primary_topic = find_primary_wikipedia_topic(script_text)
-    media_pool = fetch_authentic_article_media_pool(primary_topic)
-    beats = create_visual_beats(script_text, total_duration, min_dur=1.8, max_dur=2.6)
-
-    used_urls: Set[str] = set()
-    result_scenes = []
-    current_time = 0.0
-
-    if scene_overrides is None:
-        scene_overrides = {}
-
-    for idx, (scene_text, dur) in enumerate(beats):
-        override_key = str(idx)
-        override_val = scene_overrides.get(override_key) or scene_overrides.get(idx)
-
-        best_media = None
-        is_custom = False
-
-        if override_val:
-            # User provided a custom image or URL
-            is_custom = True
-            img_url = override_val
-            img_title = os.path.basename(override_val)
-        else:
-            # Match from media pool
-            best_score = -999
-            for m in media_pool:
-                if m['url'] in used_urls:
-                    continue
-                score = score_media_for_scene(scene_text, m)
-                if score > best_score:
-                    best_score = score
-                    best_media = m
-
-            # If no match from pool or pool exhausted, query Commons for this scene
-            if not best_media:
-                best_media = search_targeted_scene_image(f"{primary_topic} {scene_text}", used_urls)
-
-            # Fallback to next unused item
-            if not best_media:
-                for m in media_pool:
-                    if m['url'] not in used_urls:
-                        best_media = m
-                        break
-
-            if best_media:
-                used_urls.add(best_media['url'])
-                img_url = best_media['url']
-                img_title = best_media['title']
-            else:
-                img_url = "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=1080"
-                img_title = "Cinematic Visual"
-
-        result_scenes.append({
-            "scene_id": idx,
-            "start_time": round(current_time, 2),
-            "end_time": round(current_time + dur, 2),
-            "duration": round(dur, 2),
-            "text": scene_text,
-            "image_url": img_url,
-            "image_title": img_title,
-            "is_custom": is_custom
-        })
-        current_time += dur
-
-    return result_scenes
+    from engine.gemini_visuals import prepare_gemini_scenes_data
+    return prepare_gemini_scenes_data(
+        script_text=script_text,
+        total_duration=total_duration,
+        target_cut_duration=target_cut_duration,
+        scene_overrides=scene_overrides
+    )
 
 
 def generate_smart_broll_video(
@@ -557,94 +500,17 @@ def generate_smart_broll_video(
     preview_scenes: Optional[List[Dict[str, Any]]] = None
 ) -> str:
     """
-    Generates an authentic documentary b-roll video:
-    If preview_scenes is provided, it uses the exact previewed images that the user approved,
-    scaling their durations to fit total_duration without re-querying or generating new images.
-    Otherwise, it runs prepare_scenes_data to match authentic media.
+    Bypasses the old automatic video pipeline.
+    Delegates directly to the new Visual Director b-roll renderer.
     """
-    os.makedirs(temp_dir, exist_ok=True)
+    from engine.gemini_visuals import generate_gemini_ai_broll
+    return generate_gemini_ai_broll(
+        script_text=script_text,
+        total_duration=total_duration,
+        output_path=output_path,
+        temp_dir=temp_dir,
+        target_cut_duration=target_cut_duration,
+        scene_overrides=scene_overrides,
+        preview_scenes=preview_scenes
+    )
 
-    if preview_scenes and len(preview_scenes) > 0:
-        print(f"[Smart B-Roll] Using {len(preview_scenes)} user-previewed scenes directly (locking in approved visuals)!")
-        total_p_dur = sum(float(s.get("duration", 2.0)) for s in preview_scenes)
-        scale = (total_duration / total_p_dur) if total_p_dur > 0 else 1.0
-        scenes_data = []
-        curr_t = 0.0
-        for s in preview_scenes:
-            dur = max(0.8, round(float(s.get("duration", 2.0)) * scale, 2))
-            scenes_data.append({
-                "scene_id": s.get("scene_id", 0),
-                "text": s.get("text", ""),
-                "image_url": s.get("image_url", ""),
-                "duration": dur,
-                "start_time": round(curr_t, 2),
-                "end_time": round(curr_t + dur, 2),
-                "is_custom": True
-            })
-            curr_t += dur
-    else:
-        scenes_data = prepare_scenes_data(
-            script_text=script_text,
-            total_duration=total_duration,
-            target_cut_duration=target_cut_duration,
-            scene_overrides=scene_overrides
-        )
-
-    print(f"[Smart B-Roll] Rendering {len(scenes_data)} unique visual scenes (Total: {total_duration:.1f}s)")
-    scene_clips: List[str] = []
-
-    for idx, sc in enumerate(scenes_data):
-        img_path = os.path.join(temp_dir, f"scene_{idx}.jpg")
-        clip_path = os.path.join(temp_dir, f"scene_clip_{idx}.mp4")
-        dur = sc["duration"]
-
-        clean_t = sc.get('image_title', '').encode('ascii', 'replace').decode('ascii')
-        clean_txt = sc.get('text', '')[:30].encode('ascii', 'replace').decode('ascii')
-        print(f"[Scene {idx+1}/{len(scenes_data)}] ({dur:.1f}s) \"{clean_txt}...\" -> {clean_t}")
-        ok = download_image_file(sc["image_url"], img_path)
-        if ok and os.path.exists(img_path):
-            motion_ok = create_ken_burns_motion_clip(
-                image_path=img_path,
-                duration=dur,
-                output_path=clip_path,
-                motion_index=idx
-            )
-            if motion_ok and os.path.exists(clip_path):
-                scene_clips.append(clip_path)
-
-    # Concatenate all authentic scene clips into master track
-    if scene_clips:
-        concat_list_file = os.path.join(temp_dir, "concat_scenes.txt")
-        with open(concat_list_file, "w", encoding="utf-8") as f:
-            for cp in scene_clips:
-                norm_cp = os.path.abspath(cp).replace("\\", "/")
-                f.write(f"file '{norm_cp}'\n")
-
-        concat_cmd = [
-            FFMPEG_EXE, "-y",
-            "-f", "concat",
-            "-safe", "0",
-            "-i", concat_list_file,
-            "-t", f"{total_duration:.2f}",
-            "-c:v", "libx264",
-            "-preset", "ultrafast",
-            "-crf", "21",
-            "-pix_fmt", "yuv420p",
-            os.path.abspath(output_path)
-        ]
-        res = subprocess.run(concat_cmd, capture_output=True)
-        if res.returncode == 0 and os.path.exists(output_path):
-            return output_path
-
-    # Ultimate failsafe: create a clean dark cinematic canvas
-    fallback_cmd = [
-        FFMPEG_EXE, "-y",
-        "-f", "lavfi",
-        "-i", f"color=c=0x0a0c16:s=1080x1920:r=30:d={total_duration}",
-        "-c:v", "libx264",
-        "-preset", "ultrafast",
-        "-pix_fmt", "yuv420p",
-        os.path.abspath(output_path)
-    ]
-    subprocess.run(fallback_cmd, capture_output=True)
-    return output_path

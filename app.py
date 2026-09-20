@@ -179,23 +179,14 @@ def prepare_scenes(req: PrepareScenesRequest):
     target_cut = get_target_cut_duration(req.bg_choice)
 
     try:
-        if req.bg_choice == "ai_gemini":
-            from engine.gemini_visuals import prepare_gemini_scenes_data
-            scenes = prepare_gemini_scenes_data(
-                script_text=script,
-                total_duration=est_duration,
-                target_cut_duration=target_cut,
-                scene_overrides=req.scene_overrides
-            )
-            primary_topic = "Gemini AI Photorealism"
-        else:
-            scenes = prepare_scenes_data(
-                script_text=script,
-                total_duration=est_duration,
-                target_cut_duration=target_cut,
-                scene_overrides=req.scene_overrides
-            )
-            primary_topic = find_primary_wikipedia_topic(script)
+        from engine.gemini_visuals import prepare_gemini_scenes_data
+        scenes = prepare_gemini_scenes_data(
+            script_text=script,
+            total_duration=est_duration,
+            target_cut_duration=target_cut,
+            scene_overrides=req.scene_overrides
+        )
+        primary_topic = "Visual Director"
 
         return {
             "topic": primary_topic,
@@ -212,7 +203,7 @@ def upload_scene_image(
     file: UploadFile = File(...),
     scene_id: int = Form(...)
 ):
-    """Uploads a manual replacement image for a specific scene."""
+    """Uploads a manual replacement image for a specific scene (source: manual)."""
     allowed_exts = ('.jpg', '.jpeg', '.png', '.webp', '.bmp')
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in allowed_exts:
@@ -227,12 +218,14 @@ def upload_scene_image(
         "scene_id": scene_id,
         "image_url": f"/outputs/custom_scenes/{safe_name}",
         "local_path": dest_path,
-        "filename": file.filename
+        "filename": file.filename,
+        "source": "manual",
+        "is_custom": True
     }
 
 @app.post("/api/upload_batch_images")
 def upload_batch_images(files: List[UploadFile] = File(...)):
-    """Uploads multiple custom images at once to map across scenes."""
+    """Uploads multiple custom images at once to map across scenes (source: manual)."""
     allowed_exts = ('.jpg', '.jpeg', '.png', '.webp', '.bmp')
     saved = []
 
@@ -246,68 +239,51 @@ def upload_batch_images(files: List[UploadFile] = File(...)):
             saved.append({
                 "filename": f.filename,
                 "image_url": f"/outputs/custom_scenes/{safe_name}",
-                "local_path": dest_path
+                "local_path": dest_path,
+                "source": "manual",
+                "is_custom": True
             })
 
     return {"uploaded": saved}
 
 @app.post("/api/refresh_scene_image")
 def refresh_scene_image(req: RefreshSceneRequest):
-    """Finds an alternative unique authentic image or AI re-roll for a single scene."""
-    if req.bg_choice == "ai_gemini":
-        from engine.gemini_visuals import gemini_direct_visual_scenes, generate_cloudflare_flux_image
-        import random
-        dir_items = gemini_direct_visual_scenes(req.script, [req.scene_text])
-        ai_p = dir_items[0].get("ai_prompt", f"Vertical 9:16 cinematic shot of {req.scene_text}, photorealistic 8k") if dir_items else f"Vertical 9:16 cinematic shot of {req.scene_text}, photorealistic 8k"
+    """Finds an alternative unique authentic image or AI re-roll for a single scene using Visual Director."""
+    import random
+    from engine.visual_director import plan_visual_storyboard, generate_and_validate_scene
 
-        seed = random.randint(1000, 999999)
-        varied_prompt = f"{ai_p}, alternative cinematic angle, dramatic lighting, variation {seed}"
-        
-        safe_name = f"refresh_{req.scene_id}_{seed}.jpg"
-        dest_path = os.path.abspath(os.path.join("outputs/ai_previews", safe_name))
-        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+    plan = plan_visual_storyboard(req.scene_text, 3.0)
+    sc_plan = plan.get("scenes", [{}])[0] if plan.get("scenes") else {}
+    ai_p = sc_plan.get("image_prompt", f"Vertical 9:16 cinematic shot of {req.scene_text}, photorealistic 8k")
 
-        ok = generate_cloudflare_flux_image(varied_prompt, dest_path)
-        if ok and os.path.exists(dest_path):
-            return {
-                "found": True,
-                "image_url": f"/outputs/ai_previews/{safe_name}",
-                "image_title": f"AI FLUX: {ai_p[:35]}...",
-                "badge": "AI FLUX"
-            }
-        
-        # Fallback to Pollinations
-        import urllib.parse, re
-        clean_p = re.sub(r'[^a-zA-Z0-9\s,.-]', '', ai_p)[:180].strip()
-        img_url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(clean_p)}?width=1080&height=1920&nologo=true&seed={seed}"
+    seed = random.randint(1000, 999999)
+    varied_prompt = f"{ai_p}, alternative cinematic angle, dramatic lighting, variation {seed}"
+    
+    safe_name = f"refresh_{req.scene_id}_{seed}.jpg"
+    dest_path = os.path.abspath(os.path.join("outputs/ai_previews", safe_name))
+    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+
+    from engine.visual_director.generator import generate_cloudflare_flux_image, generate_pollinations_image
+    ok = generate_cloudflare_flux_image(varied_prompt, dest_path)
+    if ok and os.path.exists(dest_path):
         return {
             "found": True,
-            "image_url": img_url,
-            "image_title": f"AI: {ai_p[:35]}...",
-            "badge": "AI ULTRA"
+            "image_url": f"/outputs/ai_previews/{safe_name}",
+            "image_title": f"AI FLUX: {ai_p[:35]}...",
+            "badge": "AI FLUX",
+            "source": "generated"
         }
-
-    primary_topic = find_primary_wikipedia_topic(req.script)
-    alt = search_targeted_scene_image(
-        query=f"{primary_topic} {req.scene_text}",
-        exclude_urls=set(req.exclude_urls)
-    )
-    if not alt:
-        # Broader search
-        alt = search_targeted_scene_image(
-            query=f"{req.scene_text}",
-            exclude_urls=set(req.exclude_urls)
-        )
-
-    if alt:
-        return {
-            "found": True,
-            "image_url": alt["url"],
-            "image_title": alt["title"]
-        }
+    
+    # Fallback to Pollinations
+    import urllib.parse, re
+    clean_p = re.sub(r'[^a-zA-Z0-9\s,.-]', '', ai_p)[:180].strip()
+    img_url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(clean_p)}?width=1080&height=1920&nologo=true&seed={seed}"
     return {
-        "found": False,
-        "message": "No alternative image found in archive."
+        "found": True,
+        "image_url": img_url,
+        "image_title": f"AI: {ai_p[:35]}...",
+        "badge": "AI ULTRA",
+        "source": "generated"
     }
 
 @app.post("/api/upload_background")

@@ -1,14 +1,19 @@
 """
-continuity.py - Story Continuity Management
-Part of the isolated Visual Director module for YouTube Shorts.
-Ensures visual anchors (characters, outfits, objects, environments) persist across scene cuts.
+continuity.py - Continuity Bible & Visual Anchor Management
+Part of the Visual Director module for YouTube Shorts.
+
+Establishes and preserves visual anchors across scenes:
+- Characters: identity, clothing, age, appearance, scale
+- Locations: architectural setting, textures, lighting
+- Objects: color, material, markings, scale
+- Style: visual style, aspect ratio (always 9:16)
 """
 
 from typing import Dict, Any, Optional, List
 
 
 class ContinuityAnchor:
-    """Represents the foundational visual anchors for a story."""
+    """Legacy compatibility wrapper for continuity data."""
 
     def __init__(
         self,
@@ -58,79 +63,219 @@ class ContinuityAnchor:
         )
 
 
-def build_fallback_continuity_anchor(script_text: str) -> ContinuityAnchor:
-    """Creates a sensible fallback continuity anchor based on script keywords."""
-    s_lower = script_text.lower()
+def build_continuity_bible(
+    story_analysis: Optional[Dict[str, Any]] = None,
+    script_text: str = ""
+) -> Dict[str, Any]:
+    """
+    Constructs the formal Continuity Bible from story analysis or script text.
+    Schema:
+    {
+      "characters": [{"id": "...", "description": "..."}],
+      "locations": [{"id": "...", "description": "..."}],
+      "objects": [{"id": "...", "description": "..."}],
+      "style": {"visual_style": "...", "aspect_ratio": "9:16"}
+    }
+    """
+    if story_analysis and isinstance(story_analysis, dict):
+        chars = []
+        for c in story_analysis.get("main_characters", []):
+            if isinstance(c, dict):
+                chars.append({
+                    "id": c.get("id", "char"),
+                    "description": f"{c.get('name_or_role', '')}: {c.get('description', '')}".strip(": ")
+                })
+            elif isinstance(c, str):
+                chars.append({"id": "char", "description": c})
 
-    if any(k in s_lower for k in ["miniature", "scale", "mechanics", "tiny", "diecast", "assembly", "model car"]):
-        return ContinuityAnchor(
-            location="Miniature precision workshop with tiny tool racks and micro workbenches",
-            characters="Tiny 1:24 scale figurine mechanics with lifelike facial features",
-            clothing="Matching miniature blue workshop overalls with yellow safety accents",
-            important_objects="Metallic cherry red miniature sports car chassis, micro chrome suspension springs",
-            architecture="Macro-scale workbench, overhead miniature LED strip lighting",
-            lighting="Bright focused macro workbench lighting with crisp micro-shadows",
-            color_palette="Cherry red, metallic chrome, royal blue, matte charcoal",
-            visual_style="Photorealistic 8k tilt-shift macro cinematography, extreme micro detail"
-        )
-    elif any(k in s_lower for k in ["room 307", "hotel", "security", "corridor", "guards"]):
-        return ContinuityAnchor(
-            location="Dimly lit luxury hotel corridor with burgundy patterned carpet",
-            characters="Two vigilant hotel security guards in matching dark suits",
-            clothing="Charcoal black security suits with gold identification badges",
-            important_objects="Dark walnut Room 307 door with polished brass numbers '307'",
-            architecture="Paneled dark walnut walls with warm brass wall sconces",
-            lighting="Moody warm amber sconce lighting casting dramatic long shadows",
-            color_palette="Deep burgundy, warm amber, charcoal black, polished brass",
-            visual_style="Photorealistic 8k cinematic anamorphic lens, high contrast, suspenseful atmosphere"
-        )
-    elif any(k in s_lower for k in ["flight", "plane", "radar", "ocean", "black box", "sonar"]):
-        return ContinuityAnchor(
-            location="Aviation tracking operations and deep ocean search zone",
-            characters="Air traffic controllers and naval search crews",
-            clothing="Dark navy tactical uniforms and ATC headsets",
-            important_objects="Bright glowing green radar sweep, orange flight data recorder",
-            architecture="Dim ATC control room and deep ocean floor",
-            lighting="High-contrast neon green radar glow and deep-sea submarine spotlights",
-            color_palette="Neon green, deep abyss blue, emergency orange, charcoal",
-            visual_style="Photorealistic 8k documentary cinematography, sharp realistic textures"
-        )
-    else:
-        return ContinuityAnchor(
-            location="Cinematic story environment",
-            characters="Story subjects",
-            clothing="Era-appropriate consistent attire",
-            important_objects="Key story focal items",
-            architecture="Realistic environmental details",
-            lighting="Cinematic dramatic lighting",
-            color_palette="Natural cinematic tones",
-            visual_style="Photorealistic 8k, crisp 9:16 vertical framing"
-        )
+        locs = []
+        for l in story_analysis.get("important_locations", []):
+            if isinstance(l, dict):
+                locs.append({
+                    "id": l.get("id", "loc"),
+                    "description": f"{l.get('name', '')}: {l.get('description', '')}".strip(": ")
+                })
+            elif isinstance(l, str):
+                locs.append({"id": "loc", "description": l})
+
+        objs = []
+        for o in story_analysis.get("important_objects", []):
+            if isinstance(o, dict):
+                objs.append({
+                    "id": o.get("id", "obj"),
+                    "description": f"{o.get('name', '')}: {o.get('description', '')}".strip(": ")
+                })
+            elif isinstance(o, str):
+                objs.append({"id": "obj", "description": o})
+
+        v_style = story_analysis.get("visual_style", "cinematic realistic")
+
+        return {
+            "characters": chars,
+            "locations": locs,
+            "objects": objs,
+            "style": {
+                "visual_style": v_style,
+                "aspect_ratio": "9:16"
+            }
+        }
+
+    # Fallback directly from script keywords
+    s_lower = script_text.lower()
+    if any(k in s_lower for k in ["miniature", "scale", "mechanic", "tiny", "chassis", "suspension", "model car"]):
+        return {
+            "characters": [
+                {"id": "tiny_mechanics", "description": "tiny 1:18 scale figurine mechanics in matching dark blue workshop overalls"}
+            ],
+            "locations": [
+                {"id": "micro_workshop", "description": "miniature automotive factory workbench, macro clean lighting"}
+            ],
+            "objects": [
+                {"id": "miniature_supercar", "description": "same red 1:18-scale miniature supercar with metallic red body and black chassis"},
+                {"id": "micro_tools", "description": "realistic micro wrenches, tweezers, and miniature installation tools"}
+            ],
+            "style": {
+                "visual_style": "photorealistic macro miniature factory, shallow depth of field, realistic miniature materials",
+                "aspect_ratio": "9:16"
+            }
+        }
+    elif any(k in s_lower for k in ["room 307", "hotel", "security", "guard", "corridor", "hallway"]):
+        return {
+            "characters": [
+                {"id": "guards", "description": "two hotel security guards in dark navy uniforms with identification badges"}
+            ],
+            "locations": [
+                {"id": "hotel_hallway", "description": "upscale hotel corridor at night, burgundy patterned carpet, warm amber sconces"}
+            ],
+            "objects": [
+                {"id": "room_307_door", "description": "dark wooden hotel door with brass plaque reading 'Room 307'"}
+            ],
+            "style": {
+                "visual_style": "cinematic realistic, dark atmospheric lighting, subtle suspense",
+                "aspect_ratio": "9:16"
+            }
+        }
+    elif any(k in s_lower for k in ["suitcase", "key"]):
+        return {
+            "characters": [
+                {"id": "woman", "description": "woman in private room handling luggage"}
+            ],
+            "locations": [
+                {"id": "room", "description": "quiet private room with focused warm spotlight"}
+            ],
+            "objects": [
+                {"id": "red_suitcase", "description": "vibrant red travel suitcase with silver metal hardware"},
+                {"id": "silver_key", "description": "small silver key"}
+            ],
+            "style": {
+                "visual_style": "cinematic realistic, tactile macro details",
+                "aspect_ratio": "9:16"
+            }
+        }
+    elif any(k in s_lower for k in ["kitchen", "refrigerator", "water"]):
+        return {
+            "characters": [
+                {"id": "resident", "description": "person in domestic indoor attire"}
+            ],
+            "locations": [
+                {"id": "kitchen", "description": "same modern residential kitchen with clean countertops and stainless appliances"}
+            ],
+            "objects": [
+                {"id": "refrigerator", "description": "stainless steel refrigerator with illuminated interior"},
+                {"id": "water_bottle", "description": "clear bottle of water with water droplets"}
+            ],
+            "style": {
+                "visual_style": "cinematic realistic, naturalistic domestic lighting",
+                "aspect_ratio": "9:16"
+            }
+        }
+
+    return {
+        "characters": [],
+        "locations": [{"id": "environment", "description": "cinematic story environment"}],
+        "objects": [],
+        "style": {
+            "visual_style": "photorealistic 8k, cinematic lighting",
+            "aspect_ratio": "9:16"
+        }
+    }
+
+
+def build_fallback_continuity_anchor(script_text: str) -> ContinuityAnchor:
+    """Maintains backward compatibility for components expecting ContinuityAnchor."""
+    bible = build_continuity_bible(script_text=script_text)
+    loc_desc = bible["locations"][0]["description"] if bible["locations"] else "Cinematic story environment"
+    char_desc = bible["characters"][0]["description"] if bible["characters"] else "Story subjects"
+    obj_desc = ", ".join(o["description"] for o in bible["objects"]) if bible["objects"] else "Key story items"
+    v_style = bible["style"]["visual_style"]
+
+    return ContinuityAnchor(
+        location=loc_desc,
+        characters=char_desc,
+        clothing=char_desc,
+        important_objects=obj_desc,
+        architecture=loc_desc,
+        lighting="Dramatic atmospheric lighting",
+        color_palette="Harmonious cinematic palette",
+        visual_style=v_style
+    )
 
 
 def enforce_continuity_in_prompt(
     base_prompt: str,
-    anchor: ContinuityAnchor,
+    bible_or_anchor: Any,
     scene_text: str
 ) -> str:
     """
-    Enriches a scene prompt with vital continuity details if relevant to that scene,
-    keeping total prompt length optimal for image generation models (~180-260 chars).
+    Injects critical continuity details into the scene's image prompt.
+    Ensures:
+    - 9:16 vertical framing prefix
+    - Exact car model/color/scale (1:18 scale, tiny mechanics, dark blue uniforms)
+    - Exact door / room number (dark wooden door with brass plaque 'Room 307')
+    - Exact object details (red suitcase, small silver key, same kitchen/refrigerator)
     """
     p = base_prompt.strip()
     s_lower = scene_text.lower()
 
-    # Ensure 9:16 vertical prefix
+    # Ensure 9:16 vertical composition
     if "vertical" not in p.lower() and "9:16" not in p:
         p = f"Vertical 9:16 cinematic shot, {p}"
 
-    # Inject domain-specific anchors if mentioned
-    if any(k in s_lower for k in ["miniature", "mechanic", "suspension", "wheel", "engine", "chassis"]):
-        if "miniature" not in p.lower() and "tiny" not in p.lower():
-            p = f"{p}, miniature 1:24 scale macro shot, tiny figurine mechanics in blue overalls"
+    # Extract bible data if dict or anchor
+    bible = bible_or_anchor if isinstance(bible_or_anchor, dict) else (
+        bible_or_anchor.to_dict() if hasattr(bible_or_anchor, "to_dict") else {}
+    )
 
-    if any(k in s_lower for k in ["room 307", "door", "corridor", "hallway"]):
-        if "307" not in p and "corridor" in p.lower():
-            p = f"{p}, dark walnut Room 307 door with brass number plate, burgundy carpet"
+    # 1. Miniature Car Assembly
+    if any(k in s_lower for k in ["miniature", "scale", "mechanic", "tiny", "suspension", "wheel", "chassis", "bolt", "windshield"]):
+        if "1:18" not in p and "1:24" not in p and "miniature" not in p.lower():
+            p = f"{p}, strict 1:18 miniature scale diorama, tiny figurine mechanics in matching dark blue factory uniforms"
+        if "red" not in p.lower() and any(k in s_lower for k in ["car", "supercar", "vehicle", "chassis"]):
+            p = f"{p}, red miniature supercar chassis"
+        if "tilt-shift" not in p.lower() and "macro" not in p.lower():
+            p = f"{p}, macro tilt-shift lens, realistic micro tools"
+
+    # 2. Mystery / Room 307
+    if any(k in s_lower for k in ["room 307", "hotel", "security", "guard", "corridor", "hallway", "door"]):
+        if "307" not in p and any(k in s_lower for k in ["door", "room"]):
+            p = f"{p}, dark wooden hotel door with brass plaque reading 'Room 307'"
+        if "guard" in s_lower and "navy" not in p.lower():
+            p = f"{p}, two hotel security guards in matching dark navy uniforms"
+        if "corridor" in s_lower or "hallway" in s_lower:
+            p = f"{p}, same upscale hotel hallway with burgundy patterned carpet"
+
+    # 3. Suitcase / Key
+    if any(k in s_lower for k in ["suitcase", "key", "luggage"]):
+        if "suitcase" in s_lower and "red" not in p.lower():
+            p = f"{p}, vibrant red travel suitcase with metal clasps"
+        if "key" in s_lower and "silver" not in p.lower():
+            p = f"{p}, small silver key"
+
+    # 4. Kitchen / Refrigerator
+    if any(k in s_lower for k in ["kitchen", "refrigerator", "fridge", "water"]):
+        if "kitchen" in s_lower:
+            p = f"{p}, same modern kitchen with clean countertops"
+        if "refrigerator" in s_lower or "fridge" in s_lower:
+            p = f"{p}, stainless steel refrigerator with cool interior illumination"
 
     return p

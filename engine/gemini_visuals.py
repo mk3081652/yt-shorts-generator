@@ -397,115 +397,52 @@ def prepare_gemini_scenes_data(
     api_key: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
-    Prepares scenes for the visual storyboard using the new intelligent Visual Director module.
-    Enforces literal narration relevance, story continuity anchors, varied cinematic shots,
-    and positive/negative visual constraints with multi-tier image generation.
-    Falls back safely to the existing director if any error occurs.
+    Prepares scenes for the visual storyboard using the new Visual Director pipeline.
+    Flow:
+      Script -> Story Analysis -> Continuity Bible -> Visual Beats -> Visual Plan ->
+      Exact Prompts -> Generate/Search -> Relevance Validation (score >= 80, max 2 retries) ->
+      Best-Image Selection -> Output Scenes.
+    Preserves manual overrides with source: "manual".
     """
-    primary_topic = find_primary_wikipedia_topic(script_text)
-    planned_scenes = []
+    from engine.visual_director import plan_visual_storyboard, generate_validated_scenes
 
-    try:
-        from engine.visual_director import plan_visual_storyboard
-        print(f"[Visual Director] Planning visual storyboard for {total_duration:.1f}s script...")
-        plan = plan_visual_storyboard(script_text, total_duration, api_key=api_key)
-        planned_scenes = plan.get("scenes", [])
-    except Exception as e:
-        print(f"[Visual Director] Fallback to legacy director due to: {e}")
+    print(f"[Visual Director] Planning visual storyboard for {total_duration:.1f}s script...")
+    plan = plan_visual_storyboard(script_text, total_duration, api_key=api_key)
+    scenes = plan.get("scenes", [])
+    continuity_bible = plan.get("continuity_bible", {})
 
-    # Fallback to existing visual beats & direct scenes if Visual Director returned no scenes
-    if not planned_scenes:
-        beats = create_visual_beats(script_text, total_duration, min_dur=1.8, max_dur=2.6)
-        scene_texts = [t for t, _ in beats]
-        print(f"[Gemini Visuals] Directing {len(scene_texts)} scene beats with legacy director...")
-        directed_scenes = gemini_direct_visual_scenes(script_text, scene_texts, api_key=api_key)
-        
-        curr_t = 0.0
-        for idx, ((s_text, dur), dir_info) in enumerate(zip(beats, directed_scenes)):
-            sq = dir_info.get("search_query", primary_topic)
-            ai_p = dir_info.get("ai_prompt", f"Vertical 9:16 cinematic shot of {sq}, photorealistic 8k")
-            planned_scenes.append({
-                "scene_id": idx,
-                "narration": s_text,
-                "duration": round(dur, 2),
-                "start_time": round(curr_t, 2),
-                "end_time": round(curr_t + dur, 2),
-                "visual_description": f"Visual of {s_text[:35]}",
-                "image_prompt": ai_p,
-                "search_query": sq,
-                "shot_type": "cinematic shot",
-                "camera_motion": "push in",
-                "must_show": [s_text[:20]],
-                "must_not_show": ["blurry", "watermark"]
-            })
-            curr_t += dur
-
-    os.makedirs("outputs/ai_previews", exist_ok=True)
+    print(f"[Visual Director] Generating and validating {len(scenes)} scenes...")
+    validated = generate_validated_scenes(
+        planned_scenes=scenes,
+        output_dir="outputs/ai_previews",
+        continuity_bible=continuity_bible,
+        scene_overrides=scene_overrides,
+        api_key=api_key
+    )
 
     result_scenes = []
-    used_urls: Set[str] = set()
-    if scene_overrides is None:
-        scene_overrides = {}
-
-    to_generate = []
-
-    for idx, sc in enumerate(planned_scenes):
-        override_key = str(idx)
-        override_val = scene_overrides.get(override_key) or scene_overrides.get(idx)
-
-        sq = sc.get("search_query", primary_topic)
-        ai_p = sc.get("image_prompt", f"Vertical 9:16 cinematic shot of {sq}, photorealistic 8k")
-        s_text = sc.get("narration", "")
-        dur = sc.get("duration", 2.2)
-        start_t = sc.get("start_time", 0.0)
-        end_t = sc.get("end_time", dur)
-
-        is_custom = False
-        if override_val:
-            is_custom = True
-            img_url = override_val
-            img_title = os.path.basename(override_val)
-        else:
-            # Deterministic cache filename for this scene & prompt
-            p_hash = hashlib.md5(f"{idx}_{ai_p}".encode('utf-8')).hexdigest()[:8]
-            preview_filename = f"scene_{idx}_{p_hash}.jpg"
-            preview_path = os.path.join("outputs", "ai_previews", preview_filename)
-
-            img_url = f"/outputs/ai_previews/{preview_filename}"
-            shot_label = sc.get("shot_type", "AI")
-            img_title = f"{shot_label.title()}: {ai_p[:30]}..."
-
-            if not os.path.exists(preview_path) or os.path.getsize(preview_path) < 5000:
-                to_generate.append((idx, ai_p, sq, preview_path, s_text))
-
+    for sc in validated:
         result_scenes.append({
-            "scene_id": idx,
-            "start_time": start_t,
-            "end_time": end_t,
-            "duration": dur,
-            "text": s_text,
-            "image_url": img_url,
-            "image_title": img_title,
-            "search_query": sq,
-            "prompt": ai_p,
-            "is_custom": is_custom,
+            "scene_id": sc.get("scene_id"),
+            "start_time": sc.get("start_time"),
+            "end_time": sc.get("end_time"),
+            "duration": sc.get("duration"),
+            "text": sc.get("narration", sc.get("text", "")),
+            "narration": sc.get("narration", sc.get("text", "")),
+            "image_url": sc.get("image_url"),
+            "image_title": sc.get("visual_description", "")[:35] or f"{sc.get('shot_type', 'Shot').title()}",
+            "search_query": sc.get("search_query", ""),
+            "prompt": sc.get("image_prompt") or sc.get("prompt", ""),
+            "image_prompt": sc.get("image_prompt") or sc.get("prompt", ""),
+            "is_custom": sc.get("is_custom", False),
+            "source": sc.get("source", "generated"),
+            "validation_score": sc.get("validation_score", 85),
             "shot_type": sc.get("shot_type", "cinematic"),
             "camera_motion": sc.get("camera_motion", "push in"),
             "must_show": sc.get("must_show", []),
             "must_not_show": sc.get("must_not_show", []),
             "visual_description": sc.get("visual_description", "")
         })
-
-    # Generate any missing images with multi-tier pipeline in PARALLEL
-    if to_generate:
-        print(f"[Visual Director] Generating {len(to_generate)} scene visuals in parallel...")
-        from concurrent.futures import ThreadPoolExecutor
-        def _fetch_worker(item):
-            _idx, _prompt, _sq, _path, _stext = item
-            generate_scene_image_multi_tier(_prompt, _sq, _path, primary_topic, used_urls, scene_text=_stext)
-
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            list(executor.map(_fetch_worker, to_generate))
 
     return result_scenes
 
@@ -521,15 +458,16 @@ def generate_gemini_ai_broll(
     preview_scenes: Optional[List[Dict[str, Any]]] = None
 ) -> str:
     """
-    Master AI generation pipeline with ZERO-DROP GUARANTEE:
-    If preview_scenes is provided, it directly uses the EXACT previewed images that the user approved,
-    scaling their durations to fit total_duration without generating or fetching new images.
-    Otherwise, it runs prepare_gemini_scenes_data to direct and fetch visuals.
+    Visual Director AI B-Roll rendering pipeline:
+    - If preview_scenes is provided, directly uses the exact user-approved visuals.
+    - Otherwise, plans, generates, and validates scenes with the Visual Director.
+    - Renders Ken Burns continuous camera motion per scene.
+    - Concatenates into 1080x1920 vertical video.
     """
     os.makedirs(temp_dir, exist_ok=True)
 
     if preview_scenes and len(preview_scenes) > 0:
-        print(f"[Gemini Visuals] Using {len(preview_scenes)} user-previewed scenes directly (locking in approved visuals)!")
+        print(f"[Visual Director] Using {len(preview_scenes)} approved preview scenes directly.")
         total_p_dur = sum(float(s.get("duration", 2.0)) for s in preview_scenes)
         scale = (total_duration / total_p_dur) if total_p_dur > 0 else 1.0
         scenes_data = []
@@ -538,12 +476,13 @@ def generate_gemini_ai_broll(
             dur = max(0.8, round(float(s.get("duration", 2.0)) * scale, 2))
             scenes_data.append({
                 "scene_id": s.get("scene_id", 0),
-                "text": s.get("text", ""),
+                "text": s.get("text", s.get("narration", "")),
                 "image_url": s.get("image_url", ""),
                 "duration": dur,
                 "start_time": round(curr_t, 2),
                 "end_time": round(curr_t + dur, 2),
-                "is_custom": True
+                "is_custom": True,
+                "source": s.get("source", "manual")
             })
             curr_t += dur
     else:
@@ -555,10 +494,8 @@ def generate_gemini_ai_broll(
             api_key=api_key
         )
 
-    print(f"[Gemini Visuals] Rendering {len(scenes_data)} scenes (Total: {total_duration:.1f}s)")
+    print(f"[Visual Director] Rendering {len(scenes_data)} scenes (Total: {total_duration:.1f}s)")
     scene_clips: List[str] = []
-    primary_topic = find_primary_wikipedia_topic(script_text)
-    used_urls: Set[str] = set()
 
     for idx, sc in enumerate(scenes_data):
         img_path = os.path.join(temp_dir, f"ai_scene_{idx}.jpg")
@@ -566,39 +503,28 @@ def generate_gemini_ai_broll(
         dur = sc["duration"]
 
         clean_sc_text = sc.get('text', '')[:30].encode('ascii', 'replace').decode('ascii')
-        print(f"[Scene {idx+1}/{len(scenes_data)}] ({dur:.1f}s) \"{clean_sc_text}...\" -> {sc.get('search_query', '')}")
-        
-        ok = False
-        # 1. Custom override image
-        if sc.get("is_custom"):
-            ok = download_image_file(sc["image_url"], img_path)
+        print(f"[Scene {idx+1}/{len(scenes_data)}] ({dur:.1f}s) \"{clean_sc_text}...\"")
 
-        # 2. Local AI preview image in outputs/
-        if not ok and sc.get("image_url") and (sc["image_url"].startswith("/outputs/") or sc["image_url"].startswith("outputs/")):
+        ok = False
+        # 1. Custom or preview image from local outputs
+        if sc.get("image_url") and (sc["image_url"].startswith("/outputs/") or sc["image_url"].startswith("outputs/")):
             local_src = sc["image_url"].lstrip("/")
             if os.path.exists(local_src) and os.path.getsize(local_src) > 5000:
                 shutil.copyfile(local_src, img_path)
                 ok = True
 
-        # 3. Authentic or remote image URL
+        # 2. Remote URL download
         if not ok and sc.get("image_url") and "pollinations.ai" not in sc.get("image_url", ""):
             ok = download_image_file(sc["image_url"], img_path)
 
-        # 4. Generate AI image with multi-tier pipeline
+        # 3. Generate multi-tier if still needed
         if not ok:
-            prompt_to_use = sc.get("prompt") or sc.get("search_query") or sc["text"]
+            from engine.visual_director.generator import single_visual_attempt
+            prompt_to_use = sc.get("prompt") or sc.get("image_prompt") or sc.get("text", "")
             sq_to_use = sc.get("search_query", "")
-            ok = generate_scene_image_multi_tier(prompt_to_use, sq_to_use, img_path, primary_topic, used_urls, scene_text=sc.get("text", ""))
+            ok = single_visual_attempt(prompt_to_use, sq_to_use, img_path, scene_text=sc.get("text", ""))
 
-        # 4. CRITICAL FAILSAFE: If AI failed or timed out, query Commons for authentic image
-        if not ok:
-            print(f"[Failsafe] Fetching authentic image for Scene {idx+1} ({sc.get('search_query')})...")
-            auth = fetch_authentic_scene_image(sc.get("search_query", primary_topic), primary_topic, used_urls)
-            if auth:
-                used_urls.add(auth["url"])
-                ok = download_image_file(auth["url"], img_path)
-
-        # 5. ULTIMATE FAILSAFE: If still no image, use default dark canvas for this cut
+        # 4. Ultimate failsafe: clean dark cinematic canvas for this cut
         if not ok or not os.path.exists(img_path):
             print(f"[Failsafe] Creating dark cinematic canvas for Scene {idx+1}...")
             canvas_cmd = [
@@ -612,8 +538,7 @@ def generate_gemini_ai_broll(
             ]
             subprocess.run(canvas_cmd, capture_output=True)
 
-    # Render Ken Burns motion clips in PARALLEL with ThreadPoolExecutor
-    from concurrent.futures import ThreadPoolExecutor
+    # Render Ken Burns motion clips in parallel with ThreadPoolExecutor
     def _render_clip_worker(item):
         _idx, _img_p, _clip_p, _dur = item
         if not os.path.exists(_clip_p) and os.path.exists(_img_p):
@@ -661,13 +586,15 @@ def generate_gemini_ai_broll(
         if res.returncode == 0 and os.path.exists(output_path):
             return output_path
 
-    # Fallback to authentic archive generator
-    from engine.smart_visuals import generate_smart_broll_video
-    return generate_smart_broll_video(
-        script_text=script_text,
-        total_duration=total_duration,
-        output_path=output_path,
-        temp_dir=temp_dir,
-        target_cut_duration=target_cut_duration,
-        scene_overrides=scene_overrides
-    )
+    # Failsafe: dark cinematic canvas
+    fallback_cmd = [
+        FFMPEG_EXE, "-y",
+        "-f", "lavfi",
+        "-i", f"color=c=0x0a0c16:s=1080x1920:r=30:d={total_duration}",
+        "-c:v", "libx264",
+        "-preset", "ultrafast",
+        "-pix_fmt", "yuv420p",
+        os.path.abspath(output_path)
+    ]
+    subprocess.run(fallback_cmd, capture_output=True)
+    return output_path
