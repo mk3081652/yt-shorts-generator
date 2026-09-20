@@ -81,6 +81,8 @@ from engine.project import (
     Project,
     Scene
 )
+from engine.timeline import prepare_voice_timeline as prepare_project_voice_timeline
+
 
 app = FastAPI(title="Viral YouTube Shorts Creator Tool")
 
@@ -580,6 +582,18 @@ def api_project_redo(id: str):
     if err:
         raise HTTPException(status_code=code, detail=err)
     return proj.to_dict()
+
+
+@app.post("/api/projects/{id}/prepare_voice")
+async def api_project_prepare_voice(id: str, req: Optional[PrepareVoiceRequest] = None):
+    validate_session_id(id)
+    v = req.voice if req and req.voice else "en-US-ChristopherNeural"
+    r = req.rate if req and req.rate else "+10%"
+    proj, err, code = await prepare_project_voice_timeline(id, voice=v, rate=r)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return proj.to_dict()
+
 
 
 @app.post("/api/auto/generate")
