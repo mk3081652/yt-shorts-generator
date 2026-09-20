@@ -194,3 +194,10 @@ def generate(prompt: str, out_path: str) -> Tuple[bool, str]:
 def generate_flux_image(prompt: str, output_path: str = "") -> Tuple[bool, str]:
     """Backward compatibility alias for existing code."""
     return generate(prompt=prompt, out_path=output_path)
+
+
+# Backward compatibility aliases for existing tests
+is_flux_in_cooldown = is_rate_limited
+set_flux_cooldown = set_cooldown
+reset_flux_cooldown = clear_cooldown
+
