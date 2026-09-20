@@ -10,6 +10,7 @@ Establishes and preserves visual anchors across scenes:
 """
 
 from typing import Dict, Any, Optional, List
+from engine.smart_visuals import clean_words
 
 
 class ContinuityAnchor:
@@ -233,7 +234,15 @@ def enforce_continuity_in_prompt(
     - Exact car model/color/scale (1:18 scale, tiny mechanics, dark blue uniforms)
     - Exact door / room number (dark wooden door with brass plaque 'Room 307')
     - Exact object details (red suitcase, small silver key, same kitchen/refrigerator)
+    - Verbatim adjective/noun phrasing from continuity_bible for character/location/object anchors
     """
+    # TODO: Backend limitation — Cloudflare Workers AI FLUX-1-schnell and current Gemini endpoints
+    # do not support reference-image conditioning (image-to-image) via their public inference endpoints.
+    # When reference-image / IP-Adapter / ControlNet endpoints become available in the backends:
+    # 1. Save Scene 1's accepted image path into continuity_bible["reference_image_path"].
+    # 2. Pass reference_image_path into subsequent scene generations for matching anchor IDs.
+    # Until then, cross-scene visual consistency is enforced via verbatim adjective/noun phrasing from continuity_bible.
+
     p = base_prompt.strip()
     s_lower = scene_text.lower()
 
@@ -245,6 +254,30 @@ def enforce_continuity_in_prompt(
     bible = bible_or_anchor if isinstance(bible_or_anchor, dict) else (
         bible_or_anchor.to_dict() if hasattr(bible_or_anchor, "to_dict") else {}
     )
+
+    # Verbatim anchor injection from continuity_bible
+    if bible:
+        for char in bible.get("characters", []):
+            if isinstance(char, dict):
+                desc = char.get("description", "")
+                cid = char.get("id", "")
+                if desc and (cid.lower() in s_lower or any(w in s_lower for w in clean_words(desc)[:3])):
+                    if desc.lower() not in p.lower():
+                        p = f"{p}, {desc}"
+        for obj in bible.get("objects", []):
+            if isinstance(obj, dict):
+                desc = obj.get("description", "")
+                oid = obj.get("id", "")
+                if desc and (oid.lower() in s_lower or any(w in s_lower for w in clean_words(desc)[:2])):
+                    if desc.lower() not in p.lower():
+                        p = f"{p}, {desc}"
+        for loc in bible.get("locations", []):
+            if isinstance(loc, dict):
+                desc = loc.get("description", "")
+                lid = loc.get("id", "")
+                if desc and (lid.lower() in s_lower or any(w in s_lower for w in clean_words(desc)[:2])):
+                    if desc.lower() not in p.lower():
+                        p = f"{p}, in {desc}"
 
     # 1. Miniature Car Assembly
     if any(k in s_lower for k in ["miniature", "scale", "mechanic", "tiny", "suspension", "wheel", "chassis", "bolt", "windshield"]):
@@ -273,9 +306,9 @@ def enforce_continuity_in_prompt(
 
     # 4. Kitchen / Refrigerator
     if any(k in s_lower for k in ["kitchen", "refrigerator", "fridge", "water"]):
-        if "kitchen" in s_lower:
-            p = f"{p}, same modern kitchen with clean countertops"
-        if "refrigerator" in s_lower or "fridge" in s_lower:
+        if "kitchen" not in p.lower():
+            p = f"{p}, in the same modern kitchen with clean countertops"
+        if ("refrigerator" in s_lower or "fridge" in s_lower) and "refrigerator" not in p.lower():
             p = f"{p}, stainless steel refrigerator with cool interior illumination"
 
     return p

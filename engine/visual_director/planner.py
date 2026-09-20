@@ -15,6 +15,7 @@ import os
 import re
 import json
 import time
+import hashlib
 import urllib.request
 from typing import Dict, Any, List, Optional, Tuple
 
@@ -34,6 +35,10 @@ GEMINI_MODELS = [
     "gemini-flash-lite-latest",
     "gemini-pro-latest"
 ]
+
+# In-memory caches for story analysis and continuity bible keyed by script text hash
+_STORY_ANALYSIS_CACHE: Dict[str, Dict[str, Any]] = {}
+_CONTINUITY_BIBLE_CACHE: Dict[str, Dict[str, Any]] = {}
 
 
 def extract_json_object(text: str) -> Optional[Dict[str, Any]]:
@@ -340,11 +345,21 @@ def plan_visual_storyboard(
     if not script_clean:
         return {"story_analysis": {}, "continuity_bible": {}, "scenes": []}
 
-    # Step 1: Story Analysis
-    story_analysis = analyze_story(script_clean, api_key=api_key)
+    script_hash = hashlib.sha256(script_clean.encode('utf-8')).hexdigest()[:16]
 
-    # Step 2: Continuity Bible
-    continuity_bible = build_continuity_bible(story_analysis, script_clean)
+    # Step 1: Story Analysis (cached by script hash to prevent redundant analysis)
+    if script_hash in _STORY_ANALYSIS_CACHE:
+        story_analysis = _STORY_ANALYSIS_CACHE[script_hash]
+    else:
+        story_analysis = analyze_story(script_clean, api_key=api_key)
+        _STORY_ANALYSIS_CACHE[script_hash] = story_analysis
+
+    # Step 2: Continuity Bible (cached by script hash)
+    if script_hash in _CONTINUITY_BIBLE_CACHE:
+        continuity_bible = _CONTINUITY_BIBLE_CACHE[script_hash]
+    else:
+        continuity_bible = build_continuity_bible(story_analysis, script_clean)
+        _CONTINUITY_BIBLE_CACHE[script_hash] = continuity_bible
 
     # Step 3: Visual Beat Segmentation (~3-6s per scene, ~10-14 for 60s)
     beats = create_visual_beats(script_clean, total_duration, min_dur=2.0, max_dur=4.5)

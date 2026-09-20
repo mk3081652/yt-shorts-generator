@@ -29,7 +29,11 @@ import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, List, Optional, Set, Tuple
 
-from engine.visual_director.validator import heuristic_validate_scene, validate_visual_with_gemini
+from engine.visual_director.validator import (
+    heuristic_validate_scene,
+    validate_visual_with_gemini,
+    validate_image_with_gemini_vision
+)
 from engine.smart_visuals import (
     clean_words,
     download_image_file,
@@ -293,48 +297,73 @@ def single_visual_attempt(
     output_path: str,
     scene_text: str = "",
     used_urls: Optional[Set[str]] = None,
-    api_key: Optional[str] = None
-) -> bool:
-    """Executes a single visual acquisition attempt across tiers."""
-    # Tier 1: Google Imagen 3 (Exact AI generation for script prompt)
-    if generate_google_imagen_image(prompt, output_path, api_key=api_key):
-        return True
+    api_key: Optional[str] = None,
+    generation_mode: str = "ai_flux_primary"
+) -> Tuple[bool, str]:
+    """Executes a single visual acquisition attempt across tiers adhering to generation_mode."""
+    if generation_mode in ("ai_flux_primary", "ai_primary"):
+        # Primary Tier 1: Google Imagen 3 (Exact AI generation for script prompt)
+        if generate_google_imagen_image(prompt, output_path, api_key=api_key):
+            return True, "ai_imagen"
 
-    # Tier 2: Cloudflare FLUX
-    if generate_cloudflare_flux_image(prompt, output_path):
-        return True
+        # Primary Tier 2: Cloudflare FLUX
+        if generate_cloudflare_flux_image(prompt, output_path):
+            return True, "ai_flux"
 
-    # Tier 2: Openverse Native Tall / Vertical Image Search (700M+ CC photos, verified 9:16)
-    if search_query:
-        if used_urls is None:
-            used_urls = set()
-        openverse_match = search_openverse_tall_image(search_query, used_urls)
-        if openverse_match and openverse_match.get("url"):
-            used_urls.add(openverse_match["url"])
-            if download_image_file(openverse_match["url"], output_path):
-                print(f"[Openverse 9:16] Found tall photo '{openverse_match.get('title')[:40]}' for '{search_query}'")
-                return True
+        # Fall through ONLY if primary AI models fail outright
+        # Secondary Tier 3: Pollinations AI
+        if generate_pollinations_image(prompt, output_path):
+            return True, "ai_pollinations"
 
-    # Tier 3: Targeted authentic photo matching the specific scene query (Wikimedia Commons)
-    if search_query:
-        if used_urls is None:
-            used_urls = set()
-        auth = search_targeted_scene_image(search_query, used_urls)
-        if auth and auth.get("url"):
-            used_urls.add(auth["url"])
-            if download_image_file(auth["url"], output_path):
-                return True
+        # Fallback Tier 4: Openverse Native Tall / Vertical Image Search
+        if search_query:
+            if used_urls is None:
+                used_urls = set()
+            openverse_match = search_openverse_tall_image(search_query, used_urls)
+            if openverse_match and openverse_match.get("url"):
+                used_urls.add(openverse_match["url"])
+                if download_image_file(openverse_match["url"], output_path):
+                    print(f"[Openverse 9:16] Found tall photo '{openverse_match.get('title')[:40]}' for '{search_query}'")
+                    return True, "openverse_tall"
 
-    # Tier 4: Instant Curated Visual (verified match for core Shorts scenes)
-    check_text = f"{scene_text} {prompt}"
-    if get_instant_curated_visual(check_text, search_query, output_path):
-        return True
+        # Fallback Tier 5: Targeted authentic photo (Wikimedia Commons)
+        if search_query:
+            if used_urls is None:
+                used_urls = set()
+            auth = search_targeted_scene_image(search_query, used_urls)
+            if auth and auth.get("url"):
+                used_urls.add(auth["url"])
+                if download_image_file(auth["url"], output_path):
+                    return True, "wikimedia"
 
-    # Tier 5: Fast Pollinations
-    if generate_pollinations_image(prompt, output_path):
-        return True
+        # Fallback Tier 6: Instant Curated Visual
+        check_text = f"{scene_text} {prompt}"
+        if get_instant_curated_visual(check_text, search_query, output_path):
+            return True, "curated_stock"
 
-    return False
+    else:
+        # Authentic primary
+        if search_query:
+            if used_urls is None:
+                used_urls = set()
+            openverse_match = search_openverse_tall_image(search_query, used_urls)
+            if openverse_match and openverse_match.get("url"):
+                used_urls.add(openverse_match["url"])
+                if download_image_file(openverse_match["url"], output_path):
+                    return True, "openverse_tall"
+
+        check_text = f"{scene_text} {prompt}"
+        if get_instant_curated_visual(check_text, search_query, output_path):
+            return True, "curated_stock"
+
+        if generate_google_imagen_image(prompt, output_path, api_key=api_key):
+            return True, "ai_imagen"
+        if generate_cloudflare_flux_image(prompt, output_path):
+            return True, "ai_flux"
+        if generate_pollinations_image(prompt, output_path):
+            return True, "ai_pollinations"
+
+    return False, "none"
 
 
 def generate_and_validate_scene(
@@ -343,7 +372,8 @@ def generate_and_validate_scene(
     continuity_bible: Optional[Dict[str, Any]] = None,
     api_key: Optional[str] = None,
     used_urls: Optional[Set[str]] = None,
-    max_retries: int = 2
+    max_retries: int = 2,
+    generation_mode: str = "ai_flux_primary"
 ) -> Dict[str, Any]:
     """
     Executes the visual generation, validation, and regeneration loop for a single scene:
@@ -372,23 +402,37 @@ def generate_and_validate_scene(
         attempt_filename = f"{scene_id}_att{attempt_idx}_{p_hash}.jpg"
         attempt_path = os.path.join(output_dir, attempt_filename)
 
-        ok = single_visual_attempt(
+        ok, tier = single_visual_attempt(
             prompt=current_prompt,
             search_query=sq,
             output_path=attempt_path,
             scene_text=narration,
-            used_urls=used_urls
+            used_urls=used_urls,
+            api_key=api_key,
+            generation_mode=generation_mode
         )
 
-        # Validate attempt
-        val_res = heuristic_validate_scene(
-            narration=narration,
-            prompt=current_prompt,
-            must_show=must_show,
-            must_not_show=must_not_show,
-            continuity_bible=continuity_bible,
-            visual_description=vis_desc
-        )
+        # Validate attempt: real Gemini Vision if API key and image file exist, else heuristic
+        resolved_key = api_key or os.environ.get("GEMINI_API_KEY", "")
+        if resolved_key and os.path.exists(attempt_path) and os.path.getsize(attempt_path) > 1000:
+            val_res = validate_image_with_gemini_vision(
+                narration=narration,
+                visual_description=vis_desc,
+                must_show=must_show,
+                must_not_show=must_not_show,
+                image_path=attempt_path,
+                continuity_bible=continuity_bible,
+                api_key=resolved_key
+            )
+        else:
+            val_res = heuristic_validate_scene(
+                narration=narration,
+                prompt=current_prompt,
+                must_show=must_show,
+                must_not_show=must_not_show,
+                continuity_bible=continuity_bible,
+                visual_description=vis_desc
+            )
         score = val_res["score"]
         attempts.append({
             "attempt": attempt_idx + 1,
@@ -397,20 +441,21 @@ def generate_and_validate_scene(
             "prompt": current_prompt,
             "score": score,
             "accepted": val_res["accepted"],
+            "source_tier": tier,
             "val_res": val_res
         })
 
         if val_res["accepted"]:
-            print(f"[{scene_id}] Attempt {attempt_idx+1} ACCEPTED (Score: {score}/100)")
+            print(f"[{scene_id}] Attempt {attempt_idx+1} ACCEPTED (Score: {score}/100, Tier: {tier})")
             break
         else:
-            print(f"[{scene_id}] Attempt {attempt_idx+1} REJECTED (Score: {score}/100). Reason: {val_res['reason']}")
+            print(f"[{scene_id}] Attempt {attempt_idx+1} REJECTED (Score: {score}/100, Tier: {tier}). Reason: {val_res['reason']}")
             if val_res.get("correction_prompt"):
                 current_prompt = val_res["correction_prompt"]
 
     # Best-Image Selection: Pick the highest scoring attempt
     best_attempt = max(attempts, key=lambda a: a["score"])
-    print(f"[{scene_id}] Selected Best Image: Attempt {best_attempt['attempt']} with Score {best_attempt['score']}/100")
+    print(f"[{scene_id}] Selected Best Image: Attempt {best_attempt['attempt']} with Score {best_attempt['score']}/100 (Tier: {best_attempt.get('source_tier', 'ai_flux')})")
 
     # Update scene with selected asset
     scene_copy = dict(scene)
@@ -420,6 +465,7 @@ def generate_and_validate_scene(
     scene_copy["accepted"] = best_attempt["accepted"]
     scene_copy["prompt"] = best_attempt["prompt"]
     scene_copy["source"] = "generated"
+    scene_copy["source_tier"] = best_attempt.get("source_tier", "ai_flux")
     scene_copy["is_custom"] = False
 
     return scene_copy
@@ -430,15 +476,19 @@ def generate_validated_scenes(
     output_dir: str = "outputs/ai_previews",
     continuity_bible: Optional[Dict[str, Any]] = None,
     scene_overrides: Optional[Dict[str, str]] = None,
-    api_key: Optional[str] = None
+    api_key: Optional[str] = None,
+    generation_mode: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
     Coordinates the visual generation and validation for all planned scenes in parallel.
-    Preserves manual overrides and enforces best-image selection.
+    Preserves manual overrides and enforces best-image selection and consistent generation_mode.
     """
     os.makedirs(output_dir, exist_ok=True)
     if scene_overrides is None:
         scene_overrides = {}
+
+    has_cf = bool(os.environ.get("CLOUDFLARE_ACCOUNT_ID") and os.environ.get("CLOUDFLARE_API_TOKEN"))
+    resolved_mode = generation_mode or ("ai_flux_primary" if has_cf else "ai_primary")
 
     used_urls: Set[str] = set()
     scenes_to_process = []
@@ -453,6 +503,7 @@ def generate_validated_scenes(
             sc_copy["image_title"] = os.path.basename(override_val)
             sc_copy["is_custom"] = True
             sc_copy["source"] = "manual"
+            sc_copy["source_tier"] = "manual_upload"
             sc_copy["validation_score"] = 100
             scenes_to_process.append((sc_copy, True))
         else:
@@ -469,7 +520,8 @@ def generate_validated_scenes(
                 output_dir=output_dir,
                 continuity_bible=continuity_bible,
                 api_key=api_key,
-                used_urls=used_urls
+                used_urls=used_urls,
+                generation_mode=resolved_mode
             )
         except Exception as err:
             print(f"[Generator Worker] Error on scene {_sc.get('scene_id')}: {err}")

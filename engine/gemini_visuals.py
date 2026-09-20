@@ -411,13 +411,17 @@ def prepare_gemini_scenes_data(
     scenes = plan.get("scenes", [])
     continuity_bible = plan.get("continuity_bible", {})
 
-    print(f"[Visual Director] Generating and validating {len(scenes)} scenes...")
+    has_cf = bool(os.environ.get("CLOUDFLARE_ACCOUNT_ID") and os.environ.get("CLOUDFLARE_API_TOKEN"))
+    generation_mode = "ai_flux_primary" if has_cf else "ai_primary"
+
+    print(f"[Visual Director] Generating and validating {len(scenes)} scenes (Mode: {generation_mode})...")
     validated = generate_validated_scenes(
         planned_scenes=scenes,
         output_dir="outputs/ai_previews",
         continuity_bible=continuity_bible,
         scene_overrides=scene_overrides,
-        api_key=api_key
+        api_key=api_key,
+        generation_mode=generation_mode
     )
 
     result_scenes = []
@@ -436,6 +440,7 @@ def prepare_gemini_scenes_data(
             "image_prompt": sc.get("image_prompt") or sc.get("prompt", ""),
             "is_custom": sc.get("is_custom", False),
             "source": sc.get("source", "generated"),
+            "source_tier": sc.get("source_tier", "ai_primary"),
             "validation_score": sc.get("validation_score", 85),
             "shot_type": sc.get("shot_type", "cinematic"),
             "camera_motion": sc.get("camera_motion", "push in"),

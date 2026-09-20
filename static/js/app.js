@@ -447,6 +447,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 copyPromptText = `Photorealistic vertical 9:16 cinematic shot: ${desc}, 8k, dramatic lighting`;
             }
 
+            // Validation score quality badge (>=80 green, 60-79 yellow, <60 red)
+            const score = sc.validation_score !== undefined ? sc.validation_score : 85;
+            let scoreClass = 'score-high';
+            if (score < 60) scoreClass = 'score-low';
+            else if (score < 80) scoreClass = 'score-med';
+
+            // Source tier badge if not primary AI
+            const tier = (sc.source_tier || '').toLowerCase();
+            let tierBadge = '';
+            if (tier.includes('stock') || tier.includes('curated')) {
+                tierBadge = `<span class="scene-tier-badge tier-stock" title="Source: Curated Stock Photo">STOCK PHOTO</span>`;
+            } else if (tier.includes('openverse') || tier.includes('wikimedia') || tier.includes('archive')) {
+                tierBadge = `<span class="scene-tier-badge tier-archive" title="Source: Authentic Photo Archive">ARCHIVE</span>`;
+            } else if (tier.includes('pollinations') || tier.includes('fallback')) {
+                tierBadge = `<span class="scene-tier-badge tier-fallback" title="Source: Fallback AI">FALLBACK AI</span>`;
+            }
+
             card.innerHTML = `
                 <div class="scene-header">
                     <span>Scene ${sc.scene_id + 1}</span>
@@ -457,6 +474,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span class="scene-badge ${isCustom ? 'badge-custom' : 'badge-auto'}" id="sceneBadge_${sc.scene_id}" title="${sc.visual_description || ''}">
                         ${isCustom ? 'CUSTOM' : (sc.shot_type ? sc.shot_type.toUpperCase() : (sc.prompt || bgSelect.value === 'ai_gemini' ? 'AI ULTRA' : 'AUTHENTIC'))}
                     </span>
+                    <span class="scene-score-badge ${scoreClass}" title="Quality Score: ${score}/100">
+                        ${score}%
+                    </span>
+                    ${tierBadge}
                 </div>
                 <div class="scene-body">
                     <div class="scene-script-text" title="${sc.visual_description ? 'Director: ' + sc.visual_description + ' | ' : ''}${sc.text}">"${sc.text}"</div>
