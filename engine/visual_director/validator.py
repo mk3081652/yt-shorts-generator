@@ -15,7 +15,6 @@ import os
 import re
 import json
 import base64
-import urllib.request
 from typing import Dict, Any, List, Optional
 from engine.visual_director.prompts import VALIDATOR_SYSTEM_PROMPT
 
@@ -198,7 +197,7 @@ def validate_visual_with_gemini(
         raw, _ = generate_content(
             prompt_or_contents=prompt_text,
             thinking_level="low",
-            max_output_tokens=1000,
+            max_output_tokens=1200,
             json_mode=True,
             api_key=resolved_key
         )
@@ -316,7 +315,7 @@ def validate_image_with_gemini_vision(
         raw, _ = generate_content(
             prompt_or_contents=contents,
             thinking_level="low",
-            max_output_tokens=1000,
+            max_output_tokens=1200,
             json_mode=True,
             api_key=resolved_key,
             timeout=15

@@ -8,18 +8,7 @@ from typing import Optional, Dict, List, Any
 
 logger = logging.getLogger("yt_shorts_app")
 
-# Load local .env file if it exists
-_env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
-if os.path.exists(_env_file):
-    try:
-        with open(_env_file, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    k, v = line.split("=", 1)
-                    os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
-    except Exception:
-        pass
+import engine.config
 
 from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks, HTTPException
 
@@ -134,8 +123,8 @@ def load_job(job_id: str) -> Optional[dict]:
                 data = json.load(f)
                 JOBS[job_id] = data
                 return data
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Failed to load job {job_id}: {e}")
     return None
 
 
