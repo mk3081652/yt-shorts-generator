@@ -447,12 +447,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <div class="scene-preview-box">
                     <img src="${displayImgUrl}" class="scene-thumb" id="sceneImg_${sc.scene_id}" alt="Scene ${sc.scene_id + 1}" loading="lazy">
-                    <span class="scene-badge ${isCustom ? 'badge-custom' : 'badge-auto'}" id="sceneBadge_${sc.scene_id}">
-                        ${isCustom ? 'CUSTOM' : (sc.prompt || bgSelect.value === 'ai_gemini' ? 'AI ULTRA' : 'AUTHENTIC')}
+                    <span class="scene-badge ${isCustom ? 'badge-custom' : 'badge-auto'}" id="sceneBadge_${sc.scene_id}" title="${sc.visual_description || ''}">
+                        ${isCustom ? 'CUSTOM' : (sc.shot_type ? sc.shot_type.toUpperCase() : (sc.prompt || bgSelect.value === 'ai_gemini' ? 'AI ULTRA' : 'AUTHENTIC'))}
                     </span>
                 </div>
                 <div class="scene-body">
-                    <div class="scene-script-text" title="${sc.text}">"${sc.text}"</div>
+                    <div class="scene-script-text" title="${sc.visual_description ? 'Director: ' + sc.visual_description + ' | ' : ''}${sc.text}">"${sc.text}"</div>
                     <div class="scene-actions">
                         <label class="btn-replace-img" title="Upload your own photo for this scene">
                             📁 Replace

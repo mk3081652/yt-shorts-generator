@@ -318,33 +318,68 @@ def prepare_gemini_scenes_data(
     api_key: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
-    Prepares scenes for the visual storyboard using Google Gemini Flash and Cloudflare FLUX.
-    Generates dedicated Cloudflare FLUX photorealistic visuals for all unique script beats (radar, cabin, sonar, etc.).
+    Prepares scenes for the visual storyboard using the new intelligent Visual Director module.
+    Enforces literal narration relevance, story continuity anchors, varied cinematic shots,
+    and positive/negative visual constraints with multi-tier image generation.
+    Falls back safely to the existing director if any error occurs.
     """
-    beats = create_visual_beats(script_text, total_duration, min_dur=1.8, max_dur=2.6)
-    scene_texts = [t for t, _ in beats]
     primary_topic = find_primary_wikipedia_topic(script_text)
+    planned_scenes = []
 
-    print(f"[Gemini Visuals] Directing {len(scene_texts)} scene beats with Gemini Flash...")
-    directed_scenes = gemini_direct_visual_scenes(script_text, scene_texts, api_key=api_key)
+    try:
+        from engine.visual_director import plan_visual_storyboard
+        print(f"[Visual Director] Planning visual storyboard for {total_duration:.1f}s script...")
+        plan = plan_visual_storyboard(script_text, total_duration, api_key=api_key)
+        planned_scenes = plan.get("scenes", [])
+    except Exception as e:
+        print(f"[Visual Director] Fallback to legacy director due to: {e}")
+
+    # Fallback to existing visual beats & direct scenes if Visual Director returned no scenes
+    if not planned_scenes:
+        beats = create_visual_beats(script_text, total_duration, min_dur=1.8, max_dur=2.6)
+        scene_texts = [t for t, _ in beats]
+        print(f"[Gemini Visuals] Directing {len(scene_texts)} scene beats with legacy director...")
+        directed_scenes = gemini_direct_visual_scenes(script_text, scene_texts, api_key=api_key)
+        
+        curr_t = 0.0
+        for idx, ((s_text, dur), dir_info) in enumerate(zip(beats, directed_scenes)):
+            sq = dir_info.get("search_query", primary_topic)
+            ai_p = dir_info.get("ai_prompt", f"Vertical 9:16 cinematic shot of {sq}, photorealistic 8k")
+            planned_scenes.append({
+                "scene_id": idx,
+                "narration": s_text,
+                "duration": round(dur, 2),
+                "start_time": round(curr_t, 2),
+                "end_time": round(curr_t + dur, 2),
+                "visual_description": f"Visual of {s_text[:35]}",
+                "image_prompt": ai_p,
+                "search_query": sq,
+                "shot_type": "cinematic shot",
+                "camera_motion": "push in",
+                "must_show": [s_text[:20]],
+                "must_not_show": ["blurry", "watermark"]
+            })
+            curr_t += dur
 
     os.makedirs("outputs/ai_previews", exist_ok=True)
 
     result_scenes = []
-    current_time = 0.0
     used_urls: Set[str] = set()
-
     if scene_overrides is None:
         scene_overrides = {}
 
     to_generate = []
 
-    for idx, ((scene_text, dur), dir_info) in enumerate(zip(beats, directed_scenes)):
+    for idx, sc in enumerate(planned_scenes):
         override_key = str(idx)
         override_val = scene_overrides.get(override_key) or scene_overrides.get(idx)
 
-        sq = dir_info.get("search_query", primary_topic)
-        ai_p = dir_info.get("ai_prompt", f"Vertical 9:16 cinematic shot of {sq}, photorealistic 8k")
+        sq = sc.get("search_query", primary_topic)
+        ai_p = sc.get("image_prompt", f"Vertical 9:16 cinematic shot of {sq}, photorealistic 8k")
+        s_text = sc.get("narration", "")
+        dur = sc.get("duration", 2.2)
+        start_t = sc.get("start_time", 0.0)
+        end_t = sc.get("end_time", dur)
 
         is_custom = False
         if override_val:
@@ -358,28 +393,33 @@ def prepare_gemini_scenes_data(
             preview_path = os.path.join("outputs", "ai_previews", preview_filename)
 
             img_url = f"/outputs/ai_previews/{preview_filename}"
-            img_title = f"AI: {ai_p[:35]}..."
+            shot_label = sc.get("shot_type", "AI")
+            img_title = f"{shot_label.title()}: {ai_p[:30]}..."
 
             if not os.path.exists(preview_path) or os.path.getsize(preview_path) < 5000:
                 to_generate.append((idx, ai_p, sq, preview_path))
 
         result_scenes.append({
             "scene_id": idx,
-            "start_time": round(current_time, 2),
-            "end_time": round(current_time + dur, 2),
-            "duration": round(dur, 2),
-            "text": scene_text,
+            "start_time": start_t,
+            "end_time": end_t,
+            "duration": dur,
+            "text": s_text,
             "image_url": img_url,
             "image_title": img_title,
             "search_query": sq,
             "prompt": ai_p,
-            "is_custom": is_custom
+            "is_custom": is_custom,
+            "shot_type": sc.get("shot_type", "cinematic"),
+            "camera_motion": sc.get("camera_motion", "push in"),
+            "must_show": sc.get("must_show", []),
+            "must_not_show": sc.get("must_not_show", []),
+            "visual_description": sc.get("visual_description", "")
         })
-        current_time += dur
 
     # Generate any missing images with multi-tier pipeline
     if to_generate:
-        print(f"[Gemini Visuals] Generating {len(to_generate)} scene visuals with multi-tier pipeline...")
+        print(f"[Visual Director] Generating {len(to_generate)} scene visuals with multi-tier pipeline...")
         for _idx, _prompt, _sq, _path in to_generate:
             generate_scene_image_multi_tier(_prompt, _sq, _path, primary_topic, used_urls)
             time.sleep(0.3)
