@@ -234,6 +234,9 @@ def render_shorts_video(
             progress_callback("Rendering scene visuals and camera motion...", 55)
 
         scenes = list(preview_scenes or [])
+        if not scenes:
+            scenes = [{"duration": video_duration, "media_path": "", "media_type": "blank", "motion": "static"}]
+
         if scene_overrides:
             for idx, sc in enumerate(scenes):
                 sc_id_str = str(idx)

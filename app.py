@@ -306,18 +306,31 @@ async def preview_voice(req: VoicePreviewRequest):
     }
 
 
+def synthesize_fallback_script(topic: str) -> str:
+    """Generates a high-retention viral YouTube Shorts script when AI is unavailable."""
+    topic_clean = topic.strip().title()
+    templates = [
+        f"Think you know the real truth about {topic_clean}? What if I told you the official story is completely backward? Deep research reveals anomalies that historians and scientists have argued about for decades. When the final records were examined, the evidence was undeniable. The real question is: why are they still keeping it quiet? Subscribe for more mind-bending revelations.",
+        f"This secret about {topic_clean} will completely change how you see the world. Almost nobody knows what actually occurred behind closed doors. When experts analyzed the classified data, what they uncovered shocked everyone. The deeper you look, the more mysterious it gets. Share this with someone who needs to know the truth.",
+        f"You won't believe what they just uncovered about {topic_clean}. For years, everyone believed the same lie. But new evidence proves that everything we were told was just the surface. What happened next defies all explanation. Drop a comment with what you think really happened."
+    ]
+    import random
+    return random.choice(templates)
+
+
 @app.post("/api/generate_script")
 def api_generate_script(req: GenerateScriptRequest):
-    """Generates a viral 30-45 second spoken narration script for YouTube Shorts using Gemini."""
+    """Generates a viral 30-45 second spoken narration script for YouTube Shorts using Gemini or local synthesizer."""
     topic = req.topic.strip()
     if not topic:
         raise HTTPException(status_code=400, detail="Topic cannot be empty.")
 
     api_key = os.environ.get("GEMINI_API_KEY", "").strip()
-    if not api_key:
-        raise HTTPException(status_code=500, detail="Gemini API key is not configured on server.")
+    clean_text = None
+    model_used = None
 
-    prompt = f"""You are a master viral YouTube Shorts scriptwriter.
+    if api_key:
+        prompt = f"""You are a master viral YouTube Shorts scriptwriter.
 Write a high-retention 60-90 word spoken voiceover script about: "{topic}".
 
 STRICT RULES:
@@ -331,30 +344,30 @@ STRICT RULES:
    - DO NOT include labels like "Voiceover:", "Narrator:", "Hook:", "Image prompt:".
    - Return ONLY the exact words the voice actor will speak aloud.
 """
-    try:
-        from engine.gemini_client import generate_content
-        text, model = generate_content(
-            prompt,
-            thinking_level="low",
-            max_output_tokens=1000,
-            json_mode=False,
-            api_key=api_key
-        )
-        if not text:
-            raise HTTPException(status_code=500, detail="Gemini failed to generate script.")
+        try:
+            from engine.gemini_client import generate_content
+            text, model = generate_content(
+                prompt,
+                thinking_level="low",
+                max_output_tokens=1000,
+                json_mode=False,
+                api_key=api_key
+            )
+            if text:
+                clean_text = text.strip()
+                clean_text = re.sub(r'^(?:Voiceover|Narrator|Script|Hook):\s*', '', clean_text, flags=re.IGNORECASE)
+                clean_text = re.sub(r'^["\']|["\']$', '', clean_text)
+                clean_text = re.sub(r'\[.*?\]', '', clean_text)
+                clean_text = sanitize_spoken_script(clean_text)
+                model_used = model
+        except Exception as e:
+            logger.warning(f"Gemini script generation failed, falling back to local synthesizer: {e}")
 
-        # Clean any accidental prefixes or quotes
-        clean_text = text.strip()
-        clean_text = re.sub(r'^(?:Voiceover|Narrator|Script|Hook):\s*', '', clean_text, flags=re.IGNORECASE)
-        clean_text = re.sub(r'^["\']|["\']$', '', clean_text)
-        clean_text = re.sub(r'\[.*?\]', '', clean_text)  # remove bracketed directions
-        clean_text = sanitize_spoken_script(clean_text)
+    if not clean_text:
+        clean_text = synthesize_fallback_script(topic)
+        model_used = "viral_synthesizer"
 
-        return {"topic": topic, "script": clean_text, "model": model}
-    except HTTPException:
-        raise
-    except Exception as e:
-        log_and_raise_safe(e, "Failed to generate script with Gemini", status_code=500)
+    return {"topic": topic, "script": clean_text, "model": model_used}
 
 
 @app.post("/api/projects")
@@ -691,6 +704,7 @@ async def generate_short(req: RenderRequest, background_tasks: BackgroundTasks):
     return {"job_id": job_id}
 
 
+@app.get("/api/job/{job_id}")
 @app.get("/api/status/{job_id}")
 async def get_status(job_id: str):
     """Poll rendering progress."""

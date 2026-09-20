@@ -60,6 +60,9 @@ def generate_content(
     for m in fallback_models:
         if m not in models:
             models.append(m)
+    for m in ("gemini-3-flash-preview", "gemini-flash-lite-latest", "gemini-3.1-flash-lite-preview"):
+        if m not in models:
+            models.append(m)
 
     headers = {
         "x-goog-api-key": resolved_key,
