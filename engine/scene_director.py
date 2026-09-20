@@ -95,3 +95,80 @@ def render_broll(
         return res_fb.returncode == 0 and os.path.exists(output_path)
 
     return True
+
+
+def align_scenes(
+    segments: List[Any],
+    words: List[Dict[str, Any]],
+    total_duration: float
+) -> List[Dict[str, Any]]:
+    """
+    Aligns scene boundaries to TTS word boundaries.
+    Handles exact word matches and proportional interpolation when word counts differ.
+    Returns list of dicts: [{"segment_id": ..., "start": float, "end": float, "duration": float}]
+    """
+    if not segments:
+        return []
+
+    if not words or total_duration <= 0:
+        aligned = []
+        cur_t = 0.0
+        for s in segments:
+            dur = getattr(s, "duration", 3.0) if hasattr(s, "duration") else s.get("duration", 3.0)
+            seg_id = getattr(s, "segment_id", "") if hasattr(s, "segment_id") else s.get("segment_id", "")
+            aligned.append({
+                "segment_id": seg_id,
+                "start": round(cur_t, 2),
+                "end": round(cur_t + dur, 2),
+                "duration": round(dur, 2)
+            })
+            cur_t += dur
+        return aligned
+
+    # Extract word counts per segment
+    counts = []
+    seg_ids = []
+    for s in segments:
+        txt = getattr(s, "text", "") if hasattr(s, "text") else s.get("text", "")
+        seg_id = getattr(s, "segment_id", "") if hasattr(s, "segment_id") else s.get("segment_id", "")
+        counts.append(max(1, len(txt.strip().split())))
+        seg_ids.append(seg_id)
+
+    total_script_words = sum(counts)
+    total_tts_words = len(words)
+
+    aligned = []
+    cum_words = 0
+    prev_end = 0.0
+
+    for idx, count in enumerate(counts):
+        is_last = (idx == len(counts) - 1)
+        is_first = (idx == 0)
+
+        cum_words += count
+        ratio_end = cum_words / max(1, total_script_words)
+
+        if is_first:
+            start_t = 0.0
+        else:
+            start_t = prev_end
+
+        if is_last:
+            end_t = round(total_duration, 2)
+        else:
+            w_idx = min(total_tts_words - 1, max(0, int(round(ratio_end * total_tts_words)) - 1))
+            end_t = round(words[w_idx]["end"], 2)
+            if end_t <= start_t:
+                end_t = round(start_t + 1.0, 2)
+
+        dur = max(0.5, round(end_t - start_t, 2))
+        prev_end = end_t
+
+        aligned.append({
+            "segment_id": seg_ids[idx],
+            "start": round(start_t, 2),
+            "end": round(end_t, 2),
+            "duration": round(dur, 2)
+        })
+
+    return aligned

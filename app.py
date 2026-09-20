@@ -52,6 +52,7 @@ from engine.visual_director.segment_session import (
     undo_session,
     redo_session,
     cancel_session_generation,
+    prepare_voice_timeline,
     load_session
 )
 
@@ -221,6 +222,11 @@ class SuggestPromptsRequest(BaseModel):
 
 class SegmentActionRequest(BaseModel):
     segment_id: str
+
+
+class PrepareVoiceRequest(BaseModel):
+    voice: Optional[str] = "en-US-ChristopherNeural"
+    rate: Optional[str] = "+10%"
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -528,6 +534,18 @@ def api_replan_dirty_segments(id: str):
     """Re-runs prompt generation and validation for dirty, non-custom segments."""
     validate_session_id(id)
     session, err, code = replan_dirty_segments(id, api_key=os.environ.get("GEMINI_API_KEY", None))
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return session.to_dict()
+
+
+@app.post("/api/segments/{id}/prepare_voice")
+async def api_prepare_voice(id: str, req: Optional[PrepareVoiceRequest] = None):
+    """Generates TTS audio and aligns scene durations to exact word boundaries."""
+    validate_session_id(id)
+    v = req.voice if req and req.voice else "en-US-ChristopherNeural"
+    r = req.rate if req and req.rate else "+10%"
+    session, err, code = await prepare_voice_timeline(id, voice=v, rate=r)
     if err:
         raise HTTPException(status_code=code, detail=err)
     return session.to_dict()

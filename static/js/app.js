@@ -198,9 +198,32 @@ document.addEventListener('DOMContentLoaded', () => {
         if (btn) btn.addEventListener('click', () => goToStep(i));
     }
 
+    async function prepareVoiceTimeline() {
+        if (!currentSession) return;
+        const voice = voiceSelect ? voiceSelect.value : "en-US-ChristopherNeural";
+        const rate = speedSelect ? speedSelect.value : "+10%";
+        try {
+            const res = await fetch(`/api/segments/${currentSession.session_id}/prepare_voice`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ voice, rate })
+            });
+            if (res.ok) {
+                currentSession = await res.json();
+                renderSceneCards();
+                showToast("🎙️ Voice timeline aligned!", "info", 2000);
+            }
+        } catch (err) {
+            console.error("Voice prepare error:", err);
+        }
+    }
+
     document.getElementById('toStep2Btn')?.addEventListener('click', () => goToStep(2));
     document.getElementById('backToStep1Btn')?.addEventListener('click', () => goToStep(1));
-    document.getElementById('toStep3Btn')?.addEventListener('click', () => goToStep(3));
+    document.getElementById('toStep3Btn')?.addEventListener('click', () => {
+        goToStep(3);
+        prepareVoiceTimeline();
+    });
     document.getElementById('backToStep2Btn')?.addEventListener('click', () => goToStep(2));
     document.getElementById('toStep4Btn')?.addEventListener('click', () => goToStep(4));
     document.getElementById('backToStep3Btn')?.addEventListener('click', () => goToStep(3));
@@ -1000,11 +1023,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 motionOptionsHtml += `<option value="${m}" ${m === curMotion ? 'selected' : ''}>${m}</option>`;
             });
 
+            const isAligned = Boolean(currentSession.timeline && currentSession.timeline.scenes && currentSession.timeline.scenes.length > 0);
+            const durDisplay = isAligned ? `${seg.duration}s` : `~${seg.duration}s`;
+
             card.innerHTML = `
                 <div class="scene-card-top">
                     <div class="scene-card-badge-group">
                         <span class="scene-idx-badge">SCENE #${idx + 1}</span>
-                        <span class="segment-card-dur">~${seg.duration}s</span>
+                        <span class="segment-card-dur">${durDisplay}</span>
                         ${statusChipHtml}
                         ${qaChipHtml}
                     </div>

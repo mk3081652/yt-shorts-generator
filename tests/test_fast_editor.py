@@ -148,6 +148,111 @@ class TestFastEditor(unittest.TestCase):
         data_edit = res_edit.json()
         self.assertIn("Modified first sentence here.", data_edit["script_text"])
 
+    def test_06_align_scenes(self):
+        """Tests scene alignment with both fallback and word boundaries."""
+        from engine.scene_director import align_scenes
+        segs = [
+            {"segment_id": "s1", "text": "The luxury hotel was quiet at midnight.", "duration": 3.0},
+            {"segment_id": "s2", "text": "Suddenly security guards ran to Room 307.", "duration": 3.0},
+        ]
+        
+        # Test fallback when no words
+        fallback = align_scenes(segs, [], 0.0)
+        self.assertEqual(len(fallback), 2)
+        self.assertEqual(fallback[0]["start"], 0.0)
+        self.assertEqual(fallback[0]["end"], 3.0)
+        self.assertEqual(fallback[1]["start"], 3.0)
+        self.assertEqual(fallback[1]["end"], 6.0)
+
+        # Test alignment with word boundaries
+        words = [
+            {"word": "The", "start": 0.0, "end": 0.4},
+            {"word": "luxury", "start": 0.4, "end": 0.8},
+            {"word": "hotel", "start": 0.8, "end": 1.2},
+            {"word": "was", "start": 1.2, "end": 1.5},
+            {"word": "quiet", "start": 1.5, "end": 2.0},
+            {"word": "at", "start": 2.0, "end": 2.2},
+            {"word": "midnight.", "start": 2.2, "end": 2.8},
+            {"word": "Suddenly", "start": 2.8, "end": 3.4},
+            {"word": "security", "start": 3.4, "end": 4.0},
+            {"word": "guards", "start": 4.0, "end": 4.5},
+            {"word": "ran", "start": 4.5, "end": 4.8},
+            {"word": "to", "start": 4.8, "end": 5.0},
+            {"word": "Room", "start": 5.0, "end": 5.4},
+            {"word": "307.", "start": 5.4, "end": 6.0},
+        ]
+        aligned = align_scenes(segs, words, 6.0)
+        self.assertEqual(len(aligned), 2)
+        self.assertEqual(aligned[0]["start"], 0.0)
+        self.assertEqual(aligned[1]["end"], 6.0)
+        self.assertGreater(aligned[0]["duration"], 1.0)
+        self.assertGreater(aligned[1]["duration"], 1.0)
+
+    @patch("engine.tts.generate_speech_with_words")
+    def test_07_prepare_voice_timeline_api(self, mock_tts):
+        """Tests POST /api/segments/{id}/prepare_voice, caching, and cache invalidation."""
+        async def mock_gen(*args, **kwargs):
+            out_path = kwargs.get("output_audio_path", "outputs/mock_tts.mp3")
+            os.makedirs(os.path.dirname(out_path) or "outputs", exist_ok=True)
+            with open(out_path, "wb") as f:
+                f.write(b"mock_mp3_data")
+            words = [
+                {"word": "The", "start": 0.0, "end": 0.4},
+                {"word": "luxury", "start": 0.4, "end": 0.8},
+                {"word": "hotel", "start": 0.8, "end": 1.2},
+                {"word": "was", "start": 1.2, "end": 1.5},
+                {"word": "quiet", "start": 1.5, "end": 2.0},
+                {"word": "at", "start": 2.0, "end": 2.2},
+                {"word": "midnight.", "start": 2.2, "end": 2.8},
+                {"word": "Suddenly,", "start": 2.8, "end": 3.4},
+                {"word": "security", "start": 3.4, "end": 4.0},
+                {"word": "guards", "start": 4.0, "end": 4.5},
+                {"word": "ran", "start": 4.5, "end": 4.8},
+                {"word": "to", "start": 4.8, "end": 5.0},
+                {"word": "Room", "start": 5.0, "end": 5.4},
+                {"word": "307.", "start": 5.4, "end": 6.0},
+            ]
+            return out_path, words, 6.0
+
+        mock_tts.side_effect = mock_gen
+
+        res = self.client.post("/api/segments/create", json={
+            "script": "The luxury hotel was quiet at midnight. Suddenly, security guards ran to Room 307.",
+            "mode": "manual"
+        })
+        session_id = res.json()["session_id"]
+
+        # Call prepare_voice
+        prep_res = self.client.post(f"/api/segments/{session_id}/prepare_voice", json={
+            "voice": "en-US-ChristopherNeural",
+            "rate": "+10%"
+        })
+        self.assertEqual(prep_res.status_code, 200)
+        data = prep_res.json()
+        self.assertIn("timeline", data)
+        self.assertEqual(data["timeline"]["voice"], "en-US-ChristopherNeural")
+        self.assertEqual(len(data["timeline"]["scenes"]), len(data["segments"]))
+        self.assertEqual(mock_tts.call_count, 1)
+
+        # Call prepare_voice again -> should hit cache without calling generate_speech_with_words again
+        prep_res_cached = self.client.post(f"/api/segments/{session_id}/prepare_voice", json={
+            "voice": "en-US-ChristopherNeural",
+            "rate": "+10%"
+        })
+        self.assertEqual(prep_res_cached.status_code, 200)
+        self.assertEqual(mock_tts.call_count, 1)
+
+        # Edit text on segment -> should invalidate timeline cache
+        seg_id = data["segments"][0]["segment_id"]
+        edit_res = self.client.post(f"/api/segments/{session_id}/edit_text", json={
+            "segment_id": seg_id,
+            "new_text": "A luxury resort was silent at midnight."
+        })
+        self.assertEqual(edit_res.status_code, 200)
+        edit_data = edit_res.json()
+        self.assertEqual(edit_data.get("timeline"), {})
+
 
 if __name__ == "__main__":
     unittest.main()
+

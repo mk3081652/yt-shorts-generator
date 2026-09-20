@@ -550,6 +550,7 @@ def split_segment(
         s.order_index = i
 
     session.script_text = " ".join(seg.text for seg in session.segments)
+    session.timeline = {}
     record_snapshot(session)
     save_session(session)
     return session, None, 200
@@ -628,6 +629,7 @@ def merge_segment(
         s.order_index = i
 
     session.script_text = " ".join(seg.text for seg in session.segments)
+    session.timeline = {}
     record_snapshot(session)
     save_session(session)
     return session, None, 200
@@ -715,6 +717,7 @@ def move_boundary(
         s.dirty = True
 
     session.script_text = " ".join(s.text for s in session.segments)
+    session.timeline = {}
     record_snapshot(session)
     save_session(session)
     return session, None, 200
@@ -773,6 +776,7 @@ def add_segment(
         s.order_index = i
 
     session.script_text = " ".join(seg.text for seg in session.segments)
+    session.timeline = {}
     record_snapshot(session)
     save_session(session)
     return session, None, 200
@@ -811,6 +815,7 @@ def delete_segment(
         s.order_index = i
 
     session.script_text = " ".join(seg.text for seg in session.segments)
+    session.timeline = {}
     record_snapshot(session)
     save_session(session)
     return session, None, 200
@@ -867,6 +872,7 @@ def edit_segment_text(
         target_seg.source = "generated"
 
     session.script_text = " ".join(seg.text for seg in session.segments)
+    session.timeline = {}
     record_snapshot(session)
     save_session(session)
     return session, None, 200
@@ -1355,3 +1361,67 @@ def export_prompts(session_id: str) -> Tuple[Optional[str], Optional[str], int]:
         lines.append(f"{idx + 1}. {p}")
 
     return "\n\n".join(lines), None, 200
+
+
+async def prepare_voice_timeline(
+    session_id: str,
+    voice: str = "en-US-ChristopherNeural",
+    rate: str = "+10%"
+) -> Tuple[Optional[StoryboardSession], Optional[str], int]:
+    """
+    Generates TTS audio, word boundaries, and aligns scenes to exact timestamps.
+    Caches timeline using script_hash.
+    """
+    import hashlib
+    session = load_session(session_id)
+    if not session:
+        return None, "Session not found", 404
+
+    clean_script = session.script_text.strip()
+    if not clean_script:
+        return None, "Script cannot be empty.", 400
+
+    script_hash = hashlib.sha256(f"{clean_script}_{voice}_{rate}".encode('utf-8')).hexdigest()
+
+    # Check cache
+    cached = session.timeline
+    if cached and cached.get("script_hash") == script_hash and os.path.exists(cached.get("audio_path", "")):
+        return session, None, 200
+
+    out_name = f"voice_{session.session_id[:8]}_{uuid.uuid4().hex[:6]}.mp3"
+    out_audio_path = os.path.join("outputs", out_name)
+    os.makedirs("outputs", exist_ok=True)
+
+    try:
+        from engine.tts import generate_speech_with_words
+        audio_path, word_boundaries, total_dur = await generate_speech_with_words(
+            text=clean_script,
+            voice=voice,
+            rate=rate,
+            output_audio_path=out_audio_path
+        )
+    except Exception as e:
+        return None, f"TTS generation failed: {e}", 500
+
+    from engine.scene_director import align_scenes
+    aligned = align_scenes(session.segments, word_boundaries, total_dur)
+
+    for idx, a in enumerate(aligned):
+        if idx < len(session.segments):
+            session.segments[idx].duration = a["duration"]
+
+    session.total_duration = round(total_dur, 2)
+    session.timeline = {
+        "audio_path": audio_path,
+        "audio_url": f"/outputs/{out_name}",
+        "voice": voice,
+        "rate": rate,
+        "total_duration": round(total_dur, 2),
+        "word_boundaries": word_boundaries,
+        "script_hash": script_hash,
+        "scenes": aligned
+    }
+
+    record_snapshot(session)
+    save_session(session)
+    return session, None, 200
