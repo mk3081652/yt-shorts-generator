@@ -136,6 +136,15 @@ def generate_flux_image(
 
         except urllib.error.HTTPError as e:
             if e.code == 429:
+                err_body = ""
+                try:
+                    err_body = e.read().decode("utf-8")
+                except Exception:
+                    pass
+                if "daily free allocation" in err_body.lower() or "neurons" in err_body.lower() or "4006" in err_body:
+                    print(f"[FLUX] Cloudflare daily neuron quota (10,000) exhausted: {err_body}")
+                    set_flux_cooldown(3600)  # 1 hour cooldown for quota exhaustion
+                    return False, "flux_quota_exhausted"
                 print(f"[FLUX] Cloudflare rate limit (429) hit. Entering cooldown for {get_flux_cooldown_seconds()}s.")
                 set_flux_cooldown()
                 return False, "flux_rate_limited"

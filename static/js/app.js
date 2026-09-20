@@ -468,26 +468,76 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(err.detail || 'Failed to generate scenes');
             }
 
-            storyboardProgressBar.style.width = '100%';
-            storyboardProgressPct.textContent = '100%';
-            storyboardProgressStatus.textContent = 'Scenes Ready!';
-            storyboardProgressStep.textContent = 'Loading scene cards...';
-
             currentSession = await res.json();
             renderSceneCards();
-            showToast(`✨ Generated ${currentSession.segments.length} scenes in ${currentMode === 'auto' ? 'Auto' : 'Manual'} mode!`, 'success');
+
+            if (currentMode === 'auto') {
+                storyboardProgressBar.style.width = '30%';
+                storyboardProgressPct.textContent = '30%';
+                storyboardProgressStatus.textContent = 'Rendering Visuals via FLUX...';
+                storyboardProgressStep.textContent = 'Generating 9:16 images in background...';
+
+                const pollGenTimer = setInterval(async () => {
+                    try {
+                        const sRes = await fetch(`/api/segments/${currentSession.session_id}`);
+                        if (sRes.ok) {
+                            currentSession = await sRes.json();
+                            renderSceneCards();
+                            const total = currentSession.segments.length;
+                            const ready = currentSession.segments.filter(s => s.status === 'ready').length;
+                            const failed = currentSession.segments.filter(s => s.status === 'failed').length;
+                            const finished = ready + failed;
+                            const pct = Math.min(95, Math.round(30 + (finished / Math.max(1, total)) * 65));
+                            storyboardProgressBar.style.width = `${pct}%`;
+                            storyboardProgressPct.textContent = `${pct}%`;
+                            storyboardProgressStep.textContent = `Generated ${ready}/${total} scene visuals...`;
+
+                            const pending = currentSession.segments.filter(s => s.status === 'queued' || s.status === 'generating');
+                            if (pending.length === 0) {
+                                clearInterval(pollGenTimer);
+                                storyboardProgressBar.style.width = '100%';
+                                storyboardProgressPct.textContent = '100%';
+                                storyboardProgressStatus.textContent = 'Done!';
+                                setTimeout(() => {
+                                    storyboardProgressCard.classList.add('hidden');
+                                    generateAllScenesBtn.disabled = false;
+                                }, 500);
+
+                                const quotaFailed = currentSession.segments.some(s => s.fail_reason === 'flux_quota_exhausted');
+                                const rateFailed = currentSession.segments.some(s => s.fail_reason === 'flux_rate_limited');
+
+                                if (quotaFailed) {
+                                    showToast('⚠️ Cloudflare free limit (10,000 neurons) reached for today. See scene card tooltips.', 'warning', 7000);
+                                } else if (rateFailed) {
+                                    showToast('⚠️ Cloudflare rate limit active. Please wait for cooldown or drop visuals manually.', 'warning', 5000);
+                                } else if (ready > 0) {
+                                    showToast(`✨ Generated ${ready}/${total} visuals with FLUX!`, 'success', 3500);
+                                }
+                            }
+                        }
+                    } catch (pollErr) {
+                        console.error('Auto gen poll error:', pollErr);
+                    }
+                }, 2000);
+            } else {
+                storyboardProgressBar.style.width = '100%';
+                storyboardProgressPct.textContent = '100%';
+                storyboardProgressStatus.textContent = 'Scenes Ready!';
+                storyboardProgressStep.textContent = 'Loading scene cards...';
+                showToast(`✨ Generated ${currentSession.segments.length} scenes in Manual mode!`, 'success');
+                setTimeout(() => {
+                    storyboardProgressCard.classList.add('hidden');
+                    generateAllScenesBtn.disabled = false;
+                }, 400);
+            }
 
         } catch (err) {
             clearInterval(progressTimer);
             showToast('Generation failed: ' + err.message, 'error');
             storyboardEmptyNotice.classList.remove('hidden');
-        } finally {
-            setTimeout(() => {
-                storyboardProgressCard.classList.add('hidden');
-                generateAllScenesBtn.disabled = false;
-            }, 400);
+            storyboardProgressCard.classList.add('hidden');
+            generateAllScenesBtn.disabled = false;
         }
-    });
 
     // Generate Missing Media
     async function triggerGenerateMissing() {
@@ -1003,7 +1053,13 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (seg.status === 'queued') {
                 statusChipHtml = '<span class="status-chip status-queued">⏳ Queued</span>';
             } else if (seg.status === 'failed') {
-                statusChipHtml = `<span class="status-chip status-failed" title="${escapeHtml(seg.fail_reason || 'FLUX generation failed')}">⚠️ Failed</span>`;
+                const isQuota = seg.fail_reason === 'flux_quota_exhausted';
+                const isRate = seg.fail_reason === 'flux_rate_limited';
+                const label = isQuota ? '⚠️ Daily Quota' : (isRate ? '⚠️ Rate Limit' : '⚠️ Failed');
+                const titleText = isQuota
+                    ? 'Cloudflare free daily 10,000 neurons quota exhausted. Upgrade to Workers Paid or use another account.'
+                    : (isRate ? 'Cloudflare rate limit cooldown in progress.' : (seg.fail_reason || 'FLUX generation failed'));
+                statusChipHtml = `<span class="status-chip status-failed" title="${escapeHtml(titleText)}">${label}</span>`;
             } else if (seg.status === 'manual' || seg.is_custom) {
                 statusChipHtml = '<span class="status-chip status-manual">🟣 Manual</span>';
             } else {
