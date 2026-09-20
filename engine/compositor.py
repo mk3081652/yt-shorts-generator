@@ -128,13 +128,13 @@ def render_shorts_video(
 
         # Audio mixing & Auto-Ducking
         if bgm_file and os.path.exists(bgm_file):
-            # Input 2: Background Music
-            ffmpeg_cmd.extend(["-i", os.path.abspath(bgm_file)])
+            # Input 2: Background Music (stream_loop -1 loops at demuxer level with zero memory allocation)
+            ffmpeg_cmd.extend(["-stream_loop", "-1", "-i", os.path.abspath(bgm_file)])
             filter_complex = (
                 f"{v_chain};"
-                f"[2:a]aloop=loop=-1:size=2e+09,volume={bgm_volume:.2f}[bgm_loop];"
+                f"[2:a]volume={bgm_volume:.2f}[bgm_clean];"
                 f"[1:a]volume=1.0[v_clean];"
-                f"[v_clean][bgm_loop]amix=inputs=2:duration=first:dropout_transition=2[aout]"
+                f"[v_clean][bgm_clean]amix=inputs=2:duration=first:dropout_transition=2[aout]"
             )
             ffmpeg_cmd.extend([
                 "-filter_complex", filter_complex,
@@ -152,7 +152,8 @@ def render_shorts_video(
             "-t", f"{video_duration:.2f}",
             "-c:v", "libx264",
             "-preset", "veryfast",
-            "-crf", "21",
+            "-threads", "2",
+            "-crf", "22",
             "-c:a", "aac",
             "-b:a", "192k",
             "-pix_fmt", "yuv420p",

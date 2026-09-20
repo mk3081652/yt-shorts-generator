@@ -355,7 +355,7 @@ def create_ken_burns_motion_clip(
         "-t", f"{duration:.2f}",
         "-c:v", "libx264",
         "-preset", "ultrafast",
-        "-threads", "4",
+        "-threads", "2",
         "-crf", "22",
         os.path.abspath(output_path)
     ]

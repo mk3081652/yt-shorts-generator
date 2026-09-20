@@ -57,8 +57,33 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/outputs", StaticFiles(directory="outputs"), name="outputs")
 app.mount("/assets", StaticFiles(directory="assets"), name="assets")
 
-# Global job status dictionary
+# Global job status dictionary with disk persistence
 JOBS = {}
+JOBS_DIR = os.path.abspath("outputs/jobs")
+os.makedirs(JOBS_DIR, exist_ok=True)
+
+def save_job(job_id: str, data: dict):
+    JOBS[job_id] = data
+    try:
+        j_path = os.path.join(JOBS_DIR, f"{job_id}.json")
+        with open(j_path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+    except Exception:
+        pass
+
+def load_job(job_id: str) -> Optional[dict]:
+    if job_id in JOBS:
+        return JOBS[job_id]
+    j_path = os.path.join(JOBS_DIR, f"{job_id}.json")
+    if os.path.exists(j_path):
+        try:
+            with open(j_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                JOBS[job_id] = data
+                return data
+        except Exception:
+            pass
+    return None
 
 class RenderRequest(BaseModel):
     script: str
@@ -312,9 +337,9 @@ def get_metadata(req: MetadataRequest):
 
 def run_render_task(job_id: str, req: RenderRequest):
     def update_progress(msg: str, pct: int):
-        JOBS[job_id]["status"] = "processing"
-        JOBS[job_id]["message"] = msg
-        JOBS[job_id]["progress"] = pct
+        cur = load_job(job_id) or {}
+        cur.update({"status": "processing", "message": msg, "progress": pct})
+        save_job(job_id, cur)
 
     try:
         res = render_shorts_video(
@@ -330,7 +355,8 @@ def run_render_task(job_id: str, req: RenderRequest):
             preview_scenes=req.preview_scenes
         )
         metadata = generate_youtube_metadata(req.script)
-        JOBS[job_id].update({
+        cur = load_job(job_id) or {}
+        cur.update({
             "status": "completed",
             "progress": 100,
             "message": "Complete! Video generated.",
@@ -338,12 +364,15 @@ def run_render_task(job_id: str, req: RenderRequest):
             "duration": res["duration"],
             "metadata": metadata
         })
+        save_job(job_id, cur)
     except Exception as e:
-        JOBS[job_id].update({
+        cur = load_job(job_id) or {}
+        cur.update({
             "status": "error",
             "progress": 0,
             "message": str(e)
         })
+        save_job(job_id, cur)
 
 @app.post("/api/generate_short")
 async def generate_short(req: RenderRequest, background_tasks: BackgroundTasks):
@@ -352,13 +381,13 @@ async def generate_short(req: RenderRequest, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=400, detail="Script text cannot be empty.")
 
     job_id = str(uuid.uuid4())[:8]
-    JOBS[job_id] = {
+    save_job(job_id, {
         "status": "queued",
         "progress": 5,
         "message": "Initializing generation queue...",
         "video_url": None,
         "metadata": None
-    }
+    })
     
     background_tasks.add_task(run_render_task, job_id, req)
     return {"job_id": job_id}
@@ -366,7 +395,7 @@ async def generate_short(req: RenderRequest, background_tasks: BackgroundTasks):
 @app.get("/api/status/{job_id}")
 async def get_status(job_id: str):
     """Poll rendering progress."""
-    job = JOBS.get(job_id)
+    job = load_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found.")
     return job

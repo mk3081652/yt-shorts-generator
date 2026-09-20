@@ -805,11 +805,23 @@ document.addEventListener('DOMContentLoaded', () => {
             const jobId = data.job_id;
             showToast("🚀 Rendering started! Tracking live progress...", "info", 3500);
 
-            // Poll status
+            let notFoundRetries = 0;
             if (pollInterval) clearInterval(pollInterval);
             pollInterval = setInterval(async () => {
                 try {
                     const sRes = await fetch(`/api/status/${jobId}`);
+                    if (!sRes.ok) {
+                        notFoundRetries++;
+                        if (notFoundRetries > 12) {
+                            clearInterval(pollInterval);
+                            showToast('Rendering was interrupted by server restart. Please try again.', 'error', 6000);
+                            progressCard.classList.add('hidden');
+                            generateBtn.disabled = false;
+                            generateBtn.innerHTML = '<span class="btn-icon">⚡</span><span class="btn-text">GENERATE VIRAL SHORT (1080x1920)</span>';
+                        }
+                        return;
+                    }
+                    notFoundRetries = 0;
                     const status = await sRes.json();
 
                     if (status.status === 'processing' || status.status === 'queued') {
