@@ -78,7 +78,9 @@ def test_miniature_car_assembly():
 
     for sc in scenes:
         p_lower = sc["image_prompt"].lower()
-        print(f"Scene {sc['scene_id']+1} ({sc.get('shot_type')}): {sc['image_prompt'][:90]}...")
+        sid = sc.get("scene_id")
+        sid_disp = f"{sid + 1}" if isinstance(sid, int) else str(sid)
+        print(f"Scene {sid_disp} ({sc.get('shot_type')}): {sc['image_prompt'][:90]}...")
         # Check that miniature / scale / tiny is preserved
         has_mini = any(k in p_lower for k in ["miniature", "tiny", "micro", "1:24", "scale"])
         assert has_mini, f"Scene {sc['scene_id']} did not preserve miniature scale: {sc['image_prompt']}"

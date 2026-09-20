@@ -321,11 +321,43 @@ def semantic_fallback_plan(
         })
         current_time += dur
 
+    anchor_dict = build_fallback_continuity_anchor(script_text).to_dict()
     return {
         "story_analysis": story_analysis,
         "continuity_bible": continuity_bible,
+        "continuity_anchor": anchor_dict,
         "scenes": scenes
     }
+
+
+def _resolve_must_show_entities(items: List[Any], continuity_bible: Optional[Dict[str, Any]]) -> List[str]:
+    if not items:
+        return []
+    if not continuity_bible or not isinstance(continuity_bible, dict):
+        return [str(x) for x in items]
+
+    id_map = {}
+    for cat in ["characters", "locations", "objects"]:
+        for entity in continuity_bible.get(cat, []):
+            if isinstance(entity, dict):
+                eid = str(entity.get("id", "")).strip().lower()
+                desc = str(entity.get("description", "")).strip()
+                if eid and desc:
+                    name = desc.split(":")[0].strip() if ":" in desc else desc
+                    id_map[eid] = name
+                    id_map[eid.replace("_", "")] = name
+
+    resolved = []
+    for it in items:
+        s_it = str(it).strip()
+        s_lower = s_it.lower()
+        if s_lower in id_map:
+            resolved.append(id_map[s_lower])
+        elif s_lower.replace("_", "") in id_map:
+            resolved.append(id_map[s_lower.replace("_", "")])
+        else:
+            resolved.append(s_it)
+    return resolved
 
 
 def plan_visual_storyboard(
@@ -338,42 +370,37 @@ def plan_visual_storyboard(
     1. Story analysis (extracts story_type, characters, objects, locations, tone)
     2. Continuity bible creation
     3. Meaningful visual beat segmentation
-    4. Structured Gemini Flash planning with validation & retry
-    5. Safe semantic fallback if Gemini is offline/unconfigured
+    4. Model prompt payload creation
+    5. Scene data extraction and heuristic validation
     """
     script_clean = script_text.strip()
     if not script_clean:
-        return {"story_analysis": {}, "continuity_bible": {}, "scenes": []}
+        return {"scenes": []}
 
-    script_hash = hashlib.sha256(script_clean.encode('utf-8')).hexdigest()[:16]
+    resolved_key = api_key or os.environ.get("GEMINI_API_KEY", "")
+    if not resolved_key:
+        return semantic_fallback_plan(script_clean, total_duration)
 
-    # Step 1: Story Analysis (cached by script hash to prevent redundant analysis)
+    script_hash = hashlib.sha256(script_clean.encode("utf-8")).hexdigest()[:16]
+
     if script_hash in _STORY_ANALYSIS_CACHE:
         story_analysis = _STORY_ANALYSIS_CACHE[script_hash]
     else:
-        story_analysis = analyze_story(script_clean, api_key=api_key)
+        story_analysis = analyze_story(script_clean, api_key=resolved_key)
         _STORY_ANALYSIS_CACHE[script_hash] = story_analysis
 
-    # Step 2: Continuity Bible (cached by script hash)
     if script_hash in _CONTINUITY_BIBLE_CACHE:
         continuity_bible = _CONTINUITY_BIBLE_CACHE[script_hash]
     else:
         continuity_bible = build_continuity_bible(story_analysis, script_clean)
         _CONTINUITY_BIBLE_CACHE[script_hash] = continuity_bible
 
-    # Step 3: Visual Beat Segmentation (~3-6s per scene, ~10-14 for 60s)
-    beats = create_visual_beats(script_clean, total_duration, min_dur=2.0, max_dur=4.5)
+    beats = create_visual_beats(script_clean, total_duration, min_dur=2.5, max_dur=5.5)
     if not beats:
         beats = [(script_clean, total_duration)]
-    scene_texts = [t for t, _ in beats]
 
-    resolved_key = api_key or os.environ.get("GEMINI_API_KEY", "")
+    scene_texts = [b[0] for b in beats]
 
-    if not resolved_key:
-        print("[Visual Director] WARNING: No GEMINI_API_KEY configured. Running in degraded semantic fallback mode.")
-        return semantic_fallback_plan(script_clean, total_duration, story_analysis, continuity_bible)
-
-    # Step 4: Gemini Flash Visual Director Call
     prompt_payload = (
         f"{VISUAL_DIRECTOR_SYSTEM_PROMPT}\n\n"
         f"Story Analysis:\n{json.dumps(story_analysis, indent=2)}\n\n"
@@ -420,8 +447,10 @@ def plan_visual_storyboard(
                             vis_desc = s_data.get("visual_description", f"Visual illustrating {b_text[:35]}")
                             p = s_data.get("image_prompt") or f"Photorealistic vertical 9:16 {shot} of {b_text}, cinematic 8k"
                             sq = s_data.get("search_query") or " ".join(clean_words(b_text)[:3])
-                            must_show = s_data.get("must_show") or [b_text[:20]]
-                            must_not_show = s_data.get("must_not_show") or ["blurry", "watermark"]
+                            raw_must_show = s_data.get("must_show") or [b_text[:20]]
+                            must_show = _resolve_must_show_entities(raw_must_show, continuity_bible)
+                            raw_must_not = s_data.get("must_not_show") or ["blurry", "watermark"]
+                            must_not_show = _resolve_must_show_entities(raw_must_not, continuity_bible)
                             importance = s_data.get("importance", "medium")
                             anchor_ref = s_data.get("continuity_anchor", "bible")
 
@@ -453,9 +482,11 @@ def plan_visual_storyboard(
                             curr_t += b_dur
 
                         print(f"[Visual Director] Successfully planned {len(final_scenes)} scenes with {model_name}!")
+                        anchor_dict = build_fallback_continuity_anchor(script_clean).to_dict()
                         return {
                             "story_analysis": story_analysis,
                             "continuity_bible": continuity_bible,
+                            "continuity_anchor": anchor_dict,
                             "scenes": final_scenes
                         }
             except Exception as e:
