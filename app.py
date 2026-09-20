@@ -254,6 +254,12 @@ def serve_home():
         return HTMLResponse(content=f.read())
 
 
+@app.get("/healthz")
+def healthz():
+    """Health check endpoint for container orchestrators and monitoring."""
+    return {"status": "ok"}
+
+
 @app.get("/api/config")
 def get_config():
     """Returns available options for the studio UI."""
