@@ -66,22 +66,40 @@ Key environment variables:
 > - Without `GEMINI_API_KEY`, the app runs in a deterministic semantic fallback mode, maintaining continuity anchors and shot variety.
 > - Without Cloudflare FLUX credentials, scenes default to blank canvas clips with Ken Burns subtle motion, allowing quick manual image/video drops.
 
+### 🔍 Live API & Model Verification
+
+Verify your Gemini and Cloudflare FLUX connections with one command:
+
+```bash
+python scripts/live_check.py
+```
+
 ---
 
-## 🎬 Step 2: Visual Storyboard Modes
+## 🎬 Step 2: Fast Scene Editor (Auto & Manual Segment)
 
-Step 2 provides a fast scene editor with two dedicated workflows:
+Step 2 provides a unified, ultra-responsive scene editor with two dedicated workflows:
 
 1. **⚡ Auto Mode**:
-   - The script is automatically split into visual beats.
-   - Gemini analyzes the story and writes targeted 9:16 image prompts.
-   - Cloudflare FLUX.1-schnell generates vertical visual scenes.
-   - You can replace or re-roll any scene image individually or drop your own media.
+   - The script is split scene-by-scene into visual story beats.
+   - Gemini writes exact, targeted 9:16 visual prompts per scene with character/location continuity.
+   - Cloudflare Workers AI FLUX.1-schnell generates high-resolution vertical visuals.
+   - Individual scene re-rolling, prompt suggestions (3 variations via Gemini), and manual overrides.
 
 2. **✂️ Manual Segment Mode**:
-   - The script is segmented scene-by-scene with both an **Image Prompt** and a **Video Prompt** per scene.
-   - The user edits narration and prompts, copies prompts for external AI generation tools, and drops in generated images or videos (`.mp4`, `.mov`, `.webp`, `.jpg`, `.png`).
+   - The script is segmented scene-by-scene with dual prompts: an **Image Prompt** and a **Video Prompt** per scene.
+   - The user edits narration and prompts, copies prompts with one click for external tools (Midjourney, Runway, Kling, Pika), and drops in generated media (`.mp4`, `.mov`, `.webp`, `.jpg`, `.png`).
    - Nothing is auto-generated in this mode, giving you complete creative control.
+
+### 🛠️ Editor Power Tools:
+- **🎨 Style-Lock**: Define an aesthetic style (e.g. `cinematic film grain, 35mm photograph, moody lighting`) that is automatically prepended to every prompt.
+- **↩️ 20-Step Undo/Redo**: Full undo/redo history via toolbar buttons or `Ctrl+Z` / `Ctrl+Y` (`Cmd+Z` / `Cmd+Shift+Z`).
+- **✂️ Interactive Word-Split**: Click any word chip in a scene sentence to split the scene at that exact word boundary.
+- **◀ / ▶ Seam Shifting**: Shift single words left or right across scene boundaries with instant timeline recalculation.
+- **📦 Bulk Drop Zone**: Drag-and-drop multiple images/videos or a `.zip` archive to automatically assign media to scenes sequentially.
+- **📋 Clipboard Paste**: Focus any scene card and press `Ctrl+V` (`Cmd+V`) to paste an image or video directly from your clipboard.
+- **🎙️ Voice-First Timeline**: When moving to Step 3, TTS audio and exact word boundary timestamps are generated and cached, aligning scene durations to exact speech timing.
+- **🚀 Sequential Low-RAM Rendering**: Scene clips (image Ken Burns, video loops, black canvas) are rendered sequentially to maintain a strict < 512MB RAM ceiling.
 
 ---
 
