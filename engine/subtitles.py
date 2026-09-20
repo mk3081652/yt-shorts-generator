@@ -27,7 +27,7 @@ STYLE_PRESETS = {
         "outline": 5,
         "shadow": 3,
         "alignment": 2, # bottom-center
-        "margin_v": 760, # Center-lower third safe zone
+        "margin_v": 320, # Just above bottom UI overlay
         "uppercase": True
     },
     "hormozi": {
@@ -42,7 +42,7 @@ STYLE_PRESETS = {
         "outline": 5,
         "shadow": 3,
         "alignment": 2,
-        "margin_v": 760,
+        "margin_v": 320, # Just above bottom UI overlay
         "uppercase": True
     },
     "cyberpunk": {
@@ -57,7 +57,7 @@ STYLE_PRESETS = {
         "outline": 4.5,
         "shadow": 3,
         "alignment": 2,
-        "margin_v": 760,
+        "margin_v": 320, # Just above bottom UI overlay
         "uppercase": True
     },
     "clean": {
@@ -72,7 +72,7 @@ STYLE_PRESETS = {
         "outline": 3.5,
         "shadow": 2,
         "alignment": 2,
-        "margin_v": 760,
+        "margin_v": 320, # Just above bottom UI overlay
         "uppercase": False
     }
 }
@@ -86,13 +86,16 @@ def generate_ass_subtitles(
     word_boundaries: List[Dict[str, Any]],
     output_ass_path: str,
     style_name: str = "mrbeast",
-    max_words_per_segment: int = 2
+    max_words_per_segment: int = 2,
+    margin_v: int = None
 ) -> str:
     """
     Builds an Advanced SubStation Alpha (.ass) subtitle file.
     Groups words into punchy 1-3 word segments with high-contrast formatting.
     """
-    style = STYLE_PRESETS.get(style_name, STYLE_PRESETS["mrbeast"])
+    style = dict(STYLE_PRESETS.get(style_name, STYLE_PRESETS["mrbeast"]))
+    if margin_v is not None:
+        style["margin_v"] = margin_v
     
     play_res_x = 1080
     play_res_y = 1920
