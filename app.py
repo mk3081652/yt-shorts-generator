@@ -29,32 +29,35 @@ from engine.tts import get_available_voices, generate_speech_with_words
 from engine.subtitles import STYLE_PRESETS
 from engine.audio import get_available_bgm
 from engine.metadata import get_viral_hooks, get_script_templates, generate_youtube_metadata
-from engine.compositor import render_shorts_video
-from engine.visual_director.segment_session import (
-    create_session,
-    generate_auto_session,
-    split_segment,
-    merge_segment,
-    move_boundary,
-    add_segment,
-    delete_segment,
-    edit_segment_text,
-    edit_segment_prompt,
-    edit_segment_meta,
-    replan_dirty_segments,
-    upload_segment_media,
-    upload_bulk_media,
-    clear_segment_media,
-    generate_segment_media,
-    generate_missing_media,
-    suggest_prompts,
-    export_prompts,
-    undo_session,
-    redo_session,
-    cancel_session_generation,
-    prepare_voice_timeline,
-    load_session
+from engine.render import render_shorts_video
+
+from engine.project import (
+    create_project,
+    load_project,
+    save_project,
+    edit_scene_text,
+    edit_scene_prompt,
+    edit_meta as edit_project_meta,
+    split_scene,
+    merge_scene,
+    move_boundary as move_project_boundary,
+    add_scene,
+    delete_scene,
+    upload_media as upload_project_media,
+    upload_bulk as upload_project_bulk,
+    clear_media as clear_project_media,
+    generate_scene_media,
+    generate_missing_media as generate_project_missing_media,
+    cancel_generation as cancel_project_generation,
+    suggest_prompts as suggest_project_prompts,
+    export_prompts as export_project_prompts,
+    undo_project,
+    redo_project,
+    Project,
+    Scene
 )
+from engine.timeline import prepare_voice_timeline as prepare_project_voice_timeline
+
 
 app = FastAPI(title="Viral YouTube Shorts Creator Tool")
 
@@ -100,6 +103,7 @@ async def add_no_cache_headers(request, call_next):
 # Mount static and output folders
 os.makedirs("static", exist_ok=True)
 os.makedirs("outputs", exist_ok=True)
+os.makedirs("outputs/projects", exist_ok=True)
 os.makedirs("outputs/custom_scenes", exist_ok=True)
 os.makedirs("outputs/ai_previews", exist_ok=True)
 os.makedirs("assets/bgm", exist_ok=True)
@@ -149,8 +153,15 @@ class RenderRequest(BaseModel):
     scene_overrides: Optional[Dict[str, str]] = None
     preview_scenes: Optional[List[Dict[str, Any]]] = None
     session_id: Optional[str] = None
+    project_id: Optional[str] = None
 
     model_config = ConfigDict(extra="allow")
+
+
+class CreateProjectRequest(BaseModel):
+    script: str
+    start: Optional[str] = "auto"
+    manual_delimiter: bool = False
 
 
 class VoicePreviewRequest(BaseModel):
@@ -254,6 +265,12 @@ def serve_home():
         return HTMLResponse(content=f.read())
 
 
+@app.get("/healthz")
+def healthz():
+    """Health check endpoint for container orchestrators and monitoring."""
+    return {"status": "ok"}
+
+
 @app.get("/api/config")
 def get_config():
     """Returns available options for the studio UI."""
@@ -340,6 +357,220 @@ STRICT RULES:
         log_and_raise_safe(e, "Failed to generate script with Gemini", status_code=500)
 
 
+@app.post("/api/projects")
+def api_create_project(req: CreateProjectRequest):
+    """Creates a new Project, runs the Director, and queues generation if mode=auto."""
+    cleaned = sanitize_spoken_script(req.script)
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="Script cannot be empty.")
+    try:
+        proj = create_project(
+            script=cleaned,
+            start=req.start or "auto",
+            manual_delimiter=req.manual_delimiter,
+            api_key=os.environ.get("GEMINI_API_KEY", None)
+        )
+        return proj.to_dict()
+    except Exception as e:
+        log_and_raise_safe(e, "Failed to create project", status_code=500)
+
+
+@app.get("/api/projects/{id}")
+def api_get_project(id: str):
+    """Retrieves an existing Project by ID."""
+    validate_session_id(id)
+    proj = load_project(id)
+    if not proj:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    return proj.to_dict()
+
+
+@app.post("/api/projects/{id}/edit_text")
+def api_project_edit_text(id: str, req: EditTextRequest):
+    validate_session_id(id)
+    proj, err, code = edit_scene_text(id, req.segment_id, req.new_text)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return proj.to_dict()
+
+
+@app.post("/api/projects/{id}/edit_prompt")
+def api_project_edit_prompt(id: str, req: EditPromptRequest):
+    validate_session_id(id)
+    proj, err, code = edit_scene_prompt(id, req.segment_id, req.new_prompt, kind=req.kind)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return proj.to_dict()
+
+
+@app.post("/api/projects/{id}/edit_meta")
+def api_project_edit_meta(id: str, req: EditMetaRequest):
+    validate_session_id(id)
+    proj, err, code = edit_project_meta(id, scene_id=req.segment_id, motion=req.motion, style_lock=req.style_lock)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return proj.to_dict()
+
+
+@app.post("/api/projects/{id}/split")
+def api_project_split(id: str, req: SplitSegmentRequest):
+    validate_session_id(id)
+    proj, err, code = split_scene(id, req.segment_id, req.split_at_word_index)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return proj.to_dict()
+
+
+@app.post("/api/projects/{id}/merge")
+def api_project_merge(id: str, req: MergeSegmentRequest):
+    validate_session_id(id)
+    proj, err, code = merge_scene(id, req.segment_id, req.direction)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return proj.to_dict()
+
+
+@app.post("/api/projects/{id}/move_boundary")
+def api_project_move_boundary(id: str, req: MoveBoundaryRequest):
+    validate_session_id(id)
+    proj, err, code = move_project_boundary(id, req.segment_id, req.direction, req.words)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return proj.to_dict()
+
+
+@app.post("/api/projects/{id}/add")
+def api_project_add(id: str, req: AddSegmentRequest):
+    validate_session_id(id)
+    proj, err, code = add_scene(id, req.after_segment_id, req.text)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return proj.to_dict()
+
+
+@app.post("/api/projects/{id}/delete")
+def api_project_delete(id: str, req: DeleteSegmentRequest):
+    validate_session_id(id)
+    proj, err, code = delete_scene(id, req.segment_id)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return proj.to_dict()
+
+
+@app.post("/api/projects/{id}/upload_media")
+async def api_project_upload_media(
+    id: str,
+    file: UploadFile = File(...),
+    segment_id: str = Form(...)
+):
+    validate_session_id(id)
+    file_bytes = await file.read()
+    proj, err, code = upload_project_media(id, segment_id, file_bytes, file.filename)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return proj.to_dict()
+
+
+@app.post("/api/projects/{id}/upload_bulk")
+async def api_project_upload_bulk(
+    id: str,
+    files: List[UploadFile] = File(...)
+):
+    validate_session_id(id)
+    files_data = []
+    for f in files:
+        data = await f.read()
+        files_data.append((f.filename, data))
+    proj, results, err, code = upload_project_bulk(id, files_data)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return {"project": proj.to_dict(), "session": proj.to_dict(), "results": results}
+
+
+@app.post("/api/projects/{id}/clear_media")
+def api_project_clear_media(id: str, req: SegmentActionRequest):
+    validate_session_id(id)
+    proj, err, code = clear_project_media(id, req.segment_id)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return proj.to_dict()
+
+
+@app.post("/api/projects/{id}/generate")
+def api_project_generate(id: str, req: SegmentActionRequest):
+    validate_session_id(id)
+    proj, err, code = generate_scene_media(id, req.segment_id, api_key=os.environ.get("GEMINI_API_KEY", None))
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return proj.to_dict()
+
+
+@app.post("/api/projects/{id}/generate_missing")
+def api_project_generate_missing(id: str):
+    validate_session_id(id)
+    proj, err, code = generate_project_missing_media(id, api_key=os.environ.get("GEMINI_API_KEY", None))
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return proj.to_dict()
+
+
+@app.post("/api/projects/{id}/cancel")
+def api_project_cancel(id: str):
+    validate_session_id(id)
+    proj, err, code = cancel_project_generation(id)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return proj.to_dict()
+
+
+@app.post("/api/projects/{id}/suggest_prompts")
+def api_project_suggest_prompts(id: str, req: SuggestPromptsRequest):
+    validate_session_id(id)
+    prompts, err, code = suggest_project_prompts(id, req.segment_id, api_key=os.environ.get("GEMINI_API_KEY", None))
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return {"segment_id": req.segment_id, "prompts": prompts}
+
+
+@app.get("/api/projects/{id}/export_prompts")
+def api_project_export_prompts(id: str):
+    validate_session_id(id)
+    text, err, code = export_project_prompts(id)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return PlainTextResponse(text)
+
+
+@app.post("/api/projects/{id}/undo")
+def api_project_undo(id: str):
+    validate_session_id(id)
+    proj, err, code = undo_project(id)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return proj.to_dict()
+
+
+@app.post("/api/projects/{id}/redo")
+def api_project_redo(id: str):
+    validate_session_id(id)
+    proj, err, code = redo_project(id)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return proj.to_dict()
+
+
+@app.post("/api/projects/{id}/prepare_voice")
+async def api_project_prepare_voice(id: str, req: Optional[PrepareVoiceRequest] = None):
+    validate_session_id(id)
+    v = req.voice if req and req.voice else "en-US-ChristopherNeural"
+    r = req.rate if req and req.rate else "+10%"
+    proj, err, code = await prepare_project_voice_timeline(id, voice=v, rate=r)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return proj.to_dict()
+
+
+
 @app.post("/api/auto/generate")
 def api_auto_generate(req: AutoGenerateRequest):
     """Auto mode: splits script, plans prompts with Gemini, generates images with FLUX."""
@@ -347,12 +578,13 @@ def api_auto_generate(req: AutoGenerateRequest):
     if not cleaned:
         raise HTTPException(status_code=400, detail="Script cannot be empty.")
     try:
-        session = generate_auto_session(
+        project = create_project(
             script=cleaned,
+            start="auto",
             manual_delimiter=req.manual_delimiter,
             api_key=os.environ.get("GEMINI_API_KEY", None)
         )
-        return session.to_dict()
+        return project.to_dict()
     except Exception as e:
         log_and_raise_safe(e, "Failed to auto-generate scenes", status_code=500)
 
@@ -366,9 +598,9 @@ def validate_session_id(session_id: str) -> str:
 
 @app.on_event("startup")
 def startup_cleanup():
-    """Cleans up sessions and previews older than 7 days."""
+    """Cleans up projects, sessions and previews older than 7 days."""
     cutoff = time.time() - (7 * 86400)
-    for folder in ("outputs/segment_sessions", "outputs/ai_previews", "outputs/custom_scenes"):
+    for folder in ("outputs/projects", "outputs/segment_sessions", "outputs/ai_previews", "outputs/custom_scenes"):
         p = os.path.abspath(folder)
         if os.path.exists(p):
             for fname in os.listdir(p):
@@ -380,247 +612,7 @@ def startup_cleanup():
                     pass
 
 
-@app.post("/api/segments/create")
-def api_create_segments(req: CreateSegmentsRequest):
-    """Creates a new StoryboardSession in Auto or Manual Segment mode."""
-    cleaned = sanitize_spoken_script(req.script)
-    if not cleaned:
-        raise HTTPException(status_code=400, detail="Script cannot be empty.")
-    try:
-        session = create_session(
-            script=cleaned,
-            mode=req.mode or "auto",
-            start=req.start,
-            manual_delimiter=req.manual_delimiter,
-            api_key=os.environ.get("GEMINI_API_KEY", None)
-        )
-        return session.to_dict()
-    except Exception as e:
-        log_and_raise_safe(e, "Failed to create segment session", status_code=500)
 
-
-@app.get("/api/segments/{id}")
-def api_get_segment_session(id: str):
-    """Retrieves an existing StoryboardSession by ID."""
-    validate_session_id(id)
-    session = load_session(id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Segment session not found.")
-    return session.to_dict()
-
-
-@app.post("/api/segments/{id}/upload_media")
-async def api_upload_segment_media(
-    id: str,
-    file: UploadFile = File(...),
-    segment_id: str = Form(...)
-):
-    """Attaches an uploaded image or video to a segment with magic byte validation."""
-    validate_session_id(id)
-    file_bytes = await file.read()
-    session, err, code = upload_segment_media(id, segment_id, file_bytes, file.filename)
-    if err:
-        raise HTTPException(status_code=code, detail=err)
-    return session.to_dict()
-
-
-@app.post("/api/segments/{id}/upload_bulk")
-async def api_upload_bulk(
-    id: str,
-    files: List[UploadFile] = File(...)
-):
-    """Bulk uploads media or .zip archive to assign sequentially to empty scenes."""
-    validate_session_id(id)
-    files_data = []
-    for f in files:
-        data = await f.read()
-        files_data.append((f.filename, data))
-    session, results, err, code = upload_bulk_media(id, files_data)
-    if err:
-        raise HTTPException(status_code=code, detail=err)
-    return {"session": session.to_dict(), "results": results}
-
-
-@app.post("/api/segments/{id}/clear_media")
-def api_clear_segment_media(id: str, req: SegmentActionRequest):
-    """Clears media for a segment, marking it blank / needs_manual."""
-    validate_session_id(id)
-    session, err, code = clear_segment_media(id, req.segment_id)
-    if err:
-        raise HTTPException(status_code=code, detail=err)
-    return session.to_dict()
-
-
-@app.post("/api/segments/{id}/generate")
-def api_generate_segment_media(id: str, req: SegmentActionRequest):
-    """Regenerates media for a single segment using FLUX."""
-    validate_session_id(id)
-    session, err, code = generate_segment_media(id, req.segment_id, api_key=os.environ.get("GEMINI_API_KEY", None))
-    if err:
-        raise HTTPException(status_code=code, detail=err)
-    return session.to_dict()
-
-
-@app.post("/api/segments/{id}/generate_missing")
-def api_generate_missing_media(id: str):
-    """Generates media for all segments missing visuals in parallel."""
-    validate_session_id(id)
-    session, err, code = generate_missing_media(id, api_key=os.environ.get("GEMINI_API_KEY", None))
-    if err:
-        raise HTTPException(status_code=code, detail=err)
-    return session.to_dict()
-
-
-@app.post("/api/segments/{id}/cancel")
-def api_cancel_generation(id: str):
-    """Cancels running generation for session."""
-    validate_session_id(id)
-    session, err, code = cancel_session_generation(id)
-    if err:
-        raise HTTPException(status_code=code, detail=err)
-    return session.to_dict()
-
-
-@app.post("/api/segments/{id}/split")
-def api_split_segment(id: str, req: SplitSegmentRequest):
-    """Splits an existing segment at a specified word index."""
-    validate_session_id(id)
-    session, err, code = split_segment(id, req.segment_id, req.split_at_word_index)
-    if err:
-        raise HTTPException(status_code=code, detail=err)
-    return session.to_dict()
-
-
-@app.post("/api/segments/{id}/merge")
-def api_merge_segment(id: str, req: MergeSegmentRequest):
-    """Merges a segment with its next or previous neighbor."""
-    validate_session_id(id)
-    session, err, code = merge_segment(id, req.segment_id, req.direction)
-    if err:
-        raise HTTPException(status_code=code, detail=err)
-    return session.to_dict()
-
-
-@app.post("/api/segments/{id}/move_boundary")
-def api_move_boundary(id: str, req: MoveBoundaryRequest):
-    """Shifts words across the seam between two neighboring scenes."""
-    validate_session_id(id)
-    session, err, code = move_boundary(id, req.segment_id, req.direction, req.words)
-    if err:
-        raise HTTPException(status_code=code, detail=err)
-    return session.to_dict()
-
-
-@app.post("/api/segments/{id}/add")
-def api_add_segment(id: str, req: AddSegmentRequest):
-    """Inserts a new segment after the specified segment ID."""
-    validate_session_id(id)
-    session, err, code = add_segment(id, req.after_segment_id, req.text)
-    if err:
-        raise HTTPException(status_code=code, detail=err)
-    return session.to_dict()
-
-
-@app.post("/api/segments/{id}/delete")
-def api_delete_segment(id: str, req: DeleteSegmentRequest):
-    """Removes a segment from the session and shrinks total duration."""
-    validate_session_id(id)
-    session, err, code = delete_segment(id, req.segment_id)
-    if err:
-        raise HTTPException(status_code=code, detail=err)
-    return session.to_dict()
-
-
-@app.post("/api/segments/{id}/edit_text")
-def api_edit_segment_text(id: str, req: EditTextRequest):
-    """Edits a segment's text with word-level diffing and duration recalculation."""
-    validate_session_id(id)
-    session, err, code = edit_segment_text(id, req.segment_id, req.new_text)
-    if err:
-        raise HTTPException(status_code=code, detail=err)
-    return session.to_dict()
-
-
-@app.post("/api/segments/{id}/edit_prompt")
-def api_edit_segment_prompt(id: str, req: EditPromptRequest):
-    """Edits a segment's visual generation prompt (image or video)."""
-    validate_session_id(id)
-    session, err, code = edit_segment_prompt(id, req.segment_id, req.new_prompt, kind=req.kind)
-    if err:
-        raise HTTPException(status_code=code, detail=err)
-    return session.to_dict()
-
-
-@app.post("/api/segments/{id}/edit_meta")
-def api_edit_meta(id: str, req: EditMetaRequest):
-    """Edits a segment's motion and/or session style_lock."""
-    validate_session_id(id)
-    session, err, code = edit_segment_meta(id, req.segment_id, motion=req.motion, style_lock=req.style_lock)
-    if err:
-        raise HTTPException(status_code=code, detail=err)
-    return session.to_dict()
-
-
-@app.post("/api/segments/{id}/suggest_prompts")
-def api_suggest_prompts(id: str, req: SuggestPromptsRequest):
-    """Suggests 3 alternative image prompts for a scene."""
-    validate_session_id(id)
-    prompts, err, code = suggest_prompts(id, req.segment_id, api_key=os.environ.get("GEMINI_API_KEY", None))
-    if err:
-        raise HTTPException(status_code=code, detail=err)
-    return {"segment_id": req.segment_id, "prompts": prompts}
-
-
-@app.post("/api/segments/{id}/undo")
-def api_undo(id: str):
-    """Reverts to the previous snapshot state."""
-    validate_session_id(id)
-    session, err, code = undo_session(id)
-    if err:
-        raise HTTPException(status_code=code, detail=err)
-    return session.to_dict()
-
-
-@app.post("/api/segments/{id}/redo")
-def api_redo(id: str):
-    """Restores the next snapshot state."""
-    validate_session_id(id)
-    session, err, code = redo_session(id)
-    if err:
-        raise HTTPException(status_code=code, detail=err)
-    return session.to_dict()
-
-
-@app.get("/api/segments/{id}/export_prompts")
-def api_export_prompts(id: str):
-    """Exports numbered list of image prompts formatted for external tools."""
-    validate_session_id(id)
-    text, err, code = export_prompts(id)
-    if err:
-        raise HTTPException(status_code=code, detail=err)
-    return PlainTextResponse(text)
-
-
-@app.post("/api/segments/{id}/replan_dirty")
-def api_replan_dirty_segments(id: str):
-    """Re-runs prompt generation and validation for dirty, non-custom segments."""
-    validate_session_id(id)
-    session, err, code = replan_dirty_segments(id, api_key=os.environ.get("GEMINI_API_KEY", None))
-    if err:
-        raise HTTPException(status_code=code, detail=err)
-    return session.to_dict()
-
-
-@app.post("/api/segments/{id}/prepare_voice")
-async def api_prepare_voice(id: str, req: Optional[PrepareVoiceRequest] = None):
-    """Generates TTS audio and aligns scene durations to exact word boundaries."""
-    validate_session_id(id)
-    v = req.voice if req and req.voice else "en-US-ChristopherNeural"
-    r = req.rate if req and req.rate else "+10%"
-    session, err, code = await prepare_voice_timeline(id, voice=v, rate=r)
-    if err:
-        raise HTTPException(status_code=code, detail=err)
-    return session.to_dict()
 
 
 @app.post("/api/generate_metadata")
@@ -647,6 +639,7 @@ def run_render_task(job_id: str, req: RenderRequest):
             progress_callback=update_progress,
             scene_overrides=req.scene_overrides,
             preview_scenes=req.preview_scenes,
+            project_id=req.project_id,
             session_id=req.session_id
         )
         metadata = generate_youtube_metadata(req.script)

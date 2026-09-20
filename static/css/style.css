@@ -1371,258 +1371,358 @@ body {
 }
 
 /* ==========================================
-   SEGMENT STUDIO STYLES
+   SCENE CARD & STORYBOARD STYLES
    ========================================== */
-.segment-studio-panel {
-    background: rgba(13, 17, 28, 0.95);
-    border: 1px solid rgba(139, 92, 246, 0.4);
-    border-radius: 12px;
-    padding: 18px 20px;
-    margin: 12px 0 16px 0;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+.scene-cards-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: 14px;
 }
 
-.segment-studio-header {
+.scene-card {
+    background: rgba(15, 20, 35, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 16px 18px;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.scene-card:hover {
+    border-color: rgba(168, 85, 247, 0.4);
+    box-shadow: 0 6px 25px rgba(0, 0, 0, 0.4);
+}
+
+.scene-card.scene-manual {
+    border-color: rgba(16, 185, 129, 0.5);
+    background: rgba(12, 24, 25, 0.85);
+}
+
+.scene-card.scene-failed {
+    border-color: rgba(239, 68, 68, 0.5);
+}
+
+.scene-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 12px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.segment-studio-title-group {
+.scene-title-group {
     display: flex;
     align-items: center;
     gap: 10px;
-    flex-wrap: wrap;
 }
 
-.segment-studio-stats {
-    font-size: 0.82rem;
-    color: var(--text-muted);
-    font-weight: 500;
-}
-
-.badge-dirty {
-    background: rgba(245, 158, 11, 0.2);
-    border: 1px solid #f59e0b;
-    color: #fbbf24;
-    font-size: 0.7rem;
+.scene-title-group h4 {
+    margin: 0;
+    font-size: 0.95rem;
     font-weight: 700;
+    color: #fff;
+}
+
+.scene-dur-badge {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #c084fc;
+    background: rgba(168, 85, 247, 0.15);
     padding: 2px 8px;
     border-radius: 4px;
-    letter-spacing: 0.04em;
 }
 
-.segment-studio-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
+.status-pill {
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 12px;
+    letter-spacing: 0.03em;
 }
 
-.btn-replan-dirty {
-    background: linear-gradient(135deg, #7c3aed, #a855f7);
-    color: #fff;
-    border: none;
-    font-size: 0.8rem;
-    font-weight: 600;
-    padding: 6px 14px;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s ease;
+.status-ready {
+    background: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.4);
 }
 
-.btn-replan-dirty:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-    background: rgba(255, 255, 255, 0.1);
+.status-generating {
+    background: rgba(168, 85, 247, 0.2);
+    color: #c084fc;
+    border: 1px solid rgba(168, 85, 247, 0.4);
+    animation: pulse 1.5s infinite;
 }
 
-.btn-replan-dirty:not(:disabled):hover {
-    box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4);
-    transform: translateY(-1px);
+.status-queued {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.4);
 }
 
-.btn-use-segments {
-    background: linear-gradient(135deg, #059669, #10b981);
-    color: #fff;
-    border: none;
-    font-size: 0.8rem;
-    font-weight: 600;
-    padding: 6px 14px;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s ease;
+.status-manual {
+    background: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+    border: 1px solid rgba(59, 130, 246, 0.4);
 }
 
-.btn-use-segments:hover {
-    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
-    transform: translateY(-1px);
+.status-failed {
+    background: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.4);
 }
 
-.btn-close-studio {
+.status-empty {
     background: rgba(255, 255, 255, 0.08);
     color: var(--text-muted);
     border: 1px solid rgba(255, 255, 255, 0.12);
-    font-size: 0.8rem;
-    font-weight: 600;
-    padding: 6px 12px;
-    border-radius: 6px;
+}
+
+.scene-body {
+    display: flex;
+    gap: 16px;
+    align-items: stretch;
+}
+
+.scene-media-box {
+    width: 110px;
+    height: 195px;
+    flex-shrink: 0;
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px dashed rgba(255, 255, 255, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
     transition: all 0.2s ease;
 }
 
-.btn-close-studio:hover {
-    background: rgba(255, 255, 255, 0.15);
-    color: #fff;
+.scene-media-box:hover, .scene-media-box.drag-hover {
+    border-color: #a855f7;
+    background: rgba(168, 85, 247, 0.1);
 }
 
-.segment-cards-list {
+.scene-preview-media {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.media-overlay-actions {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: flex;
+    gap: 4px;
+}
+
+.btn-icon-overlay {
+    width: 26px;
+    height: 26px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.7);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-icon-overlay:hover {
+    background: #a855f7;
+    border-color: #a855f7;
+}
+
+.btn-icon-overlay.btn-danger:hover {
+    background: #ef4444;
+    border-color: #ef4444;
+}
+
+.media-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 10px;
+    text-align: center;
+    gap: 6px;
+}
+
+.placeholder-icon {
+    font-size: 1.5rem;
+}
+
+.placeholder-text {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    line-height: 1.3;
+}
+
+.scene-content-box {
+    flex: 1;
     display: flex;
     flex-direction: column;
     gap: 12px;
-    margin-top: 14px;
-    max-height: 520px;
-    overflow-y: auto;
-    padding-right: 4px;
 }
 
-.segment-card {
-    background: rgba(20, 25, 42, 0.7);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
-    padding: 12px 14px;
-    transition: border-color 0.2s ease, background 0.2s ease;
-}
-
-.segment-card.dirty-card {
-    border-color: rgba(245, 158, 11, 0.45);
-    background: rgba(30, 25, 35, 0.7);
-}
-
-.segment-card-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 8px;
-}
-
-.segment-card-title {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.84rem;
-    font-weight: 700;
-    color: #fff;
-}
-
-.segment-number {
-    letter-spacing: 0.5px;
-    color: #c084fc;
-}
-
-.btn-copy-prompt {
-    background: rgba(168, 85, 247, 0.15);
-    border-color: rgba(168, 85, 247, 0.35);
-    color: #d8b4fe;
-}
-
-.btn-copy-prompt:hover {
-    background: rgba(168, 85, 247, 0.3);
-    color: #fff;
-}
-
-.segment-card-dur {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    background: rgba(255, 255, 255, 0.06);
-    padding: 2px 7px;
-    border-radius: 4px;
-    font-weight: 500;
-}
-
-.segment-field-group {
+.field-group {
     display: flex;
     flex-direction: column;
     gap: 4px;
 }
 
-.segment-field-label {
-    font-size: 0.68rem;
+.field-label {
+    font-size: 0.75rem;
     font-weight: 700;
-    letter-spacing: 0.6px;
     color: var(--text-muted);
-    text-transform: uppercase;
+    letter-spacing: 0.02em;
 }
 
-.segment-card-textarea {
+.field-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.field-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-text-action {
+    background: none;
+    border: none;
+    color: #c084fc;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+    transition: color 0.15s ease;
+}
+
+.btn-text-action:hover:not(:disabled) {
+    color: #e9d5ff;
+    text-decoration: underline;
+}
+
+.btn-text-action:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.scene-narration-input, .scene-prompt-input {
     width: 100%;
     box-sizing: border-box;
     background: rgba(10, 14, 25, 0.8);
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 6px;
     color: #fff;
-    padding: 8px 10px;
-    font-size: 0.86rem;
+    padding: 8px 12px;
+    font-size: 0.88rem;
     line-height: 1.45;
     font-family: inherit;
-    resize: none;
-    overflow-y: hidden;
-    min-height: 40px;
+    resize: vertical;
     transition: border-color 0.2s ease;
 }
 
-.segment-prompt-textarea {
-    border-color: rgba(168, 85, 247, 0.25);
+.scene-prompt-input {
     background: rgba(14, 12, 30, 0.85);
-    color: #e2e8f0;
+    border-color: rgba(168, 85, 247, 0.25);
     font-size: 0.82rem;
+    color: #e2e8f0;
 }
 
-.segment-card-textarea:focus {
+.scene-narration-input:focus, .scene-prompt-input:focus {
     outline: none;
     border-color: #a855f7;
     box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.2);
 }
 
-.segment-card-actions {
+.scene-footer {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: space-between;
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.motion-group {
+    display: flex;
+    align-items: center;
     gap: 6px;
-    margin-top: 8px;
+}
+
+.motion-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.motion-select {
+    background: rgba(20, 25, 45, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+    color: #fff;
+    font-size: 0.78rem;
+    padding: 3px 8px;
+    cursor: pointer;
+}
+
+.seam-actions-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     flex-wrap: wrap;
 }
 
-.segment-btn {
+.btn-seam {
     background: rgba(255, 255, 255, 0.07);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     color: rgba(255, 255, 255, 0.85);
-    font-size: 0.74rem;
+    font-size: 0.75rem;
     font-weight: 600;
-    padding: 3px 9px;
-    border-radius: 4px;
+    padding: 4px 10px;
+    border-radius: 5px;
     cursor: pointer;
     transition: all 0.15s ease;
 }
 
-.segment-btn:hover {
-    background: rgba(255, 255, 255, 0.14);
+.btn-seam:hover {
+    background: rgba(255, 255, 255, 0.15);
     color: #fff;
 }
 
-.segment-btn.btn-danger {
+.btn-seam.btn-split {
+    background: rgba(168, 85, 247, 0.15);
+    border-color: rgba(168, 85, 247, 0.35);
+    color: #d8b4fe;
+}
+
+.btn-seam.btn-split:hover {
+    background: rgba(168, 85, 247, 0.3);
+    color: #fff;
+}
+
+.btn-seam.btn-delete {
     color: #f87171;
     border-color: rgba(248, 113, 113, 0.2);
 }
 
-.segment-btn.btn-danger:hover {
-    background: rgba(239, 68, 68, 0.15);
+.btn-seam.btn-delete:hover {
+    background: rgba(239, 68, 68, 0.2);
     color: #ef4444;
 }
+
 
 /* ==========================================
    SCENE SCORE & TIER BADGES

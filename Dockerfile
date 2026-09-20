@@ -28,8 +28,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY --chown=user:user . .
 
 # Ensure outputs and assets directories are writable
-RUN mkdir -p outputs/custom_scenes outputs/ai_previews outputs/sessions assets/bgm \
+RUN mkdir -p outputs/projects outputs/custom_scenes outputs/ai_previews assets/bgm \
     && chown -R user:user /app
+
 
 USER user
 

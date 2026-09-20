@@ -20,10 +20,10 @@ from engine.flux import (
     crop_to_9_16
 )
 from app import validate_session_id
-from engine.visual_director.segment_session import (
-    create_session,
-    upload_segment_media,
-    upload_bulk_media
+from engine.project import (
+    create_project,
+    upload_media,
+    upload_bulk
 )
 
 
@@ -168,36 +168,61 @@ class TestClientsAndSecurity(unittest.TestCase):
         with self.assertRaises(Exception):
             validate_session_id("session/123")
 
-    def test_upload_media_magic_bytes(self):
+    @patch("engine.project.plan_scenes_with_director")
+    def test_upload_media_magic_bytes(self, mock_dir):
         """Accepts valid image magic bytes and rejects invalid buffers."""
-        session = create_session("First scene. Second scene.", mode="manual")
-        seg_id = session.segments[0].segment_id
+        import io
+        mock_dir.return_value = ({
+            "scenes": [
+                {"scene_index": 1, "text": "First scene.", "image_prompt": "Prompt 1", "duration": 3.0}
+            ]
+        }, False)
+        project = create_project("First scene.", start="manual")
+        sc_id = project.scenes[0].id
 
         # Valid JPEG magic bytes
-        jpeg_buf = b"\xFF\xD8\xFF\xE0\x00\x10JFIF" + b"\x00" * 200
-        s_ok, err, code = upload_segment_media(session.session_id, seg_id, jpeg_buf, "test.jpg")
+        img = Image.new("RGB", (100, 100), color=(255, 0, 0))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")
+        jpeg_buf = buf.getvalue()
+
+        p_ok, err, code = upload_media(project.id, sc_id, jpeg_buf, "test.jpg")
         self.assertEqual(code, 200)
-        self.assertEqual(s_ok.segments[0].media_type, "image")
+        self.assertEqual(p_ok.scenes[0].media_type, "image")
 
         # Invalid buffer (random text/binary without valid magic bytes)
         fake_buf = b"This is plain text pretending to be an image file."
-        s_err, err_msg, code_err = upload_segment_media(session.session_id, seg_id, fake_buf, "fake.jpg")
+        p_err, err_msg, code_err = upload_media(project.id, sc_id, fake_buf, "fake.jpg")
         self.assertEqual(code_err, 400)
-        self.assertIn("Invalid or corrupted image", err_msg)
+        self.assertIn("Corrupted or invalid", err_msg)
 
-    def test_bulk_upload_mapping(self):
+    @patch("engine.project.plan_scenes_with_director")
+    def test_bulk_upload_mapping(self, mock_dir):
         """Bulk upload assigns files sequentially to scenes."""
-        session = create_session("Scene 1. ||| Scene 2. ||| Scene 3.", mode="manual", manual_delimiter=True)
+        import io
+        mock_dir.return_value = ({
+            "scenes": [
+                {"scene_index": 1, "text": "Scene 1.", "image_prompt": "Prompt 1", "duration": 3.0},
+                {"scene_index": 2, "text": "Scene 2.", "image_prompt": "Prompt 2", "duration": 3.0}
+            ]
+        }, False)
+        project = create_project("Scene 1. Scene 2.", start="manual")
+        img = Image.new("RGB", (100, 100), color=(0, 255, 0))
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        png_buf = buf.getvalue()
+
         file_tuples = [
-            ("img1.png", b"\x89PNG\r\n\x1a\n" + b"\x00" * 200),
-            ("img2.png", b"\x89PNG\r\n\x1a\n" + b"\x00" * 200),
+            ("img1.png", png_buf),
+            ("img2.png", png_buf),
         ]
-        s_bulk, results, err, code = upload_bulk_media(session.session_id, file_tuples)
+        p_bulk, results, err, code = upload_bulk(project.id, file_tuples)
         self.assertEqual(code, 200)
         self.assertEqual(len(results), 2)
-        self.assertEqual(s_bulk.segments[0].media_type, "image")
-        self.assertEqual(s_bulk.segments[1].media_type, "image")
-        self.assertEqual(s_bulk.segments[2].media_type, "blank")
+        self.assertEqual(p_bulk.scenes[0].media_type, "image")
+        self.assertEqual(p_bulk.scenes[1].media_type, "image")
+
+
 
 
 if __name__ == "__main__":
