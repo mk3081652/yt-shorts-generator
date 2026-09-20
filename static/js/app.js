@@ -538,6 +538,7 @@ document.addEventListener('DOMContentLoaded', () => {
             storyboardProgressCard.classList.add('hidden');
             generateAllScenesBtn.disabled = false;
         }
+    });
 
     // Generate Missing Media
     async function triggerGenerateMissing() {
