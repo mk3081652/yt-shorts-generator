@@ -134,17 +134,17 @@ def create_session(
 ) -> StoryboardSession:
     """
     Creates a new StoryboardSession from a script.
-    If mode == "auto" and not (manual_delimiter and "|||" in script), splits script, generates prompts and generates visuals via FLUX.
-    If mode == "manual", splits script and plans prompts only without generating images.
+    - Script is segmented into story beats (or on '|||' delimiter if present).
+    - Segment division is 100% identical in both Auto and Manual modes.
+    - Prompts, durations, and verbatim words are 100% identical in both modes.
+    - If mode == "auto", generates FLUX visuals for each scene in parallel.
+    - If mode == "manual", scenes start blank for user drop-in.
     """
-    if mode == "auto" and not (manual_delimiter and "|||" in script):
-        return generate_auto_session(script, api_key=api_key)
-
     clean_script = script.strip()
     words = clean_script.split()
     est_dur = max(3.0, round(len(words) * 0.38, 1))
 
-    if manual_delimiter and "|||" in clean_script:
+    if (manual_delimiter and "|||" in clean_script) or ("|||" in clean_script):
         raw_parts = [p.strip() for p in clean_script.split("|||") if p.strip()]
         beats = []
         for p in raw_parts:
@@ -185,18 +185,60 @@ def create_session(
             image_url="",
             image_path="",
             media_type="blank",
-            source="manual",
+            source="manual" if mode == "manual" else "generated",
             source_tier="",
             is_custom=False,
             validation_score=85,
-            needs_manual=False,
+            needs_manual=(mode == "manual"),
             dirty=False
         )
         segments.append(seg)
 
+    # If mode == "auto", generate FLUX visuals for each scene in parallel
+    if mode == "auto":
+        output_dir = os.path.abspath("outputs/ai_previews")
+        os.makedirs(output_dir, exist_ok=True)
+
+        def _gen_worker(seg: Segment) -> Segment:
+            sc_obj = {
+                "scene_id": f"scene_{seg.order_index+1:02d}",
+                "narration": seg.text,
+                "duration": seg.duration,
+                "order_index": seg.order_index,
+                "image_prompt": seg.image_prompt,
+                "video_prompt": seg.video_prompt,
+                "visual_description": seg.visual_description,
+                "shot_type": seg.shot_type,
+                "camera_motion": seg.camera_motion,
+                "must_show": seg.must_show,
+                "must_not_show": seg.must_not_show,
+                "search_query": " ".join(clean_words(seg.text)[:3])
+            }
+            res = generate_and_validate_scene(
+                scene=sc_obj,
+                output_dir=output_dir,
+                continuity_bible=continuity_bible,
+                api_key=api_key,
+                generation_mode="flux",
+                call_stats=call_stats
+            )
+            has_image = bool(res.get("image_path") and os.path.exists(res.get("image_path")))
+            seg.image_url = res.get("image_url", "")
+            seg.image_path = res.get("image_path", "")
+            seg.media_type = "image" if has_image else "blank"
+            seg.source = res.get("source", "generated")
+            seg.source_tier = res.get("source_tier", "flux")
+            seg.validation_score = res.get("validation_score", 0 if not has_image else 85)
+            seg.needs_manual = not has_image
+            seg.fail_reason = res.get("fail_reason", "")
+            return seg
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            segments = list(executor.map(_gen_worker, segments))
+
     session = StoryboardSession(
         session_id=uuid.uuid4().hex,
-        mode="manual",
+        mode=mode,
         script_text=clean_script,
         total_duration=round(total_duration, 2),
         story_analysis=story_analysis,
@@ -210,108 +252,16 @@ def create_session(
 
 def generate_auto_session(
     script: str,
-    api_key: Optional[str] = None
+    api_key: Optional[str] = None,
+    manual_delimiter: bool = False
 ) -> StoryboardSession:
-    """
-    Creates an Auto-mode StoryboardSession:
-    1. Splits script into beats.
-    2. Plans visual storyboard (Gemini or fallback).
-    3. Runs FLUX generation in parallel (max 2 workers).
-    4. Marks failed scenes as needs_manual=True.
-    """
-    clean_script = script.strip()
-    words = clean_script.split()
-    est_dur = max(3.0, round(len(words) * 0.38, 1))
-
-    beats = create_story_beats(clean_script, est_dur)
-    if not beats:
-        beats = [(clean_script, est_dur)]
-
-    total_duration = sum(b[1] for b in beats)
-    call_stats = {"gemini_calls": 0}
-    plan = plan_visual_storyboard(clean_script, total_duration, api_key=api_key, call_stats=call_stats, beats=beats)
-
-    story_analysis = plan.get("story_analysis", {})
-    continuity_bible = plan.get("continuity_bible", {})
-    planned_scenes = plan.get("scenes", [])
-
-    output_dir = os.path.abspath("outputs/ai_previews")
-    os.makedirs(output_dir, exist_ok=True)
-
-    scenes_for_gen = []
-    for idx, (b_text, b_dur) in enumerate(beats):
-        p_sc = planned_scenes[idx] if idx < len(planned_scenes) else {}
-        default_prompt = f"Photorealistic vertical 9:16 cinematic shot of {b_text[:40]}, 8k resolution, dramatic volumetric lighting, no text, no watermark"
-        default_video_prompt = f"Vertical 9:16 video of {b_text[:40]}, slow cinematic motion, realistic physics"
-        sc_obj = {
-            "scene_id": f"scene_{idx+1:02d}",
-            "narration": b_text,
-            "duration": round(b_dur, 2),
-            "order_index": idx,
-            "image_prompt": p_sc.get("image_prompt", default_prompt),
-            "video_prompt": p_sc.get("video_prompt", default_video_prompt),
-            "visual_description": p_sc.get("visual_description", f"Visual illustrating {b_text[:35]}"),
-            "shot_type": p_sc.get("shot_type", "cinematic shot"),
-            "camera_motion": p_sc.get("camera_motion", "push in"),
-            "must_show": p_sc.get("must_show", [b_text[:20]]),
-            "must_not_show": p_sc.get("must_not_show", ["blurry", "watermark", "text overlay"]),
-            "search_query": " ".join(clean_words(b_text)[:3])
-        }
-        scenes_for_gen.append(sc_obj)
-
-    def _gen_worker(sc):
-        return generate_and_validate_scene(
-            scene=sc,
-            output_dir=output_dir,
-            continuity_bible=continuity_bible,
-            api_key=api_key,
-            generation_mode="flux",
-            call_stats=call_stats
-        )
-
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        generated_scenes = list(executor.map(_gen_worker, scenes_for_gen))
-
-    segments: List[Segment] = []
-    for sc in generated_scenes:
-        has_image = bool(sc.get("image_path") and os.path.exists(sc.get("image_path")))
-        seg = Segment(
-            segment_id=uuid.uuid4().hex,
-            text=sc.get("narration", ""),
-            duration=sc.get("duration", 3.0),
-            order_index=sc.get("order_index", 0),
-            image_prompt=sc.get("image_prompt", ""),
-            video_prompt=sc.get("video_prompt", ""),
-            visual_description=sc.get("visual_description", ""),
-            shot_type=sc.get("shot_type", "cinematic shot"),
-            camera_motion=sc.get("camera_motion", "push in"),
-            must_show=sc.get("must_show", []),
-            must_not_show=sc.get("must_not_show", []),
-            image_url=sc.get("image_url", ""),
-            image_path=sc.get("image_path", ""),
-            media_type="image" if has_image else "blank",
-            source=sc.get("source", "generated"),
-            source_tier=sc.get("source_tier", "flux"),
-            is_custom=False,
-            validation_score=sc.get("validation_score", 0 if not has_image else 85),
-            needs_manual=sc.get("needs_manual", not has_image),
-            fail_reason=sc.get("fail_reason", ""),
-            dirty=False
-        )
-        segments.append(seg)
-
-    session = StoryboardSession(
-        session_id=uuid.uuid4().hex,
+    """Creates an Auto-mode StoryboardSession using the unified create_session pipeline."""
+    return create_session(
+        script=script,
         mode="auto",
-        script_text=clean_script,
-        total_duration=round(total_duration, 2),
-        story_analysis=story_analysis,
-        continuity_bible=continuity_bible,
-        segments=segments,
-        gemini_calls_used=call_stats.get("gemini_calls", 0)
+        manual_delimiter=manual_delimiter,
+        api_key=api_key
     )
-    save_session(session)
-    return session
 
 
 def split_segment(

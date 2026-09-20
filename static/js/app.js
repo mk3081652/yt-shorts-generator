@@ -405,7 +405,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 res = await fetch('/api/auto/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ script })
+                    body: JSON.stringify({
+                        script,
+                        manual_delimiter: script.includes('|||')
+                    })
                 });
             } else {
                 res = await fetch('/api/segments/create', {

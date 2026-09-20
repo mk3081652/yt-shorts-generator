@@ -164,6 +164,7 @@ class MetadataRequest(BaseModel):
 
 class AutoGenerateRequest(BaseModel):
     script: str
+    manual_delimiter: bool = False
 
 
 class CreateSegmentsRequest(BaseModel):
@@ -255,6 +256,7 @@ def api_auto_generate(req: AutoGenerateRequest):
     try:
         session = generate_auto_session(
             script=req.script,
+            manual_delimiter=req.manual_delimiter,
             api_key=os.environ.get("GEMINI_API_KEY", None)
         )
         return session.to_dict()

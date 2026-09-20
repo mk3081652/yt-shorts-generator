@@ -69,6 +69,48 @@ def crop_to_9_16(image_path: str):
         print(f"[FLUX] Warning: Failed to crop image to 9:16: {e}")
 
 
+def generate_pollinations_flux_image(
+    prompt: str,
+    output_path: str,
+    timeout: int = 40
+) -> Tuple[bool, str]:
+    """
+    Generates a 9:16 vertical image via Pollinations.ai FLUX model.
+    Free, no API key required, reliable FLUX provider.
+    """
+    import urllib.parse
+    clean_prompt = prompt.strip()
+    if not clean_prompt:
+        return False, "flux_empty"
+
+    # Enforce vertical composition & quality hints
+    suffix = "subject centered, vertical composition, 9:16, no text, no watermark"
+    if suffix not in clean_prompt:
+        clean_prompt = f"{clean_prompt}, {suffix}"
+
+    encoded = urllib.parse.quote(clean_prompt)
+    url = f"https://image.pollinations.ai/prompt/{encoded}?width=1080&height=1920&model=flux&nologo=true"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    }
+
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = resp.read()
+            if len(data) < 1000:
+                return False, "flux_empty"
+            os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+            with open(output_path, "wb") as f:
+                f.write(data)
+            crop_to_9_16(output_path)
+            print(f"[FLUX] Successfully generated via Pollinations FLUX ({len(data)} bytes)")
+            return True, "flux"
+    except Exception as e:
+        print(f"[FLUX] Pollinations FLUX error: {e}")
+        return False, "flux_error"
+
+
 def generate_flux_image(
     prompt: str,
     output_path: str,
@@ -76,86 +118,70 @@ def generate_flux_image(
     max_retries: int = 2
 ) -> Tuple[bool, str]:
     """
-    Generates an image via Cloudflare Workers AI FLUX.1-schnell.
+    Generates an image via FLUX.
+    Attempts Cloudflare Workers AI FLUX.1-schnell first (if configured and not in cooldown).
+    Seamlessly falls back to Pollinations FLUX if Cloudflare is unconfigured, rate-limited (429), or errors.
     Returns (success: bool, tier_or_reason: str).
-    Reasons on failure:
-      - 'flux_not_configured'
-      - 'flux_rate_limited'
-      - 'flux_timeout'
-      - 'flux_error'
-      - 'flux_empty'
     """
-    if is_flux_in_cooldown():
-        return False, "flux_rate_limited"
-
-    account_id = get_cloudflare_account_id()
-    api_token = get_cloudflare_api_token()
-
-    if not account_id or not api_token:
-        return False, "flux_not_configured"
-
     clean_prompt = prompt.strip()
     if not clean_prompt:
         return False, "flux_empty"
 
-    # Enforce vertical composition & constraints
-    suffix = "subject centered, vertical composition, no text, no watermark"
-    if suffix not in clean_prompt:
-        clean_prompt = f"{clean_prompt}, {suffix}"
+    account_id = get_cloudflare_account_id()
+    api_token = get_cloudflare_api_token()
 
-    # Clamp steps to max 8
-    safe_steps = min(8, max(1, steps))
+    # Try Cloudflare Workers AI FLUX if configured and not cooling down
+    if account_id and api_token and not is_flux_in_cooldown():
+        suffix = "subject centered, vertical composition, no text, no watermark"
+        if suffix not in clean_prompt:
+            clean_prompt = f"{clean_prompt}, {suffix}"
 
-    url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/@cf/black-forest-labs/flux-1-schnell"
-    headers = {
-        "Authorization": f"Bearer {api_token}",
-        "Content-Type": "application/json"
-    }
-    body = json.dumps({"prompt": clean_prompt, "steps": safe_steps}).encode("utf-8")
-    timeout = get_flux_timeout()
+        safe_steps = min(8, max(1, steps))
+        url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/@cf/black-forest-labs/flux-1-schnell"
+        headers = {
+            "Authorization": f"Bearer {api_token}",
+            "Content-Type": "application/json"
+        }
+        body = json.dumps({"prompt": clean_prompt, "steps": safe_steps}).encode("utf-8")
+        timeout = get_flux_timeout()
 
-    last_error_reason = "flux_error"
+        for attempt in range(max_retries):
+            try:
+                req = urllib.request.Request(url, data=body, headers=headers)
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    img_b64 = data.get("result", {}).get("image")
+                    if not img_b64:
+                        continue
 
-    for attempt in range(max_retries):
-        try:
-            req = urllib.request.Request(url, data=body, headers=headers)
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                img_b64 = data.get("result", {}).get("image")
-                if not img_b64:
-                    last_error_reason = "flux_empty"
-                    continue
+                    img_bytes = base64.b64decode(img_b64)
+                    if len(img_bytes) < 1000:
+                        continue
 
-                img_bytes = base64.b64decode(img_b64)
-                if len(img_bytes) < 1000:
-                    last_error_reason = "flux_empty"
-                    continue
+                    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+                    with open(output_path, "wb") as f:
+                        f.write(img_bytes)
 
-                os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-                with open(output_path, "wb") as f:
-                    f.write(img_bytes)
+                    crop_to_9_16(output_path)
+                    print(f"[FLUX] Successfully generated via Cloudflare FLUX ({len(img_bytes)} bytes)")
+                    return True, "flux"
 
-                # Center-cover-crop to 9:16
-                crop_to_9_16(output_path)
-                return True, "flux"
+            except urllib.error.HTTPError as e:
+                if e.code == 429:
+                    print(f"[FLUX] Cloudflare rate limit (429) hit. Entering cooldown for {get_flux_cooldown_seconds()}s. Falling back to Pollinations FLUX...")
+                    set_flux_cooldown()
+                    break  # Fall back to Pollinations immediately
+                print(f"[FLUX] Cloudflare HTTP {e.code} on attempt {attempt + 1}: {e}")
+                time.sleep(1.0 * (attempt + 1))
 
-        except urllib.error.HTTPError as e:
-            if e.code == 429:
-                print(f"[FLUX] Rate limit (429) hit. Entering cooldown for {get_flux_cooldown_seconds()}s.")
-                set_flux_cooldown()
-                return False, "flux_rate_limited"
-            print(f"[FLUX] HTTP {e.code} error on attempt {attempt + 1}: {e}")
-            last_error_reason = "flux_error"
-            time.sleep(1.0 * (attempt + 1))
+            except Exception as e:
+                print(f"[FLUX] Cloudflare error on attempt {attempt + 1}: {e}")
+                time.sleep(1.0 * (attempt + 1))
 
-        except (urllib.error.URLError, TimeoutError) as e:
-            print(f"[FLUX] Timeout/URLError on attempt {attempt + 1}: {e}")
-            last_error_reason = "flux_timeout"
-            time.sleep(1.0 * (attempt + 1))
+    # Fallback Tier: Pollinations FLUX (always available, free, no API key needed)
+    print(f"[FLUX] Using Pollinations FLUX for: {clean_prompt[:60]}...")
+    ok, reason = generate_pollinations_flux_image(clean_prompt, output_path)
+    if ok:
+        return True, "flux"
 
-        except Exception as e:
-            print(f"[FLUX] Unexpected error on attempt {attempt + 1}: {e}")
-            last_error_reason = "flux_error"
-            time.sleep(1.0 * (attempt + 1))
-
-    return False, last_error_reason
+    return False, reason
