@@ -101,201 +101,158 @@ def semantic_fallback_plan(
         importance = "high" if idx in [0, len(beats) - 1] else "medium"
         anchor_ref = "general"
 
-        # 1. Domain: Miniature Car Assembly
-        if any(k in s_lower for k in ["miniature", "scale", "mechanic", "tiny", "suspension", "wheel", "chassis", "bolt", "windshield"]):
-            anchor_ref = "miniature_car"
-            importance = "critical"
-            if "suspension" in s_lower or "spring" in s_lower:
-                shot = "macro detail"
-                vis_desc = "Tiny mechanics in dark blue uniforms physically attach chrome suspension springs to the front axle of the red 1:18 supercar chassis."
-                p = "Photorealistic vertical 9:16 macro shot, three tiny figurine mechanics in dark blue factory overalls installing chrome suspension springs onto red 1:18-scale miniature sports car chassis with micro tools, workbench"
-                sq = "miniature mechanics installing suspension 1:18 car model"
-                must_show = ["tiny mechanics in dark blue overalls", "suspension springs", "red miniature chassis", "micro tools"]
-                must_not_show = ["full-size car", "full-size humans", "real factory", "street"]
-            elif "wheel" in s_lower or "bolt" in s_lower or "lug" in s_lower:
-                shot = "extreme close-up"
-                vis_desc = "A tiny mechanic in dark blue uniform uses a micro wrench to physically tighten wheel bolts on the red 1:18 supercar."
-                p = "Photorealistic vertical 9:16 extreme close-up macro shot, tiny figurine mechanic tightening wheel bolts on miniature red sports car wheel with miniature wrench, shallow depth of field"
-                sq = "miniature mechanic tightening wheel bolts model car"
-                must_show = ["tiny mechanic", "miniature wheel", "wheel bolts", "miniature wrench"]
-                must_not_show = ["full-size mechanic", "real automobile", "street"]
-            elif "windshield" in s_lower or "glass" in s_lower:
-                shot = "close-up"
-                vis_desc = "Tiny mechanics carefully place and align the transparent miniature windshield onto the red 1:18 supercar body."
-                p = "Photorealistic vertical 9:16 macro shot, two tiny mechanics in blue overalls positioning transparent miniature windshield onto red 1:18 scale supercar body"
-                sq = "miniature car windshield installation scale model"
-                must_show = ["miniature windshield", "tiny mechanics", "red miniature car"]
-                must_not_show = ["full-size car", "real size people"]
-            else:
-                vis_desc = f"Tiny figurine mechanics assemble the red 1:18 scale supercar on the miniature workshop bench."
-                p = f"Photorealistic vertical 9:16 cinematic {shot}, tiny 1:18 scale figurine mechanics in dark blue overalls assembling red miniature sports car on workshop bench, macro tilt-shift"
-                sq = "tiny mechanics assembling miniature sports car"
-                must_show = ["tiny figurine mechanics in blue overalls", "red 1:18 miniature car"]
-                must_not_show = ["full-size car", "real factory"]
-
-        # 2. Domain: Mystery / Room 307
-        elif any(k in s_lower for k in ["room 307", "hotel", "security", "guard", "door", "corridor", "hallway", "cctv"]):
-            anchor_ref = "room_307_hallway"
-            importance = "critical"
-            if "guard" in s_lower or "rushed" in s_lower or "security" in s_lower:
-                shot = "tracking shot"
-                vis_desc = "Two hotel security guards in dark navy uniforms run urgently down the hotel hallway toward Room 307 door."
-                p = "Photorealistic vertical 9:16 dynamic tracking shot, two hotel security guards in dark navy uniforms running down hotel hallway toward dark wooden door marked Room 307, burgundy carpet, suspenseful"
-                sq = "hotel security guards running hallway toward room door"
-                must_show = ["two security guards in navy uniforms", "running down hallway", "Room 307 door visible"]
-                must_not_show = ["empty hallway", "police officers", "daylight", "outdoor street"]
-            elif "door" in s_lower or "opened" in s_lower or "swung" in s_lower:
-                shot = "close-up"
-                vis_desc = "Dark wooden door with brass plaque reading 'Room 307' slowly creaks open into the dark room."
-                p = "Photorealistic vertical 9:16 suspenseful close-up shot of dark wooden hotel door with brass plaque reading 'Room 307' slowly opening into darkness, warm amber sconce lighting, moody shadows"
-                sq = "hotel door Room 307 opening dark hallway"
-                must_show = ["Room 307 brass plaque", "door opening", "hotel hallway"]
-                must_not_show = ["different room number", "bright sunlight", "generic living room"]
-            elif "cctv" in s_lower or "footage" in s_lower or "monitor" in s_lower:
-                shot = "CCTV"
-                vis_desc = "Security surveillance monitor displaying high-angle CCTV footage of the empty hotel hallway outside Room 307."
-                p = "Vertical 9:16 high-angle CCTV security camera view of empty hotel hallway outside Room 307, timestamp overlay on monitor screen, eerie surveillance view"
-                sq = "hotel hallway security camera CCTV monitor"
-                must_show = ["CCTV camera perspective", "hotel hallway", "Room 307 door"]
-                must_not_show = ["outdoor street", "daylight"]
-            elif "empty" in s_lower:
-                shot = "wide establishing shot"
-                vis_desc = "Completely empty upscale hotel hallway at night with burgundy carpet, warm sconces, and Room 307 at the far end."
-                p = "Photorealistic vertical 9:16 wide establishing shot of completely empty upscale hotel hallway at night, burgundy patterned carpet, warm amber sconces, closed Room 307 door at end of hall"
-                sq = "empty upscale hotel hallway at night"
-                must_show = ["empty hallway", "burgundy carpet", "closed doors"]
-                must_not_show = ["people", "crowd", "daylight"]
-            else:
-                vis_desc = f"Suspenseful view in hotel hallway near Room 307 door."
-                p = f"Photorealistic vertical 9:16 cinematic {shot} of upscale hotel corridor outside Room 307, burgundy carpet, dark wood paneling, warm moody sconce lighting"
-                sq = "hotel corridor Room 307 night"
-                must_show = ["hotel hallway", "Room 307"]
-                must_not_show = ["daylight", "outdoor"]
-
-        # 3. Domain: Specific Objects (Suitcase / Silver Key)
-        elif any(k in s_lower for k in ["suitcase", "key", "luggage"]):
-            anchor_ref = "suitcase_key"
-            importance = "critical"
-            if "key" in s_lower and "suitcase" in s_lower:
-                shot = "close-up"
-                vis_desc = "A woman opens a vibrant red travel suitcase and removes a small silver key."
-                p = "Photorealistic vertical 9:16 cinematic close-up shot of a woman opening a vibrant red travel suitcase and carefully removing a small ornate silver key, warm focused table lighting"
-                sq = "woman opening red suitcase removing silver key"
-                must_show = ["woman opening suitcase", "red suitcase", "small silver key", "key being removed"]
-                must_not_show = ["black suitcase", "generic woman without suitcase", "gold key"]
-            elif "key" in s_lower:
-                shot = "macro detail"
-                vis_desc = "A woman's hand removes a small ornate silver key from inside the open red suitcase."
-                p = "Photorealistic vertical 9:16 macro close-up shot of a woman's hand carefully lifting a small ornate silver key out of an open red travel suitcase, focused warm table lighting"
-                sq = "hand removing silver key from red suitcase"
-                must_show = ["red suitcase", "small silver key", "hand removing key"]
-                must_not_show = ["black suitcase", "gold key", "generic woman without suitcase"]
-            else:
-                shot = "medium shot"
-                vis_desc = "A woman opens a vibrant red travel suitcase on a table in a dimly lit room."
-                p = "Photorealistic vertical 9:16 shot of a woman opening a vibrant red travel suitcase on a wooden table, warm ambient lighting"
-                sq = "woman opening red suitcase"
-                must_show = ["woman opening suitcase", "red suitcase"]
-                must_not_show = ["black luggage", "outdoor"]
-
-        # 4. Domain: Location Continuity (Kitchen / Refrigerator)
-        elif any(k in s_lower for k in ["kitchen", "refrigerator", "fridge", "bottle", "water"]):
-            anchor_ref = "kitchen_interior"
-            if "bottle" in s_lower or "water" in s_lower:
-                shot = "close-up"
-                vis_desc = "Hand retrieves a clear cold bottle of water from the illuminated stainless steel refrigerator in the same kitchen."
-                p = "Photorealistic vertical 9:16 close-up shot of a hand taking a clear cold bottle of water from inside an open illuminated stainless steel refrigerator in a modern kitchen"
-                sq = "taking bottle of water from refrigerator kitchen"
-                must_show = ["hand taking water bottle", "refrigerator interior", "modern kitchen"]
-                must_not_show = ["outdoor", "different room"]
-            elif "refrigerator" in s_lower or "fridge" in s_lower or "opens" in s_lower:
-                shot = "medium shot"
-                vis_desc = "Person opens the stainless steel refrigerator door in the modern kitchen, cool light illuminating the room."
-                p = "Photorealistic vertical 9:16 medium shot of person opening stainless steel refrigerator door in modern kitchen at evening, cool white refrigerator light glowing"
-                sq = "person opening refrigerator kitchen evening"
-                must_show = ["person opening refrigerator", "refrigerator", "same modern kitchen"]
-                must_not_show = ["living room", "outdoor"]
-            else:
-                shot = "wide establishing shot"
-                vis_desc = "Person walks into a modern residential kitchen with clean countertops and stainless steel appliances."
-                p = "Photorealistic vertical 9:16 wide establishing shot of person entering a modern residential kitchen, dark granite countertops, stainless steel appliances, evening lighting"
-                sq = "person entering modern kitchen evening"
-                must_show = ["person entering kitchen", "modern kitchen", "countertops"]
-                must_not_show = ["bedroom", "outdoor street"]
-
-        # 5. Domain: Aviation / Documentary (specific to general)
-        elif any(k in s_lower for k in ["radar", "transponder", "tracking", "atc", "blip", "screen"]):
-            shot = "close-up"
-            anchor_ref = "radar_screen"
-            vis_desc = "Close-up of green glowing radar sweep line and blips in dark air traffic control room."
-            p = "Photorealistic vertical 9:16 close-up of glowing green air traffic control radar screen with sweeping line and radar blips in dark control room"
-            sq = "air traffic control radar screen glowing green"
-            must_show = ["glowing green radar screen", "radar blip", "dark ATC room"]
-            must_not_show = ["airplane exterior", "daylight sky", "map", "diagram"]
-        elif any(k in s_lower for k in ["cockpit", "pilot", "flight instruments", "controls", "hour into"]):
-            shot = "close-up"
-            anchor_ref = "airplane_cockpit"
-            vis_desc = "Inside airplane cockpit at night, illuminated flight instruments and pilot controls."
-            p = "Photorealistic vertical 9:16 cinematic shot inside commercial airliner cockpit at night, illuminated flight instruments, pilot controls, starry dark clouds outside"
-            sq = "airplane cockpit night flight instruments pilot"
-            must_show = ["cockpit instrument panels", "pilot controls", "night sky outside"]
-            must_not_show = ["map", "diagram", "exterior street"]
-        elif any(k in s_lower for k in ["cabin", "passenger", "passengers", "people on board"]):
-            shot = "medium shot"
-            anchor_ref = "airplane_cabin"
-            vis_desc = "Inside commercial airliner passenger cabin with passengers seated in rows under warm cabin lights."
-            p = "Photorealistic vertical 9:16 medium shot inside commercial airliner passenger cabin, passengers seated in rows under warm cabin lighting, window view"
-            sq = "airliner passenger cabin interior people seated"
-            must_show = ["airplane passenger cabin", "seated passengers", "airplane windows"]
-            must_not_show = ["map", "diagram", "exterior plane"]
-        elif any(k in s_lower for k in ["black box", "flight recorder", "data recorder"]):
-            shot = "close-up"
-            anchor_ref = "black_box"
-            vis_desc = "Bright orange cylindrical flight data recorder resting on the dark ocean floor."
-            p = "Photorealistic vertical 9:16 close-up shot of bright orange flight data recorder black box resting on dark seabed, submersible spotlight beam"
-            sq = "flight data recorder black box ocean floor"
-            must_show = ["bright orange flight recorder", "ocean floor seabed"]
-            must_not_show = ["airplane in sky", "office desk", "map", "diagram"]
-        elif any(k in s_lower for k in ["submarine", "sonar", "underwater", "scanned", "ocean floor", "abyss", "deep sea"]):
-            shot = "close-up"
-            anchor_ref = "deep_sea_search"
-            vis_desc = "Deep-sea research submarine scanning dark ocean floor with powerful spotlights."
-            p = "Photorealistic vertical 9:16 cinematic shot of deep-sea research submarine scanning dark ocean floor with powerful spotlights, deep sea sonar exploration"
-            sq = "deep sea submarine scanning ocean floor searchlights"
-            must_show = ["research submarine", "searchlights", "dark seabed ocean floor"]
-            must_not_show = ["sunny beach", "map", "diagram"]
-        elif any(k in s_lower for k in ["mystery", "unsolved", "what really happened", "remains"]):
-            shot = "cinematic reveal"
-            anchor_ref = "aviation_mystery"
-            vis_desc = "Silhouetted commercial airliner flying through dramatic stormy sunset clouds, mystery atmosphere."
-            p = "Photorealistic vertical 9:16 cinematic silhouette of commercial passenger airplane flying through dramatic stormy sunset clouds, golden hour mystery atmosphere"
-            sq = "airplane silhouette flying sunset clouds"
-            must_show = ["airplane silhouette", "dramatic sunset clouds"]
-            must_not_show = ["map", "diagram", "ground"]
-        elif any(k in s_lower for k in ["ocean", "sea", "waves", "indian ocean", "vast water"]):
-            shot = "wide shot"
-            anchor_ref = "stormy_ocean"
-            vis_desc = "Aerial cinematic view of vast dark stormy ocean waves under ominous night sky."
-            p = "Photorealistic vertical 9:16 aerial wide shot of vast dark ocean waves under stormy night sky, deep turquoise-black water, moody atmosphere"
-            sq = "vast dark ocean waves stormy night"
-            must_show = ["dark stormy ocean", "ocean waves", "night sky"]
-            must_not_show = ["sunny beach", "map", "diagram"]
-        elif any(k in s_lower for k in ["took off", "take off", "takeoff", "departure", "runway", "heading", "flight", "plane", "airliner", "airline", "aircraft"]):
-            shot = "wide establishing shot"
-            anchor_ref = "airplane_takeoff"
-            vis_desc = "Commercial passenger airliner taking off into the night sky from an illuminated runway."
-            p = "Photorealistic vertical 9:16 wide establishing shot of commercial Boeing 777 passenger airliner taking off into night sky from illuminated runway, glowing runway lights, dramatic atmosphere"
-            sq = "commercial passenger airliner takeoff night runway"
-            must_show = ["commercial passenger airplane", "taking off", "night runway"]
-            must_not_show = ["map", "diagram", "daylight beach", "drone"]
+        # UNIVERSAL DYNAMIC SCENE PLANNER (Works for ANY script, zero hardcoded topics)
+        shot = "cinematic shot"
+        motion = "push in"
+        importance = "medium"
+        anchor_ref = "scene_context"
+        
+        # Universal Semantic Visual Ontology
+        SEMANTIC_VISUAL_MAP = {
+            # History, Empires & Warfare
+            "colosseum": ("roman colosseum", "colosseum rome", "wide establishing shot", "slow zoom out"),
+            "gladiator": ("gladiators battling inside arena", "gladiator arena", "medium shot", "dynamic pan"),
+            "gladiators": ("gladiators battling inside arena", "gladiator arena", "medium shot", "dynamic pan"),
+            "legion": ("roman soldiers marching in armor", "roman soldiers army", "dynamic tracking shot", "tracking push"),
+            "legions": ("roman soldiers marching in armor", "roman soldiers army", "dynamic tracking shot", "tracking push"),
+            "soldier": ("soldiers in combat gear", "soldiers battlefield", "dynamic tracking shot", "tracking push"),
+            "soldiers": ("soldiers in combat gear", "soldiers battlefield", "dynamic tracking shot", "tracking push"),
+            "samurai": ("samurai warrior in traditional armor with katana", "samurai warrior", "medium shot", "slow push in"),
+            "knight": ("medieval knight in shining plate armor", "medieval knight armor", "medium shot", "slow push in"),
+            "knights": ("medieval knights on horseback", "medieval knights", "wide establishing shot", "push in"),
+            "castle": ("ancient medieval stone castle fortress", "medieval castle", "wide establishing shot", "slow zoom out"),
+            "pyramid": ("ancient Egyptian pyramids of Giza in desert", "giza pyramids", "wide establishing shot", "slow zoom out"),
+            "pyramids": ("ancient Egyptian pyramids of Giza in desert", "giza pyramids", "wide establishing shot", "slow zoom out"),
+            "pharaoh": ("ancient Egyptian pharaoh golden tomb", "egypt pharaoh", "close-up detail", "macro push in"),
+            "napoleon": ("Napoleon Bonaparte on horseback leading army", "napoleon bonaparte", "medium shot", "push in"),
+            "viking": ("viking warrior on wooden longship", "viking longship", "wide establishing shot", "push in"),
+            "sword": ("ancient steel sword reflecting light", "sword weapon", "close-up detail", "macro push in"),
+            
+            # Animals & Nature
+            "lion": ("wild male lion stalking in African savannah", "lion wildlife", "medium shot", "slow push in"),
+            "lions": ("pride of lions resting under acacia tree", "lions savannah", "wide establishing shot", "slow zoom out"),
+            "predator": ("wild predator animal hunting in wilderness", "lion hunting", "dynamic tracking shot", "tracking push"),
+            "tiger": ("wild Bengal tiger in deep jungle", "tiger wildlife", "medium shot", "slow push in"),
+            "shark": ("great white shark swimming in deep ocean", "shark underwater", "close-up detail", "slow pan"),
+            "whale": ("massive blue whale swimming in ocean depths", "whale ocean", "wide shot", "slow zoom out"),
+            "wolf": ("gray wolf in snowy winter forest", "wolf wildlife", "medium shot", "slow push in"),
+            "eagle": ("majestic eagle soaring over mountain peaks", "eagle bird flight", "aerial wide shot", "slow zoom out"),
+            "ocean": ("vast dark stormy ocean waves under night sky", "stormy ocean", "wide establishing shot", "slow zoom out"),
+            "sea": ("vast dark stormy ocean waves under night sky", "stormy ocean", "wide establishing shot", "slow zoom out"),
+            "waves": ("powerful stormy ocean waves crashing", "ocean waves", "close-up detail", "dynamic pan"),
+            "volcano": ("erupting volcano with glowing red lava", "volcano lava", "wide establishing shot", "slow zoom out"),
+            "jungle": ("dense tropical rainforest with sunlight beams", "jungle rainforest", "wide establishing shot", "slow push in"),
+            "desert": ("vast golden sand dunes under desert sun", "desert sand dunes", "wide establishing shot", "slow zoom out"),
+            
+            # Finance, Crypto & Business
+            "bitcoin": ("physical golden Bitcoin cryptocurrency coin", "bitcoin coin", "close-up detail", "macro push in"),
+            "crypto": ("digital cryptocurrency blockchain network", "bitcoin crypto", "close-up detail", "macro push in"),
+            "blockchain": ("digital blockchain data network visualization", "blockchain technology", "medium shot", "slow pan"),
+            "gold": ("pure gold bullion bars stacked in bank vault", "gold bars vault", "close-up detail", "macro push in"),
+            "coins": ("glowing gold coins stacked on desk", "gold coins currency", "close-up detail", "macro push in"),
+            "wall street": ("busy Wall Street financial trading floor", "wall street trading", "wide establishing shot", "push in"),
+            "money": ("stacks of cash currency on table", "currency money", "close-up detail", "macro push in"),
+            
+            # Space, Sci-Fi & Cyberpunk
+            "space": ("deep space nebula with glowing stars and galaxy", "deep space galaxy", "wide establishing shot", "slow zoom out"),
+            "galaxy": ("spiral galaxy with billions of glowing stars", "spiral galaxy space", "wide establishing shot", "slow zoom out"),
+            "black hole": ("massive supermassive black hole with accretion disk in space", "black hole space", "wide establishing shot", "slow zoom out"),
+            "rocket": ("massive space rocket launching with fire into night sky", "space rocket launch", "dynamic tracking shot", "tilt up"),
+            "astronaut": ("astronaut in spacesuit floating in deep space", "astronaut spacewalk", "medium shot", "slow push in"),
+            "cyberpunk": ("neon-lit cyberpunk city street in rain at night", "cyberpunk city", "wide establishing shot", "push in"),
+            "hacker": ("elite computer hacker working in dark room with code screens", "computer hacker", "medium shot", "slow push in"),
+            "robot": ("futuristic humanoid robot android with glowing blue eyes", "humanoid robot", "close-up detail", "slow push in"),
+            "skyscrapers": ("futuristic city skyscrapers glowing with neon at night", "city skyscrapers night", "wide establishing shot", "slow zoom out"),
+            
+            # Aviation & Maritime
+            "airplane": ("commercial Boeing passenger airliner in flight", "commercial airliner", "wide establishing shot", "slow pan"),
+            "airliner": ("commercial Boeing passenger airliner in flight", "commercial airliner", "wide establishing shot", "slow pan"),
+            "flight": ("commercial passenger airliner flying through clouds", "commercial airliner flight", "wide establishing shot", "slow pan"),
+            "plane": ("commercial Boeing passenger airliner in flight", "commercial airliner", "wide establishing shot", "slow pan"),
+            "takeoff": ("commercial passenger airliner taking off into night sky from illuminated runway", "airplane takeoff", "wide establishing shot", "tilt up"),
+            "took off": ("commercial passenger airliner taking off into night sky from illuminated runway", "airplane takeoff", "wide establishing shot", "tilt up"),
+            "runway": ("commercial airliner on illuminated runway at night", "airplane runway night", "wide establishing shot", "push in"),
+            "cockpit": ("inside commercial airliner cockpit at night with glowing instruments", "airplane cockpit", "close-up detail", "slow push in"),
+            "radar": ("glowing green air traffic control radar screen in dark room", "radar screen", "close-up detail", "slow push in"),
+            "transponder": ("air traffic control radar screen with sweeping green beam", "radar screen", "close-up detail", "slow push in"),
+            "cabin": ("inside commercial airliner passenger cabin with passengers seated", "airplane passenger cabin", "medium shot", "slow push in"),
+            "passengers": ("inside commercial airliner passenger cabin with passengers seated", "airplane passenger cabin", "medium shot", "slow push in"),
+            "submarine": ("deep-sea research submarine scanning dark seabed with searchlights", "underwater submarine", "close-up detail", "slow pan"),
+            "sonar": ("deep-sea research submarine scanning dark seabed with searchlights", "underwater submarine", "close-up detail", "slow pan"),
+            "black box": ("bright orange flight data recorder black box on ocean floor", "flight recorder black box", "close-up detail", "macro push in"),
+            
+            # Mystery, Noir & Urban
+            "detective": ("vintage noir detective in trench coat in dimly lit room", "detective noir", "medium shot", "slow push in"),
+            "revolver": ("vintage silver revolver handgun resting on wooden desk", "revolver handgun", "close-up detail", "macro push in"),
+            "gun": ("vintage handgun resting on wooden desk", "handgun weapon", "close-up detail", "macro push in"),
+            "journal": ("old antique leather-bound journal with handwritten notes", "vintage leather journal", "close-up detail", "macro push in"),
+            "fog": ("heavy atmospheric mist and fog rolling through cobblestone street at night", "fog cobblestone street", "wide establishing shot", "push in"),
+            "door": ("dark antique wooden door slowly creaking open into shadows", "antique wooden door", "close-up detail", "slow push in"),
+            "corridor": ("long empty upscale hotel hallway with warm wall sconces at night", "hotel corridor hallway", "wide establishing shot", "push in"),
+            "hallway": ("long empty upscale hotel hallway with warm wall sconces at night", "hotel corridor hallway", "wide establishing shot", "push in"),
+            "suitcase": ("vibrant red vintage travel suitcase resting on table", "vintage suitcase", "close-up detail", "slow push in"),
+            "key": ("small ornate antique silver key resting on table", "antique silver key", "close-up detail", "macro push in"),
+            "cctv": ("high-angle CCTV security camera surveillance monitor view", "cctv security camera", "close-up detail", "slow push in"),
+            "security": ("hotel security guards in dark navy uniforms in hallway", "security guard uniform", "medium shot", "tracking push"),
+            "guard": ("security guard in dark navy uniform on night patrol", "security guard uniform", "medium shot", "tracking push"),
+            
+            # Lifestyle, Food & Domestic
+            "kitchen": ("modern residential kitchen with stainless steel appliances", "modern kitchen", "wide establishing shot", "push in"),
+            "chef": ("professional chef chopping fresh ingredients in restaurant kitchen", "chef cooking", "medium shot", "dynamic pan"),
+            "cooking": ("sizzling pan on stove with fresh garlic and olive oil", "chef cooking pan", "close-up detail", "macro push in"),
+            "refrigerator": ("illuminated stainless steel refrigerator door opening in modern kitchen", "modern refrigerator", "medium shot", "slow push in"),
+            "car": ("sleek modern sports car in clean workshop garage", "sports car", "wide establishing shot", "slow pan"),
+            "workshop": ("mechanic workshop with tools and automotive equipment", "mechanic workshop tools", "medium shot", "push in")
+        }
+        
+        # Check semantic ontology match
+        matched_concept = None
+        for keyword, mapping in SEMANTIC_VISUAL_MAP.items():
+            # Match whole words to prevent subword false positives
+            if re.search(r'\b' + re.escape(keyword) + r'\b', s_lower):
+                matched_concept = mapping
+                break
+                
+        if matched_concept:
+            subject_desc, sq, shot, motion = matched_concept
+            vis_desc = f"{shot.title()} of {subject_desc}."
+            p = f"Photorealistic vertical 9:16 cinematic {shot} of {subject_desc}, dramatic lighting, 8k resolution, photorealistic"
+            must_show = [sq.split()[0]]
+            must_not_show = ["map", "route", "chart", "diagram", "technical drawing", "blurry", "watermark", "scanned document", "text overlay"]
         else:
+            # Dynamic semantic fallback for any unmapped sentence
             kws = clean_words(scene_text)
-            vis_desc = f"{shot.title()} illustrating {scene_text[:35]}..."
-            clean_subject = "commercial airliner in sky" if any(x in script_text.lower() for x in ["flight", "plane", "aviation", "airliner", "aircraft"]) else (' '.join(kws[:3]) if kws else "cinematic scene")
-            p = f"Photorealistic vertical 9:16 cinematic {shot} of {clean_subject}, dramatic lighting, 8k, photorealistic"
-            sq = f"{clean_subject} cinematic"
-            must_show = [clean_subject]
-            must_not_show = ["blurry", "watermark", "map", "diagram"]
+            # Filter out numbers and common action verbs
+            filtered_kws = [
+                w for w in kws 
+                if not w.isdigit() and w not in {
+                    'began', 'lay', 'walked', 'rolled', 'turned', 'went', 'came',
+                    'thousands', 'millions', 'hundreds', 'year', 'years', 'decade',
+                    'great', 'massive', 'first', 'last', 'really', 'simply', 'later'
+                }
+            ]
+            primary_nouns = filtered_kws[:2] if len(filtered_kws) >= 2 else (filtered_kws[:1] if filtered_kws else ["cinematic scene"])
+            concrete_subject = " ".join(primary_nouns)
+            
+            # Deduce shot type from text action
+            if any(w in s_lower for w in ["in", "outside", "city", "street", "palace", "landscape", "sky", "mountain", "vast", "empty"]):
+                shot = "wide establishing shot"
+                motion = "slow zoom out"
+            elif any(w in s_lower for w in ["sprinted", "ran", "marched", "flew", "flying", "navigating", "sprints", "rushed"]):
+                shot = "dynamic tracking shot"
+                motion = "tracking push"
+            elif any(w in s_lower for w in ["small", "silver", "gold", "hand", "finger", "face", "eye", "close", "key", "coin", "screen"]):
+                shot = "close-up detail"
+                motion = "macro push in"
+            else:
+                shot = "medium shot"
+                motion = "slow push in"
+                
+            vis_desc = f"{shot.title()} showing {concrete_subject}."
+            p = f"Photorealistic vertical 9:16 cinematic {shot} of {concrete_subject}, dramatic volumetric lighting, cinematic color grading, 8k photorealistic"
+            sq = concrete_subject
+            must_show = [primary_nouns[0] if primary_nouns else "subject"]
+            must_not_show = ["map", "route", "chart", "diagram", "technical drawing", "blurry", "watermark", "scanned document", "text overlay"]
 
         # Enforce continuity
         p = enforce_continuity_in_prompt(p, continuity_bible, scene_text)

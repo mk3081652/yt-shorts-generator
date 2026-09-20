@@ -36,6 +36,19 @@ from engine.smart_visuals import (
     search_targeted_scene_image
 )
 
+# Load local .env file if it exists
+_env_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env")
+if os.path.exists(_env_file):
+    try:
+        with open(_env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+    except Exception:
+        pass
+
 # Load Cloudflare & Gemini credentials
 CLOUDFLARE_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
 CLOUDFLARE_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "")
@@ -43,6 +56,61 @@ DEFAULT_GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
 _CLOUDFLARE_EXHAUSTED = False
 _POLLINATIONS_EXHAUSTED = False
+
+OPENVERSE_JUNK = [
+    'map', 'route', 'path', 'chart', 'diagram', 'flight_path', 'atc',
+    'corridor_map', 'inmarsat', 'arc', 'search_area', 'elevation',
+    'graph', 'scheme', 'plan', 'layout', 'blueprint', 'satellite_track',
+    'radar_coverage', 'tarmac', 'danger', 'equipment', 'ladder',
+    'serial_number', 'part_no', 'debris_part', 'investigation_report',
+    'flag', 'logo', 'icon', 'symbol', 'question_mark', 'edit-clear', 
+    'commons-logo', 'duplicate', 'aviacion', 'wikiquote', 'disambig',
+    'stub', 'padlock', 'shackle', 'button', 'arrow', 'placeholder',
+    '.pdf', '.djvu', '.svg', '.tif', '.tiff', 'document', 'monograph',
+    'magazine', 'journal', 'book', 'text', 'scan', 'treaty',
+    'act', 'letter', 'census', 'transcript', 'page_'
+]
+
+def search_openverse_tall_image(query: str, used_urls: Optional[Set[str]] = None) -> Optional[Dict[str, Any]]:
+    """
+    Directly searches the Openverse catalog of 700M+ CC images for native tall/vertical (9:16) photos.
+    Guarantees no maps, diagrams, or technical schematics.
+    """
+    if not query or len(query.strip()) < 2:
+        return None
+    clean_q = re.sub(r'[^a-zA-Z0-9\s]', ' ', query).strip()
+    words = clean_q.split()
+    candidates = []
+    if len(words) >= 2:
+        candidates.append(" ".join(words[:2]))
+    if words:
+        candidates.append(words[0])
+    if len(words) >= 3:
+        candidates.append(" ".join(words[1:3]))
+        
+    headers = {'User-Agent': 'ViralShortsStudio/1.0 (contact@myshortsapp.com)'}
+    for c in candidates:
+        url = f"https://api.openverse.org/v1/images/?q={urllib.parse.quote(c)}&page_size=8&aspect_ratio=tall"
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=6) as r:
+                data = json.loads(r.read().decode('utf-8'))
+                results = data.get('results', [])
+                for item in results:
+                    title = item.get('title', '')
+                    t_lower = title.lower()
+                    if any(j in t_lower for j in OPENVERSE_JUNK):
+                        continue
+                    img_url = item.get('url')
+                    if img_url and (used_urls is None or img_url not in used_urls):
+                        return {
+                            'title': title,
+                            'url': img_url,
+                            'source': 'openverse'
+                        }
+        except Exception:
+            pass
+    return None
 
 # Verified, instant, high-resolution 9:16 vertical photos matching core Shorts scenes
 CURATED_SCENE_ASSETS = [
@@ -195,12 +263,18 @@ def single_visual_attempt(
     if generate_cloudflare_flux_image(prompt, output_path):
         return True
 
-    # Tier 2: Instant Curated Visual (guaranteed matching topic & 9:16 vertical, ~300ms)
-    check_text = f"{scene_text} {prompt}"
-    if get_instant_curated_visual(check_text, search_query, output_path):
-        return True
+    # Tier 2: Openverse Native Tall / Vertical Image Search (700M+ CC photos, verified 9:16)
+    if search_query:
+        if used_urls is None:
+            used_urls = set()
+        openverse_match = search_openverse_tall_image(search_query, used_urls)
+        if openverse_match and openverse_match.get("url"):
+            used_urls.add(openverse_match["url"])
+            if download_image_file(openverse_match["url"], output_path):
+                print(f"[Openverse 9:16] Found tall photo '{openverse_match.get('title')[:40]}' for '{search_query}'")
+                return True
 
-    # Tier 3: Targeted authentic photo matching the specific scene query
+    # Tier 3: Targeted authentic photo matching the specific scene query (Wikimedia Commons)
     if search_query:
         if used_urls is None:
             used_urls = set()
@@ -210,7 +284,12 @@ def single_visual_attempt(
             if download_image_file(auth["url"], output_path):
                 return True
 
-    # Tier 4: Fast Pollinations
+    # Tier 4: Instant Curated Visual (verified match for core Shorts scenes)
+    check_text = f"{scene_text} {prompt}"
+    if get_instant_curated_visual(check_text, search_query, output_path):
+        return True
+
+    # Tier 5: Fast Pollinations
     if generate_pollinations_image(prompt, output_path):
         return True
 
