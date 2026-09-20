@@ -137,6 +137,8 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
     margin-bottom: 14px;
 }
 
@@ -144,6 +146,7 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-shrink: 0;
 }
 
 .card-title .icon {
@@ -155,6 +158,7 @@ body {
     font-weight: 700;
     color: #fff;
     letter-spacing: -0.3px;
+    white-space: nowrap;
 }
 
 /* Script Card */
@@ -165,6 +169,7 @@ body {
 .script-tools {
     display: flex;
     gap: 8px;
+    flex-wrap: wrap;
 }
 
 .compact-select {
@@ -177,6 +182,9 @@ body {
     border-radius: 8px;
     cursor: pointer;
     outline: none;
+    max-width: 175px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .compact-select:hover {
@@ -496,8 +504,10 @@ body {
 }
 
 .phone-frame {
-    width: 320px;
-    height: 568px; /* 9:16 aspect ratio */
+    width: 300px;
+    max-width: 100%;
+    height: 533px; /* 9:16 aspect ratio */
+    max-height: min(533px, 68vh);
     background: #020408;
     border: 8px solid #1f293d;
     border-radius: 36px;
