@@ -37,6 +37,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const storyboardProgressPct = document.getElementById('storyboardProgressPct');
     const storyboardProgressBar = document.getElementById('storyboardProgressBar');
     
+    // Segment Studio Elements
+    const toggleSegmentStudioBtn = document.getElementById('toggleSegmentStudioBtn');
+    const segmentStudioContainer = document.getElementById('segmentStudioContainer');
+    const segmentStudioStats = document.getElementById('segmentStudioStats');
+    const segmentStudioDirtyBadge = document.getElementById('segmentStudioDirtyBadge');
+    const replanDirtyBtn = document.getElementById('replanDirtyBtn');
+    const useSegmentsBtn = document.getElementById('useSegmentsBtn');
+    const closeSegmentStudioBtn = document.getElementById('closeSegmentStudioBtn');
+    const segmentStudioCards = document.getElementById('segmentStudioCards');
+
     const generateBtn = document.getElementById('generateBtn');
     const progressCard = document.getElementById('progressCard');
     const progressStatus = document.getElementById('progressStatus');
@@ -61,6 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentScenes = [];
     let sceneOverrides = {};
     let currentStep = 1;
+    let currentSession = null;
 
     // ==========================================
     // GOOGLE MATERIAL TOAST NOTIFICATIONS
@@ -709,6 +720,10 @@ document.addEventListener('DOMContentLoaded', () => {
             previewScenesBtn.innerHTML = '✅ Matched (100%)';
 
             storyboardTopic.innerHTML = `Topic: <strong>${data.topic}</strong>`;
+            const callsEl = document.getElementById('storyboardCallsCount');
+            if (callsEl && typeof data.gemini_calls_used === 'number') {
+                callsEl.textContent = `⚡ ${data.gemini_calls_used} API call${data.gemini_calls_used === 1 ? '' : 's'}`;
+            }
             updateStoryboardStats();
 
             // Short delay so user clearly sees 100% completion
@@ -811,6 +826,353 @@ document.addEventListener('DOMContentLoaded', () => {
             batchImageInput.value = '';
         }
     });
+
+    // ==========================================
+    // 9B. SEGMENT STUDIO (MANUAL SEGMENTATION)
+    // ==========================================
+
+    function renderSegmentStudio() {
+        if (!currentSession || !segmentStudioCards) return;
+
+        const segs = currentSession.segments || [];
+        const dirtyCount = segs.filter(s => s.dirty).length;
+
+        if (segmentStudioStats) {
+            segmentStudioStats.textContent = `${segs.length} segment${segs.length === 1 ? '' : 's'} • ${currentSession.total_duration}s total`;
+        }
+
+        if (segmentStudioDirtyBadge) {
+            if (dirtyCount > 0) {
+                segmentStudioDirtyBadge.textContent = `${dirtyCount} DIRTY`;
+                segmentStudioDirtyBadge.classList.remove('hidden');
+            } else {
+                segmentStudioDirtyBadge.classList.add('hidden');
+            }
+        }
+
+        if (replanDirtyBtn) {
+            replanDirtyBtn.disabled = dirtyCount === 0;
+            replanDirtyBtn.textContent = `↻ Re-plan Dirty (${dirtyCount})`;
+        }
+
+        segmentStudioCards.innerHTML = '';
+
+        segs.forEach((seg, idx) => {
+            const card = document.createElement('div');
+            card.className = `segment-card ${seg.dirty ? 'dirty-card' : ''}`;
+            card.id = `segmentCard_${seg.segment_id}`;
+
+            const words = seg.text.trim().split(/\s+/).filter(Boolean);
+            const canSplit = words.length >= 2;
+            const isLast = idx === segs.length - 1;
+            const canDelete = segs.length > 1;
+
+            card.innerHTML = `
+                <div class="segment-card-header">
+                    <div class="segment-card-title">
+                        <span>#${idx + 1}</span>
+                        <span class="segment-card-dur">${seg.duration}s</span>
+                        ${seg.dirty ? '<span class="badge-dirty">DIRTY</span>' : ''}
+                        ${seg.is_custom ? '<span class="badge" style="color:var(--accent-green)">CUSTOM</span>' : ''}
+                    </div>
+                </div>
+                <textarea class="segment-card-textarea" data-segment-id="${seg.segment_id}">${seg.text}</textarea>
+                <div class="segment-card-actions">
+                    <button class="segment-btn btn-split" data-segment-id="${seg.segment_id}" ${canSplit ? '' : 'disabled'} title="Split into two segments">
+                        ✂️ Split
+                    </button>
+                    <button class="segment-btn btn-merge" data-segment-id="${seg.segment_id}" ${!isLast ? '' : 'disabled'} title="Merge with next segment">
+                        🔗 Merge Next
+                    </button>
+                    <button class="segment-btn btn-add" data-segment-id="${seg.segment_id}" title="Add new segment after this">
+                        ➕ Add After
+                    </button>
+                    <button class="segment-btn btn-danger btn-del" data-segment-id="${seg.segment_id}" ${canDelete ? '' : 'disabled'} title="Delete this segment">
+                        🗑️ Delete
+                    </button>
+                </div>
+            `;
+
+            // Textarea edit handling
+            const textarea = card.querySelector('.segment-card-textarea');
+            let initialVal = seg.text;
+            textarea.addEventListener('blur', async () => {
+                const newVal = textarea.value.trim();
+                if (!newVal || newVal === initialVal) return;
+                try {
+                    const res = await fetch(`/api/segments/${currentSession.session_id}/edit_text`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ segment_id: seg.segment_id, new_text: newVal })
+                    });
+                    if (!res.ok) {
+                        const err = await res.json();
+                        throw new Error(err.detail || 'Edit failed');
+                    }
+                    currentSession = await res.json();
+                    renderSegmentStudio();
+                } catch (err) {
+                    showToast('Failed to update segment: ' + err.message, 'error');
+                    textarea.value = initialVal;
+                }
+            });
+
+            // Split handling
+            const splitBtn = card.querySelector('.btn-split');
+            if (splitBtn && canSplit) {
+                splitBtn.addEventListener('click', async () => {
+                    const maxSplit = words.length - 1;
+                    const defaultSplit = Math.max(1, Math.floor(words.length / 2));
+                    const input = prompt(`Split segment at word index (1 to ${maxSplit}):\n\nWords: "${seg.text}"`, defaultSplit);
+                    if (input === null) return;
+                    const splitIdx = parseInt(input.trim());
+                    if (isNaN(splitIdx) || splitIdx < 1 || splitIdx > maxSplit) {
+                        showToast(`Invalid word index. Must be between 1 and ${maxSplit}.`, 'warning');
+                        return;
+                    }
+
+                    try {
+                        splitBtn.disabled = true;
+                        const res = await fetch(`/api/segments/${currentSession.session_id}/split`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ segment_id: seg.segment_id, split_at_word_index: splitIdx })
+                        });
+                        if (!res.ok) {
+                            const err = await res.json();
+                            throw new Error(err.detail || 'Split failed');
+                        }
+                        currentSession = await res.json();
+                        renderSegmentStudio();
+                        showToast('✂️ Segment split successfully!', 'success');
+                    } catch (err) {
+                        showToast(err.message, 'error');
+                    } finally {
+                        splitBtn.disabled = false;
+                    }
+                });
+            }
+
+            // Merge Next handling
+            const mergeBtn = card.querySelector('.btn-merge');
+            if (mergeBtn && !isLast) {
+                mergeBtn.addEventListener('click', async () => {
+                    try {
+                        mergeBtn.disabled = true;
+                        const res = await fetch(`/api/segments/${currentSession.session_id}/merge`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ segment_id: seg.segment_id, direction: 'next' })
+                        });
+                        if (!res.ok) {
+                            const err = await res.json();
+                            throw new Error(err.detail || 'Merge failed');
+                        }
+                        currentSession = await res.json();
+                        renderSegmentStudio();
+                        showToast('🔗 Segments merged successfully!', 'success');
+                    } catch (err) {
+                        showToast(err.message, 'error');
+                    } finally {
+                        mergeBtn.disabled = false;
+                    }
+                });
+            }
+
+            // Add After handling
+            const addBtn = card.querySelector('.btn-add');
+            if (addBtn) {
+                addBtn.addEventListener('click', async () => {
+                    const text = prompt('Enter narration text for the new segment:');
+                    if (!text || !text.trim()) return;
+
+                    try {
+                        addBtn.disabled = true;
+                        const res = await fetch(`/api/segments/${currentSession.session_id}/add`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ after_segment_id: seg.segment_id, text: text.trim() })
+                        });
+                        if (!res.ok) {
+                            const err = await res.json();
+                            throw new Error(err.detail || 'Add segment failed');
+                        }
+                        currentSession = await res.json();
+                        renderSegmentStudio();
+                        showToast('➕ New segment added!', 'success');
+                    } catch (err) {
+                        showToast(err.message, 'error');
+                    } finally {
+                        addBtn.disabled = false;
+                    }
+                });
+            }
+
+            // Delete handling
+            const delBtn = card.querySelector('.btn-del');
+            if (delBtn && canDelete) {
+                delBtn.addEventListener('click', async () => {
+                    if (!confirm(`Are you sure you want to delete segment #${idx + 1}?`)) return;
+
+                    try {
+                        delBtn.disabled = true;
+                        const res = await fetch(`/api/segments/${currentSession.session_id}/delete`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ segment_id: seg.segment_id })
+                        });
+                        if (!res.ok) {
+                            const err = await res.json();
+                            throw new Error(err.detail || 'Delete failed');
+                        }
+                        currentSession = await res.json();
+                        renderSegmentStudio();
+                        showToast('🗑️ Segment deleted.', 'info');
+                    } catch (err) {
+                        showToast(err.message, 'error');
+                    } finally {
+                        delBtn.disabled = false;
+                    }
+                });
+            }
+
+            segmentStudioCards.appendChild(card);
+        });
+    }
+
+    async function openSegmentStudio() {
+        const script = scriptInput.value.trim();
+        if (!script) {
+            showToast('Please enter or paste your script first before opening Segment Studio!', 'warning');
+            scriptInput.focus();
+            return;
+        }
+
+        if (toggleSegmentStudioBtn) {
+            toggleSegmentStudioBtn.disabled = true;
+            toggleSegmentStudioBtn.textContent = '⏳ Loading...';
+        }
+
+        try {
+            if (!currentSession) {
+                const manualDelim = script.includes('|||');
+                const res = await fetch('/api/segments/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ script: script, manual_delimiter: manualDelim })
+                });
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || 'Failed to initialize session');
+                }
+                currentSession = await res.json();
+            }
+
+            if (segmentStudioContainer) segmentStudioContainer.classList.remove('hidden');
+            if (storyboardEmptyNotice) storyboardEmptyNotice.classList.add('hidden');
+            renderSegmentStudio();
+            showToast(`✂️ Segment Studio opened with ${currentSession.segments.length} segments.`, 'info');
+        } catch (err) {
+            showToast('Failed to open Segment Studio: ' + err.message, 'error');
+        } finally {
+            if (toggleSegmentStudioBtn) {
+                toggleSegmentStudioBtn.disabled = false;
+                toggleSegmentStudioBtn.textContent = '✂️ Segment Studio';
+            }
+        }
+    }
+
+    function closeSegmentStudio() {
+        if (segmentStudioContainer) segmentStudioContainer.classList.add('hidden');
+    }
+
+    async function replanDirtySegments() {
+        if (!currentSession) return;
+
+        if (replanDirtyBtn) {
+            replanDirtyBtn.disabled = true;
+            replanDirtyBtn.textContent = '⏳ Re-planning...';
+        }
+
+        try {
+            const res = await fetch(`/api/segments/${currentSession.session_id}/replan_dirty`, {
+                method: 'POST'
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || 'Re-plan failed');
+            }
+            currentSession = await res.json();
+            renderSegmentStudio();
+
+            const callsEl = document.getElementById('storyboardCallsCount');
+            if (callsEl && typeof currentSession.gemini_calls_used === 'number') {
+                callsEl.textContent = `⚡ ${currentSession.gemini_calls_used} API call${currentSession.gemini_calls_used === 1 ? '' : 's'}`;
+            }
+            showToast('✨ Re-planned dirty segments successfully!', 'success');
+        } catch (err) {
+            showToast('Re-plan failed: ' + err.message, 'error');
+        } finally {
+            if (replanDirtyBtn) {
+                const dirtyCount = (currentSession.segments || []).filter(s => s.dirty).length;
+                replanDirtyBtn.disabled = dirtyCount === 0;
+                replanDirtyBtn.textContent = `↻ Re-plan Dirty (${dirtyCount})`;
+            }
+        }
+    }
+
+    function useSegmentsInStoryboard() {
+        if (!currentSession || !currentSession.segments || currentSession.segments.length === 0) {
+            showToast('No segments available to apply.', 'warning');
+            return;
+        }
+
+        let startTime = 0.0;
+        currentScenes = currentSession.segments.map((seg, idx) => {
+            const sTime = startTime;
+            const dur = seg.duration;
+            startTime = parseFloat((startTime + dur).toFixed(2));
+            return {
+                scene_id: idx,
+                start_time: sTime,
+                end_time: startTime,
+                duration: dur,
+                text: seg.text,
+                image_url: seg.image_url || "/static/placeholder.jpg",
+                image_path: seg.image_path || "",
+                prompt: seg.image_prompt,
+                image_prompt: seg.image_prompt,
+                visual_description: seg.visual_description,
+                shot_type: seg.shot_type,
+                camera_motion: seg.camera_motion,
+                source: seg.source,
+                source_tier: seg.source,
+                validation_score: seg.validation_score,
+                is_custom: seg.is_custom
+            };
+        });
+
+        // Sync back joined script text if modified in studio
+        const joinedScript = currentSession.segments.map(s => s.text.trim()).join(' ');
+        if (joinedScript && joinedScript !== scriptInput.value.trim()) {
+            scriptInput.value = joinedScript;
+        }
+
+        renderStoryboard();
+        updateStoryboardStats();
+
+        if (storyboardToolbar) storyboardToolbar.classList.remove('hidden');
+        if (storyboardGrid) storyboardGrid.classList.remove('hidden');
+        if (storyboardEmptyNotice) storyboardEmptyNotice.classList.add('hidden');
+        if (segmentStudioContainer) segmentStudioContainer.classList.add('hidden');
+
+        showToast(`✅ Storyboard updated with ${currentScenes.length} scenes from Segment Studio!`, 'success');
+    }
+
+    if (toggleSegmentStudioBtn) toggleSegmentStudioBtn.addEventListener('click', openSegmentStudio);
+    if (closeSegmentStudioBtn) closeSegmentStudioBtn.addEventListener('click', closeSegmentStudio);
+    if (replanDirtyBtn) replanDirtyBtn.addEventListener('click', replanDirtySegments);
+    if (useSegmentsBtn) useSegmentsBtn.addEventListener('click', useSegmentsInStoryboard);
 
     // ==========================================
     // 10. GENERATE MASTER VIDEO (1080x1920)

@@ -182,6 +182,9 @@
                                 <a href="https://flow.google" target="_blank" rel="noopener noreferrer" class="btn-google-flow" title="Open Google Flow to generate cinematic 9:16 images">
                                     🚀 Google Flow
                                 </a>
+                                <button id="toggleSegmentStudioBtn" class="btn-secondary" style="font-size: 0.82rem; font-weight: 600; padding: 6px 12px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px;" title="Open Segment Studio for manual script cutting and segment timing">
+                                    ✂️ Segment Studio
+                                </button>
                                 <label class="btn-upload-batch" title="Upload multiple photos from computer">
                                     📥 Upload Images
                                     <input type="file" id="batchImageInput" accept="image/jpeg,image/png,image/webp" multiple style="display:none;">
@@ -196,7 +199,8 @@
                             <div class="storyboard-stats">
                                 <span id="storyboardTopic">Topic: <strong>Detecting...</strong></span> • 
                                 <span id="storyboardSceneCount">0 scenes</span> • 
-                                <span id="storyboardCustomCount" style="color:var(--accent-green)">0 custom</span>
+                                <span id="storyboardCustomCount" style="color:var(--accent-green)">0 custom</span> •
+                                <span id="storyboardCallsCount" style="color: #c084fc; font-weight: 600;">⚡ 0 API calls</span>
                             </div>
                             <button id="resetStoryboardBtn" class="btn-secondary btn-sm" title="Re-match all scenes from authentic archive">
                                 🔄 Auto-Match All
@@ -219,6 +223,30 @@
                                 <div class="progress-bar-bg" style="height: 10px; background: rgba(255, 255, 255, 0.1); border-radius: 5px; overflow: hidden;">
                                     <div id="storyboardProgressBar" class="progress-bar-fill" style="width: 0%; height: 100%; background: linear-gradient(90deg, #8b5cf6, #ec4899); transition: width 0.25s ease; border-radius: 5px;"></div>
                                 </div>
+                            </div>
+
+                            <!-- Segment Studio Panel -->
+                            <div id="segmentStudioContainer" class="segment-studio-panel hidden">
+                                <div class="segment-studio-header">
+                                    <div class="segment-studio-title-group">
+                                        <span class="icon">✂️</span>
+                                        <h4 style="margin: 0; font-size: 1rem; font-weight: 700; color: #fff;">Segment Studio</h4>
+                                        <span id="segmentStudioStats" class="segment-studio-stats">0 segments • 0.0s total</span>
+                                        <span id="segmentStudioDirtyBadge" class="badge-dirty hidden">0 DIRTY</span>
+                                    </div>
+                                    <div class="segment-studio-actions">
+                                        <button id="replanDirtyBtn" class="btn-replan-dirty" disabled title="Re-plan prompt and validation for dirty segments">
+                                            ↻ Re-plan Dirty (0)
+                                        </button>
+                                        <button id="useSegmentsBtn" class="btn-use-segments" title="Apply these segments to storyboard scenes">
+                                            ✅ Use These Segments
+                                        </button>
+                                        <button id="closeSegmentStudioBtn" class="btn-close-studio" title="Close Segment Studio">
+                                            ✕ Close
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="segmentStudioCards" class="segment-cards-list"></div>
                             </div>
 
                             <div class="storyboard-empty" id="storyboardEmptyNotice">

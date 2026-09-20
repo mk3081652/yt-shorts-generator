@@ -360,10 +360,13 @@ def _resolve_must_show_entities(items: List[Any], continuity_bible: Optional[Dic
     return resolved
 
 
+from engine.log_utils import log_tier_failure
+
 def plan_visual_storyboard(
     script_text: str,
     total_duration: float,
-    api_key: Optional[str] = None
+    api_key: Optional[str] = None,
+    call_stats: Optional[Dict[str, int]] = None
 ) -> Dict[str, Any]:
     """
     Main Visual Director planning entry point.
@@ -386,6 +389,8 @@ def plan_visual_storyboard(
     if script_hash in _STORY_ANALYSIS_CACHE:
         story_analysis = _STORY_ANALYSIS_CACHE[script_hash]
     else:
+        if call_stats is not None:
+            call_stats["gemini_calls"] = call_stats.get("gemini_calls", 0) + 1
         story_analysis = analyze_story(script_clean, api_key=resolved_key)
         _STORY_ANALYSIS_CACHE[script_hash] = story_analysis
 
@@ -424,6 +429,8 @@ def plan_visual_storyboard(
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={resolved_key}"
         for attempt in range(2):
             try:
+                if call_stats is not None:
+                    call_stats["gemini_calls"] = call_stats.get("gemini_calls", 0) + 1
                 req = urllib.request.Request(
                     url,
                     data=json.dumps(body).encode("utf-8"),
@@ -490,7 +497,7 @@ def plan_visual_storyboard(
                             "scenes": final_scenes
                         }
             except Exception as e:
-                print(f"[Visual Director] {model_name} attempt {attempt+1} error: {e}")
+                log_tier_failure(f"Gemini Planner ({model_name})", e, context=f"attempt {attempt+1}")
                 time.sleep(0.8)
 
     print("[Visual Director] Gemini models exhausted. Falling back to semantic planner.")

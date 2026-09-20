@@ -240,6 +240,8 @@ def validate_visual_with_gemini(
         )
 
 
+from engine.log_utils import log_tier_failure
+
 def validate_image_with_gemini_vision(
     narration: str,
     visual_description: str,
@@ -247,7 +249,8 @@ def validate_image_with_gemini_vision(
     must_not_show: List[str],
     image_path: str,
     continuity_bible: Optional[Dict[str, Any]] = None,
-    api_key: Optional[str] = None
+    api_key: Optional[str] = None,
+    call_stats: Optional[Dict[str, int]] = None
 ) -> Dict[str, Any]:
     """
     Validates an actual downloaded or generated image file against narration, constraints,
@@ -323,6 +326,8 @@ def validate_image_with_gemini_vision(
         for model in candidates:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={resolved_key}"
             try:
+                if call_stats is not None:
+                    call_stats["gemini_calls"] = call_stats.get("gemini_calls", 0) + 1
                 req = urllib.request.Request(
                     url,
                     data=json.dumps(body).encode("utf-8"),
@@ -348,10 +353,11 @@ def validate_image_with_gemini_vision(
                         "continuity_errors": parsed.get("continuity_errors", []),
                         "correction_prompt": str(parsed.get("correction_prompt", ""))
                     }
-            except Exception:
+            except Exception as e:
+                log_tier_failure(f"Gemini Vision QA ({model})", e)
                 continue
     except Exception as e:
-        print(f"[Validator] Vision validation error: {e}")
+        log_tier_failure("Gemini Vision Validation", e)
 
     return heuristic_validate_scene(
         narration=narration,

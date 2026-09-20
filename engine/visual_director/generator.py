@@ -31,7 +31,6 @@ from typing import Dict, Any, List, Optional, Set, Tuple
 
 from engine.visual_director.validator import (
     heuristic_validate_scene,
-    validate_visual_with_gemini,
     validate_image_with_gemini_vision
 )
 from engine.smart_visuals import (
@@ -75,6 +74,8 @@ OPENVERSE_JUNK = [
     'act', 'letter', 'census', 'transcript', 'page_'
 ]
 
+from engine.log_utils import log_tier_failure
+
 def search_openverse_tall_image(query: str, used_urls: Optional[Set[str]] = None) -> Optional[Dict[str, Any]]:
     """
     Directly searches the Openverse catalog of 700M+ CC images for native tall/vertical (9:16) photos.
@@ -112,8 +113,8 @@ def search_openverse_tall_image(query: str, used_urls: Optional[Set[str]] = None
                             'url': img_url,
                             'source': 'openverse'
                         }
-        except Exception:
-            pass
+        except Exception as e:
+            log_tier_failure("Openverse Search", e, context=c)
     return None
 
 # Verified, instant, high-resolution 9:16 vertical photos matching core Shorts scenes
@@ -373,7 +374,8 @@ def generate_and_validate_scene(
     api_key: Optional[str] = None,
     used_urls: Optional[Set[str]] = None,
     max_retries: int = 2,
-    generation_mode: str = "ai_flux_primary"
+    generation_mode: str = "ai_flux_primary",
+    call_stats: Optional[Dict[str, int]] = None
 ) -> Dict[str, Any]:
     """
     Executes the visual generation, validation, and regeneration loop for a single scene:
@@ -422,7 +424,8 @@ def generate_and_validate_scene(
                 must_not_show=must_not_show,
                 image_path=attempt_path,
                 continuity_bible=continuity_bible,
-                api_key=resolved_key
+                api_key=resolved_key,
+                call_stats=call_stats
             )
         else:
             val_res = heuristic_validate_scene(
@@ -477,7 +480,8 @@ def generate_validated_scenes(
     continuity_bible: Optional[Dict[str, Any]] = None,
     scene_overrides: Optional[Dict[str, str]] = None,
     api_key: Optional[str] = None,
-    generation_mode: Optional[str] = None
+    generation_mode: Optional[str] = None,
+    call_stats: Optional[Dict[str, int]] = None
 ) -> List[Dict[str, Any]]:
     """
     Coordinates the visual generation and validation for all planned scenes in parallel.
@@ -521,10 +525,11 @@ def generate_validated_scenes(
                 continuity_bible=continuity_bible,
                 api_key=api_key,
                 used_urls=used_urls,
-                generation_mode=resolved_mode
+                generation_mode=resolved_mode,
+                call_stats=call_stats
             )
         except Exception as err:
-            print(f"[Generator Worker] Error on scene {_sc.get('scene_id')}: {err}")
+            log_tier_failure("Generator Worker", err, context=_sc.get('scene_id'))
             return _sc
 
     with ThreadPoolExecutor(max_workers=2) as executor:

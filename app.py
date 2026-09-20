@@ -1,7 +1,10 @@
 import os
 import sys
-import shutil
 import uuid
+import shutil
+import logging
+
+logger = logging.getLogger("yt_shorts_app")
 
 # Load local .env file if it exists
 _env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
@@ -25,7 +28,7 @@ if hasattr(sys.stdout, 'reconfigure'):
 if hasattr(sys.stderr, 'reconfigure'):
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -35,17 +38,41 @@ from engine.backgrounds import get_available_backgrounds, get_target_cut_duratio
 from engine.audio import get_available_bgm
 from engine.metadata import get_viral_hooks, get_script_templates, generate_youtube_metadata
 from engine.compositor import render_shorts_video
-from engine.smart_visuals import (
-    prepare_scenes_data,
-    search_targeted_scene_image,
-    find_primary_wikipedia_topic
+from engine.visual_director.segment_session import (
+    create_session,
+    split_segment,
+    merge_segment,
+    add_segment,
+    delete_segment,
+    edit_segment_text,
+    replan_dirty_segments,
+    load_session
 )
 
 app = FastAPI(title="Viral YouTube Shorts Creator Tool")
 
+def log_and_raise_safe(e: Exception, user_message: str, status_code: int = 500):
+    """Logs full exception and traceback server-side, returning only generic message to client."""
+    logger.error(f"[Server Error] {user_message}: {e}", exc_info=True)
+    raise HTTPException(status_code=status_code, detail=user_message)
+
+# Explicit CORS allowlist
+allowed_origins_env = os.environ.get("ALLOWED_ORIGINS", "").strip()
+if allowed_origins_env:
+    allowed_origins = [orig.strip() for orig in allowed_origins_env.split(",") if orig.strip()]
+else:
+    allowed_origins = [
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000"
+    ]
+    if bool(os.environ.get("RENDER") or os.environ.get("PORT")):
+        print("[WARNING] ALLOWED_ORIGINS is not set in production. Defaulting to localhost. Set ALLOWED_ORIGINS to your production domain.")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -115,6 +142,7 @@ class PrepareScenesRequest(BaseModel):
     voice_rate: str = "+10%"
     bg_choice: str = "ai_gemini"
     scene_overrides: Optional[Dict[str, str]] = None
+    force_refresh: bool = False
 
 class RefreshSceneRequest(BaseModel):
     script: str
@@ -130,6 +158,29 @@ class VoicePreviewRequest(BaseModel):
 
 class MetadataRequest(BaseModel):
     script: str
+
+class CreateSegmentsRequest(BaseModel):
+    script: str
+    manual_delimiter: bool = False
+
+class SplitSegmentRequest(BaseModel):
+    segment_id: str
+    split_at_word_index: int
+
+class MergeSegmentRequest(BaseModel):
+    segment_id: str
+    direction: str = "next"
+
+class AddSegmentRequest(BaseModel):
+    after_segment_id: str
+    text: str
+
+class DeleteSegmentRequest(BaseModel):
+    segment_id: str
+
+class EditTextRequest(BaseModel):
+    segment_id: str
+    new_text: str
 
 @app.get("/", response_class=HTMLResponse)
 def serve_home():
@@ -202,12 +253,15 @@ def prepare_scenes(req: PrepareScenesRequest):
 
     try:
         from engine.gemini_visuals import prepare_gemini_scenes_data
+        call_stats = {"gemini_calls": 0}
         scenes = prepare_gemini_scenes_data(
             script_text=script,
             total_duration=est_duration,
             target_cut_duration=target_cut,
             scene_overrides=req.scene_overrides,
-            api_key=os.environ.get("GEMINI_API_KEY", None)
+            api_key=os.environ.get("GEMINI_API_KEY", None),
+            force_refresh=req.force_refresh,
+            call_stats=call_stats
         )
         primary_topic = "Visual Director"
 
@@ -216,12 +270,11 @@ def prepare_scenes(req: PrepareScenesRequest):
             "est_duration": round(est_duration, 1),
             "scenes": scenes,
             "ai_planner_configured": ai_configured,
-            "warning": warning
+            "warning": warning,
+            "gemini_calls_used": call_stats["gemini_calls"]
         }
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to prepare scenes: {str(e)}")
+        log_and_raise_safe(e, "Failed to prepare scenes", status_code=500)
 
 @app.post("/api/upload_scene_image")
 def upload_scene_image(
@@ -335,6 +388,77 @@ def get_metadata(req: MetadataRequest):
     """Generates YouTube Shorts Title, Description & Tags."""
     meta = generate_youtube_metadata(req.script)
     return meta
+
+@app.post("/api/segments/create")
+def api_create_segments(req: CreateSegmentsRequest):
+    """Creates a new StoryboardSession for manual/interactive segmentation."""
+    if not req.script.strip():
+        raise HTTPException(status_code=400, detail="Script cannot be empty.")
+    try:
+        session = create_session(
+            script=req.script,
+            manual_delimiter=req.manual_delimiter,
+            api_key=os.environ.get("GEMINI_API_KEY", None)
+        )
+        return session.to_dict()
+    except Exception as e:
+        log_and_raise_safe(e, "Failed to create segment session", status_code=500)
+
+@app.post("/api/segments/{id}/split")
+def api_split_segment(id: str, req: SplitSegmentRequest):
+    """Splits an existing segment at a specified word index."""
+    session, err, code = split_segment(id, req.segment_id, req.split_at_word_index)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return session.to_dict()
+
+@app.post("/api/segments/{id}/merge")
+def api_merge_segment(id: str, req: MergeSegmentRequest):
+    """Merges a segment with its next or previous neighbor."""
+    session, err, code = merge_segment(id, req.segment_id, req.direction)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return session.to_dict()
+
+@app.post("/api/segments/{id}/add")
+def api_add_segment(id: str, req: AddSegmentRequest):
+    """Inserts a new segment after the specified segment ID."""
+    session, err, code = add_segment(id, req.after_segment_id, req.text)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return session.to_dict()
+
+@app.post("/api/segments/{id}/delete")
+def api_delete_segment(id: str, req: DeleteSegmentRequest):
+    """Removes a segment from the session and shrinks total duration."""
+    session, err, code = delete_segment(id, req.segment_id)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return session.to_dict()
+
+@app.post("/api/segments/{id}/edit_text")
+def api_edit_segment_text(id: str, req: EditTextRequest):
+    """Edits a segment's text with word-level diffing and duration recalculation."""
+    session, err, code = edit_segment_text(id, req.segment_id, req.new_text)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return session.to_dict()
+
+@app.post("/api/segments/{id}/replan_dirty")
+def api_replan_dirty_segments(id: str):
+    """Re-runs prompt generation and validation for dirty, non-custom segments."""
+    session, err, code = replan_dirty_segments(id, api_key=os.environ.get("GEMINI_API_KEY", None))
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return session.to_dict()
+
+@app.get("/api/segments/{id}")
+def api_get_segment_session(id: str):
+    """Retrieves an existing StoryboardSession by ID."""
+    session = load_session(id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Segment session not found.")
+    return session.to_dict()
 
 def run_render_task(job_id: str, req: RenderRequest):
     def update_progress(msg: str, pct: int):
