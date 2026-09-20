@@ -45,6 +45,7 @@ from engine.visual_director.segment_session import (
     add_segment,
     delete_segment,
     edit_segment_text,
+    edit_segment_prompt,
     replan_dirty_segments,
     load_session
 )
@@ -181,6 +182,10 @@ class DeleteSegmentRequest(BaseModel):
 class EditTextRequest(BaseModel):
     segment_id: str
     new_text: str
+
+class EditPromptRequest(BaseModel):
+    segment_id: str
+    new_prompt: str
 
 @app.get("/", response_class=HTMLResponse)
 def serve_home():
@@ -440,6 +445,14 @@ def api_delete_segment(id: str, req: DeleteSegmentRequest):
 def api_edit_segment_text(id: str, req: EditTextRequest):
     """Edits a segment's text with word-level diffing and duration recalculation."""
     session, err, code = edit_segment_text(id, req.segment_id, req.new_text)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return session.to_dict()
+
+@app.post("/api/segments/{id}/edit_prompt")
+def api_edit_segment_prompt(id: str, req: EditPromptRequest):
+    """Edits a segment's visual generation prompt manually."""
+    session, err, code = edit_segment_prompt(id, req.segment_id, req.new_prompt)
     if err:
         raise HTTPException(status_code=code, detail=err)
     return session.to_dict()

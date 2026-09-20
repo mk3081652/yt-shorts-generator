@@ -1,4 +1,4 @@
-﻿"""
+"""
 test_segment_session.py - Unit tests for StoryboardSession operations & REST endpoints.
 Phase 3 Segment Studio tests.
 """
@@ -12,11 +12,13 @@ from engine.visual_director.segment_session import (
     Segment,
     StoryboardSession,
     create_session,
+    create_story_beats,
     split_segment,
     merge_segment,
     add_segment,
     delete_segment,
     edit_segment_text,
+    edit_segment_prompt,
     replan_dirty_segments,
     load_session
 )
@@ -144,6 +146,39 @@ class TestSegmentSessionUnit(unittest.TestCase):
         self.assertIsNone(err2)
         self.assertTrue(updated2.segments[0].dirty)
 
+    def test_edit_segment_prompt(self):
+        session = create_session("Original test words for segment", manual_delimiter=False)
+        target = session.segments[0]
+        orig_dirty = target.dirty
+
+        # Successful edit
+        new_prompt = "Photorealistic 9:16 cinematic close-up of a submarine in dark ocean, volumetric lighting, no text, no watermark"
+        updated, err, code = edit_segment_prompt(session.session_id, target.segment_id, new_prompt)
+        self.assertIsNone(err)
+        self.assertEqual(code, 200)
+        self.assertEqual(updated.segments[0].image_prompt, new_prompt)
+        self.assertEqual(updated.segments[0].dirty, orig_dirty)
+
+        # Empty prompt rejected
+        _, err_empty, code_empty = edit_segment_prompt(session.session_id, target.segment_id, "   ")
+        self.assertIsNotNone(err_empty)
+        self.assertEqual(code_empty, 400)
+
+    def test_verbatim_script_preservation(self):
+        script = (
+            "The mystery of deep ocean exploration began decades ago. "
+            "Scientists discovered strange glowing creatures in the abyss. "
+            "Pressure reaches thousands of pounds per square inch."
+        )
+        session = create_session(script, manual_delimiter=False)
+        # Exact verbatim words check
+        joined_words = " ".join(s.text for s in session.segments).split()
+        self.assertEqual(joined_words, script.split())
+        # All segments have 9:16 prompts
+        for s in session.segments:
+            self.assertIn("9:16", s.image_prompt)
+            self.assertGreater(s.duration, 0)
+
 
 class TestSegmentSessionAPI(unittest.TestCase):
 
@@ -175,14 +210,25 @@ class TestSegmentSessionAPI(unittest.TestCase):
         self.assertEqual(edit_res.status_code, 200)
         self.assertTrue(edit_res.json()["segments"][0]["dirty"])
 
-        # 4. Add segment
+        # 4. Edit prompt via API
+        prompt_res = self.client.post(f"/api/segments/{session_id}/edit_prompt", json={
+            "segment_id": seg_id,
+            "new_prompt": "Cinematic 9:16 wide shot of glowing jellyfish in the deep ocean, 8k, no text"
+        })
+        self.assertEqual(prompt_res.status_code, 200)
+        self.assertEqual(
+            prompt_res.json()["segments"][0]["image_prompt"],
+            "Cinematic 9:16 wide shot of glowing jellyfish in the deep ocean, 8k, no text"
+        )
+
+        # 5. Add segment
         add_res = self.client.post(f"/api/segments/{session_id}/add", json={
             "after_segment_id": seg_id,
             "text": "Submarines venture deeper into the midnight zone."
         })
         self.assertEqual(add_res.status_code, 200)
 
-        # 5. Split segment
+        # 6. Split segment
         added_seg_id = add_res.json()["segments"][1]["segment_id"]
         split_res = self.client.post(f"/api/segments/{session_id}/split", json={
             "segment_id": added_seg_id,
@@ -190,7 +236,7 @@ class TestSegmentSessionAPI(unittest.TestCase):
         })
         self.assertEqual(split_res.status_code, 200)
 
-        # 6. Replan dirty
+        # 7. Replan dirty
         replan_res = self.client.post(f"/api/segments/{session_id}/replan_dirty")
         self.assertEqual(replan_res.status_code, 200)
         # Verify dirty flags are cleared

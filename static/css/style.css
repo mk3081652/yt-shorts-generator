@@ -1519,6 +1519,22 @@ body {
     color: #fff;
 }
 
+.segment-number {
+    letter-spacing: 0.5px;
+    color: #c084fc;
+}
+
+.btn-copy-prompt {
+    background: rgba(168, 85, 247, 0.15);
+    border-color: rgba(168, 85, 247, 0.35);
+    color: #d8b4fe;
+}
+
+.btn-copy-prompt:hover {
+    background: rgba(168, 85, 247, 0.3);
+    color: #fff;
+}
+
 .segment-card-dur {
     font-size: 0.75rem;
     color: var(--text-muted);
@@ -1526,6 +1542,20 @@ body {
     padding: 2px 7px;
     border-radius: 4px;
     font-weight: 500;
+}
+
+.segment-field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.segment-field-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    color: var(--text-muted);
+    text-transform: uppercase;
 }
 
 .segment-card-textarea {
@@ -1536,12 +1566,20 @@ body {
     border-radius: 6px;
     color: #fff;
     padding: 8px 10px;
-    font-size: 0.88rem;
+    font-size: 0.86rem;
     line-height: 1.45;
     font-family: inherit;
-    resize: vertical;
-    min-height: 55px;
+    resize: none;
+    overflow-y: hidden;
+    min-height: 40px;
     transition: border-color 0.2s ease;
+}
+
+.segment-prompt-textarea {
+    border-color: rgba(168, 85, 247, 0.25);
+    background: rgba(14, 12, 30, 0.85);
+    color: #e2e8f0;
+    font-size: 0.82rem;
 }
 
 .segment-card-textarea:focus {

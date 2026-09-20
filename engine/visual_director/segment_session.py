@@ -1,4 +1,4 @@
-﻿"""
+"""
 segment_session.py - Server-owned Segment Studio Data Model & Operations
 Part of the Visual Director system for YouTube Shorts.
 
@@ -7,6 +7,7 @@ adding, deleting, text editing, and selective dirty-segment replanning.
 """
 
 import os
+import re
 import json
 import uuid
 from dataclasses import dataclass, field, asdict
@@ -113,6 +114,127 @@ def load_session(session_id: str) -> Optional[StoryboardSession]:
         return None
 
 
+def create_story_beats(
+    script_text: str,
+    total_duration: float,
+    min_dur: float = 2.0,
+    max_dur: float = 6.0
+) -> List[Tuple[str, float]]:
+    """
+    Intelligent narrative story-beat segmentation:
+    - ONE SEGMENT = ONE CLEAR VISUAL IDEA.
+    - Script is analyzed as a complete narrative.
+    - Divides into narrative visual beats (sentences and major visual clauses).
+    - Verbatim preservation: Original script words are 100% preserved in exact order.
+    - Duration calculated from realistic Shorts speaking speed (~0.38s/word, clamped to min 1.5s).
+    """
+    clean_script = script_text.strip()
+    if not clean_script:
+        return []
+
+    words = clean_script.split()
+    total_words = len(words)
+    if total_words == 0:
+        return []
+
+    # 1. Split by sentence boundaries (. ! ? or newlines)
+    raw_sentences = re.split(r'([.!?]+(?:\s+|\n+|$))', clean_script)
+    sentences = []
+    i = 0
+    while i < len(raw_sentences):
+        s = raw_sentences[i].strip()
+        if i + 1 < len(raw_sentences):
+            delim = raw_sentences[i + 1]
+            if delim.strip():
+                s = (s + " " + delim.strip()).strip()
+            i += 2
+        else:
+            i += 1
+        if s:
+            sentences.append(s)
+
+    if not sentences:
+        sentences = [clean_script]
+
+    # 2. Refine sentences into narrative visual beats
+    # If a sentence is long (> 16 words), check if it can be split at a major clause boundary
+    # (e.g. ", and ", ", but ", ", while ", ", as ", ", where ", "; ", ": ")
+    beats_text: List[str] = []
+    for sent in sentences:
+        s_words = sent.split()
+        if len(s_words) > 16:
+            clause_parts = re.split(r'(?<=[,;:])\s+(?=(?:and|but|while|as|where|yet|before|after|with|when)\b)', sent, flags=re.IGNORECASE)
+            if len(clause_parts) > 1 and all(len(cp.split()) >= 5 for cp in clause_parts):
+                beats_text.extend(cp.strip() for cp in clause_parts if cp.strip())
+            else:
+                sub_parts = re.split(r'([,;:]\s+)', sent)
+                merged_parts = []
+                curr = ""
+                for p in sub_parts:
+                    curr += p
+                    if len(curr.split()) >= 8:
+                        merged_parts.append(curr.strip())
+                        curr = ""
+                if curr.strip():
+                    if merged_parts:
+                        merged_parts[-1] += " " + curr.strip()
+                    else:
+                        merged_parts.append(curr.strip())
+                beats_text.extend(merged_parts)
+        else:
+            beats_text.append(sent)
+
+    # 3. Combine adjacent very short beats (< 5 words) if together <= 16 words
+    combined_beats: List[str] = []
+    curr_beat = ""
+    for b in beats_text:
+        b_clean = b.strip()
+        if not b_clean:
+            continue
+        if not curr_beat:
+            curr_beat = b_clean
+        else:
+            curr_len = len(curr_beat.split())
+            b_len = len(b_clean.split())
+            if curr_len < 5 and (curr_len + b_len) <= 16:
+                curr_beat = f"{curr_beat} {b_clean}"
+            elif b_len < 4 and (curr_len + b_len) <= 16:
+                curr_beat = f"{curr_beat} {b_clean}"
+            else:
+                combined_beats.append(curr_beat)
+                curr_beat = b_clean
+    if curr_beat:
+        combined_beats.append(curr_beat)
+
+    if not combined_beats:
+        combined_beats = [clean_script]
+
+    # 4. Strict Verbatim Preservation Check:
+    # Ensure concatenation of all beats equals the exact original words
+    joined_words = " ".join(combined_beats).split()
+    if joined_words != words:
+        # Fallback to pure sentence splitting to guarantee exact words
+        combined_beats = [s for s in sentences if s.strip()]
+        if " ".join(combined_beats).split() != words:
+            combined_beats = [clean_script]
+
+    # 5. Calculate realistic duration for each beat based on speaking rate
+    # Short narration = shorter duration, long narration = longer duration
+    beats: List[Tuple[str, float]] = []
+    for b in combined_beats:
+        b_word_cnt = len(b.split())
+        b_ratio = b_word_cnt / max(1, total_words)
+        dur = max(1.5, round(b_ratio * total_duration, 2))
+        beats.append((b, dur))
+
+    # Normalize sum of durations to match total_duration
+    sum_dur = sum(d for _, d in beats)
+    if sum_dur > 0:
+        beats = [(t, max(1.0, round((d / sum_dur) * total_duration, 2))) for t, d in beats]
+
+    return beats
+
+
 def create_session(
     script: str,
     manual_delimiter: bool = False,
@@ -121,7 +243,7 @@ def create_session(
     """
     Creates a new StoryboardSession from a script.
     If manual_delimiter is True and '|||' is in script, splits on '|||'.
-    Otherwise uses create_visual_beats().
+    Otherwise uses create_story_beats() for intelligent story-beat segmentation.
     Runs analyze_story() and build_continuity_bible() once.
     """
     clean_script = script.strip()
@@ -136,14 +258,14 @@ def create_session(
             p_dur = max(1.5, round((p_words / max(1, len(words))) * est_dur, 2))
             beats.append((p, p_dur))
     else:
-        beats = create_visual_beats(clean_script, est_dur)
+        beats = create_story_beats(clean_script, est_dur)
         if not beats:
             beats = [(clean_script, est_dur)]
 
     total_duration = sum(b[1] for b in beats)
 
     call_stats = {"gemini_calls": 0}
-    plan = plan_visual_storyboard(clean_script, total_duration, api_key=api_key, call_stats=call_stats)
+    plan = plan_visual_storyboard(clean_script, total_duration, api_key=api_key, call_stats=call_stats, beats=beats)
 
     story_analysis = plan.get("story_analysis", {})
     continuity_bible = plan.get("continuity_bible", {})
@@ -152,17 +274,18 @@ def create_session(
     segments: List[Segment] = []
     for idx, (b_text, b_dur) in enumerate(beats):
         p_sc = planned_scenes[idx] if idx < len(planned_scenes) else {}
+        default_prompt = f"Photorealistic vertical 9:16 cinematic shot of {b_text[:40]}, 8k resolution, dramatic volumetric lighting, no text, no watermark"
         seg = Segment(
             segment_id=uuid.uuid4().hex,
             text=b_text,
             duration=round(b_dur, 2),
             order_index=idx,
-            image_prompt=p_sc.get("image_prompt", f"Photorealistic vertical 9:16 cinematic shot of {b_text[:40]}, 8k"),
+            image_prompt=p_sc.get("image_prompt", default_prompt),
             visual_description=p_sc.get("visual_description", f"Visual illustrating {b_text[:35]}"),
             shot_type=p_sc.get("shot_type", "cinematic shot"),
             camera_motion=p_sc.get("camera_motion", "push in"),
             must_show=p_sc.get("must_show", [b_text[:20]]),
-            must_not_show=p_sc.get("must_not_show", ["blurry", "watermark"]),
+            must_not_show=p_sc.get("must_not_show", ["blurry", "watermark", "text overlay"]),
             image_url="",
             image_path="",
             source="generated",
@@ -533,3 +656,35 @@ def replan_dirty_segments(
     session.gemini_calls_used += call_stats.get("gemini_calls", 0)
     save_session(session)
     return session, None, 200
+
+
+def edit_segment_prompt(
+    session_id: str,
+    segment_id: str,
+    new_prompt: str
+) -> Tuple[Optional[StoryboardSession], Optional[str], int]:
+    """
+    Edits a segment's visual generation prompt manually.
+    Updates image_prompt without resetting is_custom or marking dirty.
+    """
+    session = load_session(session_id)
+    if not session:
+        return None, "Session not found", 404
+
+    target_seg = None
+    for s in session.segments:
+        if s.segment_id == segment_id:
+            target_seg = s
+            break
+
+    if target_seg is None:
+        return None, "Segment not found", 404
+
+    clean_prompt = new_prompt.strip()
+    if not clean_prompt:
+        return None, "Visual prompt cannot be empty.", 400
+
+    target_seg.image_prompt = clean_prompt
+    save_session(session)
+    return session, None, 200
+

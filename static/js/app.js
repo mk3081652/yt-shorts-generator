@@ -833,6 +833,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // 9B. SEGMENT STUDIO (MANUAL SEGMENTATION)
     // ==========================================
 
+    function autoResizeTextarea(el) {
+        if (!el) return;
+        el.style.height = 'auto';
+        el.style.height = Math.max(el.scrollHeight, 40) + 'px';
+    }
+
     function renderSegmentStudio() {
         if (!currentSession || !segmentStudioCards) return;
 
@@ -872,13 +878,28 @@ document.addEventListener('DOMContentLoaded', () => {
             card.innerHTML = `
                 <div class="segment-card-header">
                     <div class="segment-card-title">
-                        <span>#${idx + 1}</span>
+                        <span class="segment-number">SEGMENT #${idx + 1}</span>
                         <span class="segment-card-dur">${seg.duration}s</span>
                         ${seg.dirty ? '<span class="badge-dirty">DIRTY</span>' : ''}
                         ${seg.is_custom ? '<span class="badge" style="color:var(--accent-green)">CUSTOM</span>' : ''}
                     </div>
+                    <div class="segment-header-actions">
+                        <button class="segment-btn btn-copy-prompt" data-segment-id="${seg.segment_id}" title="Copy visual prompt to clipboard">
+                            📋 Copy Prompt
+                        </button>
+                    </div>
                 </div>
-                <textarea class="segment-card-textarea" data-segment-id="${seg.segment_id}">${seg.text}</textarea>
+
+                <div class="segment-field-group">
+                    <label class="segment-field-label">NARRATION</label>
+                    <textarea class="segment-card-textarea segment-narration-textarea" data-segment-id="${seg.segment_id}" placeholder="Spoken narration for this segment...">${seg.text}</textarea>
+                </div>
+
+                <div class="segment-field-group" style="margin-top: 8px;">
+                    <label class="segment-field-label">VISUAL GENERATION PROMPT</label>
+                    <textarea class="segment-card-textarea segment-prompt-textarea" data-segment-id="${seg.segment_id}" placeholder="Visual prompt (Subject, Action, Environment, Composition, Lighting, Style: photorealistic 9:16, no text, no watermark)...">${seg.image_prompt || ''}</textarea>
+                </div>
+
                 <div class="segment-card-actions">
                     <button class="segment-btn btn-split" data-segment-id="${seg.segment_id}" ${canSplit ? '' : 'disabled'} title="Split into two segments">
                         ✂️ Split
@@ -895,12 +916,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             `;
 
-            // Textarea edit handling
-            const textarea = card.querySelector('.segment-card-textarea');
-            let initialVal = seg.text;
-            textarea.addEventListener('blur', async () => {
-                const newVal = textarea.value.trim();
-                if (!newVal || newVal === initialVal) return;
+            // Textarea auto-resize
+            const narrationTextarea = card.querySelector('.segment-narration-textarea');
+            const promptTextarea = card.querySelector('.segment-prompt-textarea');
+
+            [narrationTextarea, promptTextarea].forEach(ta => {
+                if (ta) {
+                    ta.addEventListener('input', () => autoResizeTextarea(ta));
+                    setTimeout(() => autoResizeTextarea(ta), 0);
+                }
+            });
+
+            // Narration textarea edit handling
+            let initialNarration = seg.text;
+            narrationTextarea.addEventListener('blur', async () => {
+                const newVal = narrationTextarea.value.trim();
+                if (!newVal || newVal === initialNarration) return;
                 try {
                     const res = await fetch(`/api/segments/${currentSession.session_id}/edit_text`, {
                         method: 'POST',
@@ -914,10 +945,56 @@ document.addEventListener('DOMContentLoaded', () => {
                     currentSession = await res.json();
                     renderSegmentStudio();
                 } catch (err) {
-                    showToast('Failed to update segment: ' + err.message, 'error');
-                    textarea.value = initialVal;
+                    showToast('Failed to update segment text: ' + err.message, 'error');
+                    narrationTextarea.value = initialNarration;
                 }
             });
+
+            // Visual prompt textarea edit handling
+            let initialPrompt = seg.image_prompt || '';
+            promptTextarea.addEventListener('blur', async () => {
+                const newPrompt = promptTextarea.value.trim();
+                if (!newPrompt || newPrompt === initialPrompt) return;
+                try {
+                    const res = await fetch(`/api/segments/${currentSession.session_id}/edit_prompt`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ segment_id: seg.segment_id, new_prompt: newPrompt })
+                    });
+                    if (!res.ok) {
+                        const err = await res.json();
+                        throw new Error(err.detail || 'Prompt update failed');
+                    }
+                    currentSession = await res.json();
+                    initialPrompt = newPrompt;
+                    showToast('Visual prompt saved!', 'info', 1500);
+                } catch (err) {
+                    showToast('Failed to save prompt: ' + err.message, 'error');
+                    promptTextarea.value = initialPrompt;
+                }
+            });
+
+            // Copy prompt button handling
+            const copyPromptBtn = card.querySelector('.btn-copy-prompt');
+            if (copyPromptBtn) {
+                copyPromptBtn.addEventListener('click', () => {
+                    const promptToCopy = promptTextarea.value.trim() || seg.image_prompt || '';
+                    if (!promptToCopy) {
+                        showToast('No prompt to copy!', 'warning');
+                        return;
+                    }
+                    navigator.clipboard.writeText(promptToCopy).then(() => {
+                        const origText = copyPromptBtn.textContent;
+                        copyPromptBtn.textContent = '✅ Copied!';
+                        setTimeout(() => { copyPromptBtn.textContent = origText; }, 1800);
+                        showToast('📋 Visual prompt copied to clipboard!', 'success', 2000);
+                    }).catch(() => {
+                        promptTextarea.select();
+                        document.execCommand('copy');
+                        showToast('📋 Copied!', 'success', 1800);
+                    });
+                });
+            }
 
             // Split handling
             const splitBtn = card.querySelector('.btn-split');

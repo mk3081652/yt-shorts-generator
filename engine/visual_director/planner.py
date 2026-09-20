@@ -75,13 +75,15 @@ def semantic_fallback_plan(
     script_text: str,
     total_duration: float,
     story_analysis: Optional[Dict[str, Any]] = None,
-    continuity_bible: Optional[Dict[str, Any]] = None
+    continuity_bible: Optional[Dict[str, Any]] = None,
+    beats: Optional[List[Tuple[str, float]]] = None
 ) -> Dict[str, Any]:
     """
     Guaranteed deterministic fallback planner when Gemini API is unconfigured or offline.
     Builds concrete, domain-aware scenes with shot variations and continuity anchors.
     """
-    beats = create_visual_beats(script_text, total_duration, min_dur=2.0, max_dur=4.5)
+    if beats is None:
+        beats = create_visual_beats(script_text, total_duration, min_dur=2.0, max_dur=4.5)
     if not beats:
         beats = [(script_text, total_duration)]
 
@@ -366,7 +368,8 @@ def plan_visual_storyboard(
     script_text: str,
     total_duration: float,
     api_key: Optional[str] = None,
-    call_stats: Optional[Dict[str, int]] = None
+    call_stats: Optional[Dict[str, int]] = None,
+    beats: Optional[List[Tuple[str, float]]] = None
 ) -> Dict[str, Any]:
     """
     Main Visual Director planning entry point.
@@ -382,7 +385,7 @@ def plan_visual_storyboard(
 
     resolved_key = api_key or os.environ.get("GEMINI_API_KEY", "")
     if not resolved_key:
-        return semantic_fallback_plan(script_clean, total_duration)
+        return semantic_fallback_plan(script_clean, total_duration, beats=beats)
 
     script_hash = hashlib.sha256(script_clean.encode("utf-8")).hexdigest()[:16]
 
@@ -400,7 +403,8 @@ def plan_visual_storyboard(
         continuity_bible = build_continuity_bible(story_analysis, script_clean)
         _CONTINUITY_BIBLE_CACHE[script_hash] = continuity_bible
 
-    beats = create_visual_beats(script_clean, total_duration, min_dur=2.5, max_dur=5.5)
+    if beats is None:
+        beats = create_visual_beats(script_clean, total_duration, min_dur=2.5, max_dur=5.5)
     if not beats:
         beats = [(script_clean, total_duration)]
 
@@ -501,4 +505,4 @@ def plan_visual_storyboard(
                 time.sleep(0.8)
 
     print("[Visual Director] Gemini models exhausted. Falling back to semantic planner.")
-    return semantic_fallback_plan(script_clean, total_duration, story_analysis, continuity_bible)
+    return semantic_fallback_plan(script_clean, total_duration, story_analysis, continuity_bible, beats=beats)
