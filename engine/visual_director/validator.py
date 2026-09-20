@@ -157,6 +157,10 @@ def heuristic_validate_scene(
     }
 
 
+from engine.gemini_client import generate_content
+from engine.config import get_gemini_api_key, is_vision_qa_enabled
+
+
 def validate_visual_with_gemini(
     narration: str,
     visual_description: str,
@@ -169,7 +173,7 @@ def validate_visual_with_gemini(
     """
     Validates a scene visual against narration using Gemini QA or fallback heuristics.
     """
-    resolved_key = api_key or os.environ.get("GEMINI_API_KEY", "")
+    resolved_key = api_key or get_gemini_api_key()
     if not resolved_key:
         return heuristic_validate_scene(
             narration=narration,
@@ -180,37 +184,26 @@ def validate_visual_with_gemini(
             visual_description=visual_description
         )
 
-    body = {
-        "contents": [{
-            "parts": [{
-                "text": (
-                    f"{VALIDATOR_SYSTEM_PROMPT}\n\n"
-                    f"Narration: {narration}\n"
-                    f"Visual Description: {visual_description}\n"
-                    f"Image Prompt: {image_prompt}\n"
-                    f"Must Show: {json.dumps(must_show)}\n"
-                    f"Must Not Show: {json.dumps(must_not_show)}\n"
-                    f"Continuity Bible: {json.dumps(continuity_bible or {})}"
-                )
-            }]
-        }],
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "maxOutputTokens": 600,
-            "temperature": 0.1
-        }
-    }
+    prompt_text = (
+        f"{VALIDATOR_SYSTEM_PROMPT}\n\n"
+        f"Narration: {narration}\n"
+        f"Visual Description: {visual_description}\n"
+        f"Image Prompt: {image_prompt}\n"
+        f"Must Show: {json.dumps(must_show)}\n"
+        f"Must Not Show: {json.dumps(must_not_show)}\n"
+        f"Continuity Bible: {json.dumps(continuity_bible or {})}"
+    )
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={resolved_key}"
     try:
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(body).encode("utf-8"),
-            headers={"Content-Type": "application/json"}
+        raw, _ = generate_content(
+            prompt_or_contents=prompt_text,
+            thinking_level="low",
+            max_output_tokens=1000,
+            json_mode=True,
+            api_key=resolved_key
         )
-        with urllib.request.urlopen(req, timeout=8) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            raw = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        if raw:
+            raw = raw.strip()
             if raw.startswith("```json"):
                 raw = raw[7:]
             if raw.startswith("```"):
@@ -229,15 +222,17 @@ def validate_visual_with_gemini(
                 "correction_prompt": str(parsed.get("correction_prompt", ""))
             }
     except Exception:
-        # Fall back gracefully to heuristic validator
-        return heuristic_validate_scene(
-            narration=narration,
-            prompt=image_prompt,
-            must_show=must_show,
-            must_not_show=must_not_show,
-            continuity_bible=continuity_bible,
-            visual_description=visual_description
-        )
+        pass
+
+    # Fall back gracefully to heuristic validator
+    return heuristic_validate_scene(
+        narration=narration,
+        prompt=image_prompt,
+        must_show=must_show,
+        must_not_show=must_not_show,
+        continuity_bible=continuity_bible,
+        visual_description=visual_description
+    )
 
 
 from engine.log_utils import log_tier_failure
@@ -255,10 +250,10 @@ def validate_image_with_gemini_vision(
     """
     Validates an actual downloaded or generated image file against narration, constraints,
     and continuity using Gemini Vision (multimodal prompt with inline_data base64 image).
-    Falls back to heuristic_validate_scene on error or missing API key.
+    Falls back to heuristic_validate_scene on error, missing API key, or if VISION_QA is disabled.
     """
-    resolved_key = api_key or os.environ.get("GEMINI_API_KEY", "")
-    if not resolved_key or not image_path or not os.path.exists(image_path):
+    resolved_key = api_key or get_gemini_api_key()
+    if not is_vision_qa_enabled() or not resolved_key or not image_path or not os.path.exists(image_path):
         return heuristic_validate_scene(
             narration=narration,
             prompt=visual_description or narration,
@@ -301,61 +296,51 @@ def validate_image_with_gemini_vision(
             "Analyze the provided image carefully against the narration and requirements above."
         )
 
-        body = {
-            "contents": [{
-                "parts": [
-                    {
-                        "inline_data": {
-                            "mime_type": mime_type,
-                            "data": b64_img
-                        }
-                    },
-                    {
-                        "text": prompt_text
+        contents = [{
+            "parts": [
+                {
+                    "inline_data": {
+                        "mime_type": mime_type,
+                        "data": b64_img
                     }
-                ]
-            }],
-            "generationConfig": {
-                "responseMimeType": "application/json",
-                "maxOutputTokens": 600,
-                "temperature": 0.1
-            }
-        }
+                },
+                {
+                    "text": prompt_text
+                }
+            ]
+        }]
 
-        candidates = ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-pro-latest"]
-        for model in candidates:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={resolved_key}"
-            try:
-                if call_stats is not None:
-                    call_stats["gemini_calls"] = call_stats.get("gemini_calls", 0) + 1
-                req = urllib.request.Request(
-                    url,
-                    data=json.dumps(body).encode("utf-8"),
-                    headers={"Content-Type": "application/json"}
-                )
-                with urllib.request.urlopen(req, timeout=12) as resp:
-                    data = json.loads(resp.read().decode("utf-8"))
-                    raw = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-                    if raw.startswith("```json"):
-                        raw = raw[7:]
-                    if raw.startswith("```"):
-                        raw = raw[3:]
-                    if raw.endswith("```"):
-                        raw = raw[:-3]
-                    parsed = json.loads(raw.strip())
-                    score = int(parsed.get("score", 85))
-                    return {
-                        "score": score,
-                        "accepted": score >= 80,
-                        "reason": str(parsed.get("reason", "Accepted by Gemini Vision QA.")),
-                        "missing_elements": parsed.get("missing_elements", []),
-                        "incorrect_elements": parsed.get("incorrect_elements", []),
-                        "continuity_errors": parsed.get("continuity_errors", []),
-                        "correction_prompt": str(parsed.get("correction_prompt", ""))
-                    }
-            except Exception as e:
-                log_tier_failure(f"Gemini Vision QA ({model})", e)
-                continue
+        if call_stats is not None:
+            call_stats["gemini_calls"] = call_stats.get("gemini_calls", 0) + 1
+
+        raw, _ = generate_content(
+            prompt_or_contents=contents,
+            thinking_level="low",
+            max_output_tokens=1000,
+            json_mode=True,
+            api_key=resolved_key,
+            timeout=15
+        )
+
+        if raw:
+            raw = raw.strip()
+            if raw.startswith("```json"):
+                raw = raw[7:]
+            if raw.startswith("```"):
+                raw = raw[3:]
+            if raw.endswith("```"):
+                raw = raw[:-3]
+            parsed = json.loads(raw.strip())
+            score = int(parsed.get("score", 85))
+            return {
+                "score": score,
+                "accepted": score >= 80,
+                "reason": str(parsed.get("reason", "Accepted by Gemini Vision QA.")),
+                "missing_elements": parsed.get("missing_elements", []),
+                "incorrect_elements": parsed.get("incorrect_elements", []),
+                "continuity_errors": parsed.get("continuity_errors", []),
+                "correction_prompt": str(parsed.get("correction_prompt", ""))
+            }
     except Exception as e:
         log_tier_failure("Gemini Vision Validation", e)
 

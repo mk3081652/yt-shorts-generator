@@ -2,8 +2,9 @@
 segment_session.py - Server-owned Segment Studio Data Model & Operations
 Part of the Visual Director system for YouTube Shorts.
 
-Additive module supporting manual script segmentation, splitting, merging,
-adding, deleting, text editing, and selective dirty-segment replanning.
+Supports two modes:
+- Auto: split script, plan prompts, auto-generate visuals via FLUX, allow manual replacement.
+- Manual Segment: split script, plan image & video prompts, user provides visuals externally.
 """
 
 import os
@@ -11,13 +12,15 @@ import re
 import json
 import uuid
 from dataclasses import dataclass, field, asdict
+from concurrent.futures import ThreadPoolExecutor
 from typing import List, Dict, Any, Optional, Tuple
 
-from engine.smart_visuals import create_visual_beats, clean_words
+from engine.beats import create_story_beats, clean_words
 from engine.visual_director.story_analyzer import analyze_story
 from engine.visual_director.continuity import build_continuity_bible, enforce_continuity_in_prompt
 from engine.visual_director.planner import plan_visual_storyboard, semantic_fallback_plan
-from engine.visual_director.generator import generate_and_validate_scene
+from engine.visual_director.generator import generate_and_validate_scene, single_visual_attempt
+from engine.config import get_gemini_api_key
 
 SESSIONS_DIR = os.path.abspath("outputs/segment_sessions")
 os.makedirs(SESSIONS_DIR, exist_ok=True)
@@ -30,6 +33,7 @@ class Segment:
     duration: float = 3.0
     order_index: int = 0
     image_prompt: str = ""
+    video_prompt: str = ""
     visual_description: str = ""
     shot_type: str = "cinematic shot"
     camera_motion: str = "push in"
@@ -37,9 +41,13 @@ class Segment:
     must_not_show: List[str] = field(default_factory=list)
     image_url: str = ""
     image_path: str = ""
-    source: str = "generated"
+    media_type: str = "image"  # "image" | "video" | "blank"
+    source: str = "generated"   # "generated" | "manual"
+    source_tier: str = ""       # "flux" | "flux_failed" | "manual_upload"
     is_custom: bool = False
     validation_score: int = 85
+    needs_manual: bool = False
+    fail_reason: str = ""
     dirty: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
@@ -49,9 +57,10 @@ class Segment:
     def from_dict(cls, data: Dict[str, Any]) -> "Segment":
         valid_keys = {
             "segment_id", "text", "duration", "order_index", "image_prompt",
-            "visual_description", "shot_type", "camera_motion", "must_show",
-            "must_not_show", "image_url", "image_path", "source", "is_custom",
-            "validation_score", "dirty"
+            "video_prompt", "visual_description", "shot_type", "camera_motion",
+            "must_show", "must_not_show", "image_url", "image_path", "media_type",
+            "source", "source_tier", "is_custom", "validation_score", "needs_manual",
+            "fail_reason", "dirty"
         }
         filtered = {k: v for k, v in data.items() if k in valid_keys}
         return cls(**filtered)
@@ -60,6 +69,7 @@ class Segment:
 @dataclass
 class StoryboardSession:
     session_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    mode: str = "auto"  # "auto" | "manual"
     script_text: str = ""
     total_duration: float = 0.0
     story_analysis: Dict[str, Any] = field(default_factory=dict)
@@ -70,6 +80,7 @@ class StoryboardSession:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "session_id": self.session_id,
+            "mode": self.mode,
             "script_text": self.script_text,
             "total_duration": round(self.total_duration, 2),
             "story_analysis": self.story_analysis,
@@ -84,6 +95,7 @@ class StoryboardSession:
         segs = [Segment.from_dict(s) for s in raw_segs]
         return cls(
             session_id=data.get("session_id", uuid.uuid4().hex),
+            mode=data.get("mode", "auto"),
             script_text=data.get("script_text", ""),
             total_duration=float(data.get("total_duration", 0.0)),
             story_analysis=data.get("story_analysis", {}),
@@ -114,138 +126,20 @@ def load_session(session_id: str) -> Optional[StoryboardSession]:
         return None
 
 
-def create_story_beats(
-    script_text: str,
-    total_duration: float,
-    min_dur: float = 2.0,
-    max_dur: float = 6.0
-) -> List[Tuple[str, float]]:
-    """
-    Intelligent narrative story-beat segmentation:
-    - ONE SEGMENT = ONE CLEAR VISUAL IDEA.
-    - Script is analyzed as a complete narrative.
-    - Divides into narrative visual beats (sentences and major visual clauses).
-    - Verbatim preservation: Original script words are 100% preserved in exact order.
-    - Duration calculated from realistic Shorts speaking speed (~0.38s/word, clamped to min 1.5s).
-    """
-    clean_script = script_text.strip()
-    if not clean_script:
-        return []
-
-    words = clean_script.split()
-    total_words = len(words)
-    if total_words == 0:
-        return []
-
-    # 1. Split by sentence boundaries (. ! ? or newlines)
-    raw_sentences = re.split(r'([.!?]+(?:\s+|\n+|$))', clean_script)
-    sentences = []
-    i = 0
-    while i < len(raw_sentences):
-        s = raw_sentences[i].strip()
-        if i + 1 < len(raw_sentences):
-            delim = raw_sentences[i + 1]
-            if delim.strip():
-                s = (s + " " + delim.strip()).strip()
-            i += 2
-        else:
-            i += 1
-        if s:
-            sentences.append(s)
-
-    if not sentences:
-        sentences = [clean_script]
-
-    # 2. Refine sentences into narrative visual beats
-    # If a sentence is long (> 16 words), check if it can be split at a major clause boundary
-    # (e.g. ", and ", ", but ", ", while ", ", as ", ", where ", "; ", ": ")
-    beats_text: List[str] = []
-    for sent in sentences:
-        s_words = sent.split()
-        if len(s_words) > 16:
-            clause_parts = re.split(r'(?<=[,;:])\s+(?=(?:and|but|while|as|where|yet|before|after|with|when)\b)', sent, flags=re.IGNORECASE)
-            if len(clause_parts) > 1 and all(len(cp.split()) >= 5 for cp in clause_parts):
-                beats_text.extend(cp.strip() for cp in clause_parts if cp.strip())
-            else:
-                sub_parts = re.split(r'([,;:]\s+)', sent)
-                merged_parts = []
-                curr = ""
-                for p in sub_parts:
-                    curr += p
-                    if len(curr.split()) >= 8:
-                        merged_parts.append(curr.strip())
-                        curr = ""
-                if curr.strip():
-                    if merged_parts:
-                        merged_parts[-1] += " " + curr.strip()
-                    else:
-                        merged_parts.append(curr.strip())
-                beats_text.extend(merged_parts)
-        else:
-            beats_text.append(sent)
-
-    # 3. Combine adjacent very short beats (< 5 words) if together <= 16 words
-    combined_beats: List[str] = []
-    curr_beat = ""
-    for b in beats_text:
-        b_clean = b.strip()
-        if not b_clean:
-            continue
-        if not curr_beat:
-            curr_beat = b_clean
-        else:
-            curr_len = len(curr_beat.split())
-            b_len = len(b_clean.split())
-            if curr_len < 5 and (curr_len + b_len) <= 16:
-                curr_beat = f"{curr_beat} {b_clean}"
-            elif b_len < 4 and (curr_len + b_len) <= 16:
-                curr_beat = f"{curr_beat} {b_clean}"
-            else:
-                combined_beats.append(curr_beat)
-                curr_beat = b_clean
-    if curr_beat:
-        combined_beats.append(curr_beat)
-
-    if not combined_beats:
-        combined_beats = [clean_script]
-
-    # 4. Strict Verbatim Preservation Check:
-    # Ensure concatenation of all beats equals the exact original words
-    joined_words = " ".join(combined_beats).split()
-    if joined_words != words:
-        # Fallback to pure sentence splitting to guarantee exact words
-        combined_beats = [s for s in sentences if s.strip()]
-        if " ".join(combined_beats).split() != words:
-            combined_beats = [clean_script]
-
-    # 5. Calculate realistic duration for each beat based on speaking rate
-    # Short narration = shorter duration, long narration = longer duration
-    beats: List[Tuple[str, float]] = []
-    for b in combined_beats:
-        b_word_cnt = len(b.split())
-        b_ratio = b_word_cnt / max(1, total_words)
-        dur = max(1.5, round(b_ratio * total_duration, 2))
-        beats.append((b, dur))
-
-    # Normalize sum of durations to match total_duration
-    sum_dur = sum(d for _, d in beats)
-    if sum_dur > 0:
-        beats = [(t, max(1.0, round((d / sum_dur) * total_duration, 2))) for t, d in beats]
-
-    return beats
-
-
 def create_session(
     script: str,
+    mode: str = "manual",
     manual_delimiter: bool = False,
     api_key: Optional[str] = None
 ) -> StoryboardSession:
     """
     Creates a new StoryboardSession from a script.
-    If manual_delimiter is True and '|||' is in script, splits on '|||'.
-    Otherwise uses create_story_beats() for intelligent story-beat segmentation.
-    Runs analyze_story() and build_continuity_bible() once.
+    If mode == "auto" and not (manual_delimiter and "|||" in script), splits script, generates prompts and generates visuals via FLUX.
+    If mode == "manual", splits script and plans prompts only without generating images.
     """
+    if mode == "auto" and not (manual_delimiter and "|||" in script):
+        return generate_auto_session(script, api_key=api_key)
+
     clean_script = script.strip()
     words = clean_script.split()
     est_dur = max(3.0, round(len(words) * 0.38, 1))
@@ -275,12 +169,14 @@ def create_session(
     for idx, (b_text, b_dur) in enumerate(beats):
         p_sc = planned_scenes[idx] if idx < len(planned_scenes) else {}
         default_prompt = f"Photorealistic vertical 9:16 cinematic shot of {b_text[:40]}, 8k resolution, dramatic volumetric lighting, no text, no watermark"
+        default_video_prompt = f"Vertical 9:16 video of {b_text[:40]}, slow cinematic motion, realistic physics"
         seg = Segment(
             segment_id=uuid.uuid4().hex,
             text=b_text,
             duration=round(b_dur, 2),
             order_index=idx,
             image_prompt=p_sc.get("image_prompt", default_prompt),
+            video_prompt=p_sc.get("video_prompt", default_video_prompt),
             visual_description=p_sc.get("visual_description", f"Visual illustrating {b_text[:35]}"),
             shot_type=p_sc.get("shot_type", "cinematic shot"),
             camera_motion=p_sc.get("camera_motion", "push in"),
@@ -288,15 +184,125 @@ def create_session(
             must_not_show=p_sc.get("must_not_show", ["blurry", "watermark", "text overlay"]),
             image_url="",
             image_path="",
-            source="generated",
+            media_type="blank",
+            source="manual",
+            source_tier="",
             is_custom=False,
             validation_score=85,
+            needs_manual=False,
             dirty=False
         )
         segments.append(seg)
 
     session = StoryboardSession(
         session_id=uuid.uuid4().hex,
+        mode="manual",
+        script_text=clean_script,
+        total_duration=round(total_duration, 2),
+        story_analysis=story_analysis,
+        continuity_bible=continuity_bible,
+        segments=segments,
+        gemini_calls_used=call_stats.get("gemini_calls", 0)
+    )
+    save_session(session)
+    return session
+
+
+def generate_auto_session(
+    script: str,
+    api_key: Optional[str] = None
+) -> StoryboardSession:
+    """
+    Creates an Auto-mode StoryboardSession:
+    1. Splits script into beats.
+    2. Plans visual storyboard (Gemini or fallback).
+    3. Runs FLUX generation in parallel (max 2 workers).
+    4. Marks failed scenes as needs_manual=True.
+    """
+    clean_script = script.strip()
+    words = clean_script.split()
+    est_dur = max(3.0, round(len(words) * 0.38, 1))
+
+    beats = create_story_beats(clean_script, est_dur)
+    if not beats:
+        beats = [(clean_script, est_dur)]
+
+    total_duration = sum(b[1] for b in beats)
+    call_stats = {"gemini_calls": 0}
+    plan = plan_visual_storyboard(clean_script, total_duration, api_key=api_key, call_stats=call_stats, beats=beats)
+
+    story_analysis = plan.get("story_analysis", {})
+    continuity_bible = plan.get("continuity_bible", {})
+    planned_scenes = plan.get("scenes", [])
+
+    output_dir = os.path.abspath("outputs/ai_previews")
+    os.makedirs(output_dir, exist_ok=True)
+
+    scenes_for_gen = []
+    for idx, (b_text, b_dur) in enumerate(beats):
+        p_sc = planned_scenes[idx] if idx < len(planned_scenes) else {}
+        default_prompt = f"Photorealistic vertical 9:16 cinematic shot of {b_text[:40]}, 8k resolution, dramatic volumetric lighting, no text, no watermark"
+        default_video_prompt = f"Vertical 9:16 video of {b_text[:40]}, slow cinematic motion, realistic physics"
+        sc_obj = {
+            "scene_id": f"scene_{idx+1:02d}",
+            "narration": b_text,
+            "duration": round(b_dur, 2),
+            "order_index": idx,
+            "image_prompt": p_sc.get("image_prompt", default_prompt),
+            "video_prompt": p_sc.get("video_prompt", default_video_prompt),
+            "visual_description": p_sc.get("visual_description", f"Visual illustrating {b_text[:35]}"),
+            "shot_type": p_sc.get("shot_type", "cinematic shot"),
+            "camera_motion": p_sc.get("camera_motion", "push in"),
+            "must_show": p_sc.get("must_show", [b_text[:20]]),
+            "must_not_show": p_sc.get("must_not_show", ["blurry", "watermark", "text overlay"]),
+            "search_query": " ".join(clean_words(b_text)[:3])
+        }
+        scenes_for_gen.append(sc_obj)
+
+    def _gen_worker(sc):
+        return generate_and_validate_scene(
+            scene=sc,
+            output_dir=output_dir,
+            continuity_bible=continuity_bible,
+            api_key=api_key,
+            generation_mode="flux",
+            call_stats=call_stats
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        generated_scenes = list(executor.map(_gen_worker, scenes_for_gen))
+
+    segments: List[Segment] = []
+    for sc in generated_scenes:
+        has_image = bool(sc.get("image_path") and os.path.exists(sc.get("image_path")))
+        seg = Segment(
+            segment_id=uuid.uuid4().hex,
+            text=sc.get("narration", ""),
+            duration=sc.get("duration", 3.0),
+            order_index=sc.get("order_index", 0),
+            image_prompt=sc.get("image_prompt", ""),
+            video_prompt=sc.get("video_prompt", ""),
+            visual_description=sc.get("visual_description", ""),
+            shot_type=sc.get("shot_type", "cinematic shot"),
+            camera_motion=sc.get("camera_motion", "push in"),
+            must_show=sc.get("must_show", []),
+            must_not_show=sc.get("must_not_show", []),
+            image_url=sc.get("image_url", ""),
+            image_path=sc.get("image_path", ""),
+            media_type="image" if has_image else "blank",
+            source=sc.get("source", "generated"),
+            source_tier=sc.get("source_tier", "flux"),
+            is_custom=False,
+            validation_score=sc.get("validation_score", 0 if not has_image else 85),
+            needs_manual=sc.get("needs_manual", not has_image),
+            fail_reason=sc.get("fail_reason", ""),
+            dirty=False
+        )
+        segments.append(seg)
+
+    session = StoryboardSession(
+        session_id=uuid.uuid4().hex,
+        mode="auto",
         script_text=clean_script,
         total_duration=round(total_duration, 2),
         story_analysis=story_analysis,
@@ -332,7 +338,7 @@ def split_segment(
     if target_seg is None:
         return None, "Segment not found", 404
 
-    if target_seg.is_custom or target_seg.source == "manual":
+    if target_seg.is_custom:
         return None, "Segment has a manual image override. Clear it before splitting.", 409
 
     words = target_seg.text.split()
@@ -355,6 +361,7 @@ def split_segment(
         duration=dur1,
         order_index=target_idx,
         image_prompt=f"Photorealistic vertical 9:16 shot of {text1[:40]}, 8k",
+        video_prompt=f"Vertical 9:16 video of {text1[:40]}, cinematic motion",
         visual_description=f"Visual illustrating {text1[:35]}",
         shot_type=target_seg.shot_type,
         camera_motion=target_seg.camera_motion,
@@ -368,6 +375,7 @@ def split_segment(
         duration=dur2,
         order_index=target_idx + 1,
         image_prompt=f"Photorealistic vertical 9:16 shot of {text2[:40]}, 8k",
+        video_prompt=f"Vertical 9:16 video of {text2[:40]}, cinematic motion",
         visual_description=f"Visual illustrating {text2[:35]}",
         shot_type=target_seg.shot_type,
         camera_motion=target_seg.camera_motion,
@@ -383,6 +391,7 @@ def split_segment(
     for i, s in enumerate(session.segments):
         s.order_index = i
 
+    session.script_text = " ".join(seg.text for seg in session.segments)
     save_session(session)
     return session, None, 200
 
@@ -435,6 +444,7 @@ def merge_segment(
         duration=merged_dur,
         order_index=insert_at,
         image_prompt=f"Photorealistic vertical 9:16 shot of {merged_text[:40]}, 8k",
+        video_prompt=f"Vertical 9:16 video of {merged_text[:40]}, cinematic motion",
         visual_description=f"Visual illustrating {merged_text[:35]}",
         shot_type=first.shot_type,
         camera_motion=first.camera_motion,
@@ -455,6 +465,7 @@ def merge_segment(
     for i, s in enumerate(session.segments):
         s.order_index = i
 
+    session.script_text = " ".join(seg.text for seg in session.segments)
     save_session(session)
     return session, None, 200
 
@@ -494,6 +505,7 @@ def add_segment(
         duration=est_dur,
         order_index=target_idx + 1,
         image_prompt=f"Photorealistic vertical 9:16 shot of {clean_text[:40]}, 8k",
+        video_prompt=f"Vertical 9:16 video of {clean_text[:40]}, cinematic motion",
         visual_description=f"Visual illustrating {clean_text[:35]}",
         shot_type="cinematic shot",
         camera_motion="push in",
@@ -508,6 +520,7 @@ def add_segment(
     for i, s in enumerate(session.segments):
         s.order_index = i
 
+    session.script_text = " ".join(seg.text for seg in session.segments)
     save_session(session)
     return session, None, 200
 
@@ -544,6 +557,7 @@ def delete_segment(
     for i, s in enumerate(session.segments):
         s.order_index = i
 
+    session.script_text = " ".join(seg.text for seg in session.segments)
     save_session(session)
     return session, None, 200
 
@@ -581,6 +595,7 @@ def edit_segment_text(
 
     if old_words == new_words:
         target_seg.text = clean_new
+        session.script_text = " ".join(seg.text for seg in session.segments)
         save_session(session)
         return session, None, 200
 
@@ -600,6 +615,7 @@ def edit_segment_text(
         target_seg.is_custom = False
         target_seg.source = "generated"
 
+    session.script_text = " ".join(seg.text for seg in session.segments)
     save_session(session)
     return session, None, 200
 
@@ -617,7 +633,7 @@ def replan_dirty_segments(
     if not session:
         return None, "Session not found", 404
 
-    resolved_key = api_key or os.environ.get("GEMINI_API_KEY", "")
+    resolved_key = api_key or get_gemini_api_key()
     call_stats = {"gemini_calls": 0}
 
     for seg in session.segments:
@@ -647,11 +663,206 @@ def replan_dirty_segments(
                 call_stats=call_stats
             )
 
+            has_img = bool(res.get("image_path") and os.path.exists(res.get("image_path")))
             seg.image_url = res.get("image_url", "")
             seg.image_path = res.get("image_path", "")
+            seg.media_type = "image" if has_img else "blank"
             seg.validation_score = res.get("validation_score", 85)
             seg.source = res.get("source", "generated")
+            seg.source_tier = res.get("source_tier", "flux")
+            seg.needs_manual = res.get("needs_manual", not has_img)
+            seg.fail_reason = res.get("fail_reason", "")
             seg.dirty = False
+
+    session.gemini_calls_used += call_stats.get("gemini_calls", 0)
+    save_session(session)
+    return session, None, 200
+
+
+def upload_segment_media(
+    session_id: str,
+    segment_id: str,
+    file_path: str,
+    media_type: str = "image"
+) -> Tuple[Optional[StoryboardSession], Optional[str], int]:
+    """
+    Attaches a user-provided image or video to a specific segment.
+    """
+    session = load_session(session_id)
+    if not session:
+        return None, "Session not found", 404
+
+    target_seg = None
+    for s in session.segments:
+        if s.segment_id == segment_id:
+            target_seg = s
+            break
+
+    if target_seg is None:
+        return None, "Segment not found", 404
+
+    target_seg.image_path = file_path
+    filename = os.path.basename(file_path)
+    target_seg.image_url = f"/outputs/ai_previews/{filename}"
+    target_seg.media_type = media_type
+    target_seg.source = "manual"
+    target_seg.source_tier = "manual_upload"
+    target_seg.is_custom = True
+    target_seg.needs_manual = False
+    target_seg.fail_reason = ""
+    target_seg.validation_score = 100
+    target_seg.dirty = False
+
+    save_session(session)
+    return session, None, 200
+
+
+def clear_segment_media(
+    session_id: str,
+    segment_id: str
+) -> Tuple[Optional[StoryboardSession], Optional[str], int]:
+    """
+    Clears attached media for a specific segment.
+    """
+    session = load_session(session_id)
+    if not session:
+        return None, "Session not found", 404
+
+    target_seg = None
+    for s in session.segments:
+        if s.segment_id == segment_id:
+            target_seg = s
+            break
+
+    if target_seg is None:
+        return None, "Segment not found", 404
+
+    target_seg.image_path = ""
+    target_seg.image_url = ""
+    target_seg.media_type = "blank"
+    target_seg.source = "manual"
+    target_seg.source_tier = ""
+    target_seg.is_custom = False
+    target_seg.needs_manual = True
+    target_seg.fail_reason = ""
+    target_seg.validation_score = 0
+    target_seg.dirty = False
+
+    save_session(session)
+    return session, None, 200
+
+
+def generate_segment_media(
+    session_id: str,
+    segment_id: str,
+    api_key: Optional[str] = None
+) -> Tuple[Optional[StoryboardSession], Optional[str], int]:
+    """
+    Generates media for a single segment using FLUX.
+    """
+    session = load_session(session_id)
+    if not session:
+        return None, "Session not found", 404
+
+    target_seg = None
+    for s in session.segments:
+        if s.segment_id == segment_id:
+            target_seg = s
+            break
+
+    if target_seg is None:
+        return None, "Segment not found", 404
+
+    output_dir = os.path.abspath("outputs/ai_previews")
+    os.makedirs(output_dir, exist_ok=True)
+    call_stats = {"gemini_calls": 0}
+
+    sc_dict = {
+        "scene_id": target_seg.segment_id,
+        "narration": target_seg.text,
+        "visual_description": target_seg.visual_description,
+        "image_prompt": target_seg.image_prompt,
+        "search_query": " ".join(clean_words(target_seg.text)[:3]),
+        "must_show": target_seg.must_show or [target_seg.text[:20]],
+        "must_not_show": target_seg.must_not_show or ["blurry", "watermark"]
+    }
+
+    res = generate_and_validate_scene(
+        scene=sc_dict,
+        output_dir=output_dir,
+        continuity_bible=session.continuity_bible,
+        api_key=api_key,
+        call_stats=call_stats
+    )
+
+    has_img = bool(res.get("image_path") and os.path.exists(res.get("image_path")))
+    target_seg.image_url = res.get("image_url", "")
+    target_seg.image_path = res.get("image_path", "")
+    target_seg.media_type = "image" if has_img else "blank"
+    target_seg.validation_score = res.get("validation_score", 85)
+    target_seg.source = res.get("source", "generated")
+    target_seg.source_tier = res.get("source_tier", "flux")
+    target_seg.needs_manual = res.get("needs_manual", not has_img)
+    target_seg.fail_reason = res.get("fail_reason", "")
+    target_seg.dirty = False
+
+    session.gemini_calls_used += call_stats.get("gemini_calls", 0)
+    save_session(session)
+    return session, None, 200
+
+
+def generate_missing_media(
+    session_id: str,
+    api_key: Optional[str] = None
+) -> Tuple[Optional[StoryboardSession], Optional[str], int]:
+    """
+    Generates media for all segments where media is missing or needs_manual=True.
+    """
+    session = load_session(session_id)
+    if not session:
+        return None, "Session not found", 404
+
+    missing_segs = [s for s in session.segments if not s.image_path or s.needs_manual]
+    if not missing_segs:
+        return session, None, 200
+
+    output_dir = os.path.abspath("outputs/ai_previews")
+    os.makedirs(output_dir, exist_ok=True)
+    call_stats = {"gemini_calls": 0}
+
+    def _worker(seg):
+        sc_dict = {
+            "scene_id": seg.segment_id,
+            "narration": seg.text,
+            "visual_description": seg.visual_description,
+            "image_prompt": seg.image_prompt,
+            "search_query": " ".join(clean_words(seg.text)[:3]),
+            "must_show": seg.must_show or [seg.text[:20]],
+            "must_not_show": seg.must_not_show or ["blurry", "watermark"]
+        }
+        res = generate_and_validate_scene(
+            scene=sc_dict,
+            output_dir=output_dir,
+            continuity_bible=session.continuity_bible,
+            api_key=api_key,
+            call_stats=call_stats
+        )
+        return seg, res
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(_worker, missing_segs))
+
+    for seg, res in results:
+        has_img = bool(res.get("image_path") and os.path.exists(res.get("image_path")))
+        seg.image_url = res.get("image_url", "")
+        seg.image_path = res.get("image_path", "")
+        seg.media_type = "image" if has_img else "blank"
+        seg.validation_score = res.get("validation_score", 85)
+        seg.source = res.get("source", "generated")
+        seg.source_tier = res.get("source_tier", "flux")
+        seg.needs_manual = res.get("needs_manual", not has_img)
+        seg.fail_reason = res.get("fail_reason", "")
+        seg.dirty = False
 
     session.gemini_calls_used += call_stats.get("gemini_calls", 0)
     save_session(session)
@@ -661,11 +872,11 @@ def replan_dirty_segments(
 def edit_segment_prompt(
     session_id: str,
     segment_id: str,
-    new_prompt: str
+    new_prompt: str,
+    kind: str = "image"
 ) -> Tuple[Optional[StoryboardSession], Optional[str], int]:
     """
-    Edits a segment's visual generation prompt manually.
-    Updates image_prompt without resetting is_custom or marking dirty.
+    Edits a segment's prompt (either 'image' or 'video').
     """
     session = load_session(session_id)
     if not session:
@@ -682,9 +893,12 @@ def edit_segment_prompt(
 
     clean_prompt = new_prompt.strip()
     if not clean_prompt:
-        return None, "Visual prompt cannot be empty.", 400
+        return None, "Prompt cannot be empty.", 400
 
-    target_seg.image_prompt = clean_prompt
+    if kind == "video":
+        target_seg.video_prompt = clean_prompt
+    else:
+        target_seg.image_prompt = clean_prompt
+
     save_session(session)
     return session, None, 200
-

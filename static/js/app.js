@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // DOM Elements
+    // DOM Elements - Step 1
     const scriptInput = document.getElementById('scriptInput');
     const wordCount = document.getElementById('wordCount');
     const estDuration = document.getElementById('estDuration');
@@ -7,74 +7,69 @@ document.addEventListener('DOMContentLoaded', () => {
     const retentionStatus = document.getElementById('retentionStatus');
     const templateSelect = document.getElementById('templateSelect');
     const hookSelect = document.getElementById('hookSelect');
-    
+
     const voiceSelect = document.getElementById('voiceSelect');
     const speedSelect = document.getElementById('speedSelect');
     const previewVoiceBtn = document.getElementById('previewVoiceBtn');
     const voiceAudioPreview = document.getElementById('voiceAudioPreview');
-    
-    const bgSelect = document.getElementById('bgSelect');
-    const videoUploadInput = document.getElementById('videoUploadInput');
-    const uploadNotice = document.getElementById('uploadNotice');
-    
-    const bgmSelect = document.getElementById('bgmSelect');
-    const bgmVolume = document.getElementById('bgmVolume');
-    const volLabel = document.getElementById('volLabel');
 
-    // Storyboard Elements
-    const previewScenesBtn = document.getElementById('previewScenesBtn');
-    const batchImageInput = document.getElementById('batchImageInput');
-    const storyboardToolbar = document.getElementById('storyboardToolbar');
-    const storyboardGrid = document.getElementById('storyboardGrid');
+    // DOM Elements - Step 2 (Fast Scene Editor)
+    const modeAutoBtn = document.getElementById('modeAutoBtn');
+    const modeManualBtn = document.getElementById('modeManualBtn');
+    const generateAllScenesBtn = document.getElementById('generateAllScenesBtn');
+    const generateMissingBtn = document.getElementById('generateMissingBtn');
+    const multiMediaInput = document.getElementById('multiMediaInput');
+    const toolbarDropzone = document.getElementById('toolbarDropzone');
+    const addBeatBtn = document.getElementById('addBeatBtn');
+    const blankScenesWarning = document.getElementById('blankScenesWarning');
+    const blankWarningText = document.getElementById('blankWarningText');
+    const bannerGenerateMissingBtn = document.getElementById('bannerGenerateMissingBtn');
+    const sceneCardsList = document.getElementById('sceneCardsList');
     const storyboardEmptyNotice = document.getElementById('storyboardEmptyNotice');
-    const storyboardTopic = document.getElementById('storyboardTopic');
+    const storyboardToolbar = document.getElementById('storyboardToolbar');
     const storyboardSceneCount = document.getElementById('storyboardSceneCount');
-    const storyboardCustomCount = document.getElementById('storyboardCustomCount');
-    const resetStoryboardBtn = document.getElementById('resetStoryboardBtn');
+    const storyboardTotalDur = document.getElementById('storyboardTotalDur');
+    const storyboardVisualsCount = document.getElementById('storyboardVisualsCount');
+
     const storyboardProgressCard = document.getElementById('storyboardProgressCard');
     const storyboardProgressStatus = document.getElementById('storyboardProgressStatus');
     const storyboardProgressStep = document.getElementById('storyboardProgressStep');
     const storyboardProgressPct = document.getElementById('storyboardProgressPct');
     const storyboardProgressBar = document.getElementById('storyboardProgressBar');
-    
-    // Segment Studio Elements
-    const toggleSegmentStudioBtn = document.getElementById('toggleSegmentStudioBtn');
-    const segmentStudioContainer = document.getElementById('segmentStudioContainer');
-    const segmentStudioStats = document.getElementById('segmentStudioStats');
-    const segmentStudioDirtyBadge = document.getElementById('segmentStudioDirtyBadge');
-    const replanDirtyBtn = document.getElementById('replanDirtyBtn');
-    const useSegmentsBtn = document.getElementById('useSegmentsBtn');
-    const closeSegmentStudioBtn = document.getElementById('closeSegmentStudioBtn');
-    const segmentStudioCards = document.getElementById('segmentStudioCards');
 
+    // DOM Elements - Step 3
+    const bgmSelect = document.getElementById('bgmSelect');
+    const bgmVolume = document.getElementById('bgmVolume');
+    const volLabel = document.getElementById('volLabel');
+
+    // DOM Elements - Step 4 & Preview
     const generateBtn = document.getElementById('generateBtn');
     const progressCard = document.getElementById('progressCard');
     const progressStatus = document.getElementById('progressStatus');
     const progressStep = document.getElementById('progressStep');
     const progressPct = document.getElementById('progressPct');
     const progressBar = document.getElementById('progressBar');
-    
+
     const finalVideoPlayer = document.getElementById('finalVideoPlayer');
     const playerPlaceholder = document.getElementById('playerPlaceholder');
     const playerActions = document.getElementById('playerActions');
     const downloadVideoBtn = document.getElementById('downloadVideoBtn');
-    
+
     const seoKitCard = document.getElementById('seoKitCard');
     const seoTitle = document.getElementById('seoTitle');
     const seoDesc = document.getElementById('seoDesc');
     const seoTags = document.getElementById('seoTags');
 
+    // State
     let configData = null;
     let pollInterval = null;
-
-    // Storyboard state: maps scene_id -> image_url or local_path
-    let currentScenes = [];
-    let sceneOverrides = {};
     let currentStep = 1;
+    let currentMode = 'auto'; // 'auto' | 'manual'
     let currentSession = null;
+    let activePromptTabs = {}; // segment_id -> 'image' | 'video'
 
     // ==========================================
-    // GOOGLE MATERIAL TOAST NOTIFICATIONS
+    // TOAST NOTIFICATIONS
     // ==========================================
     function showToast(message, type = 'info', duration = 3500) {
         const toastContainer = document.getElementById('toastContainer');
@@ -119,12 +114,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ==========================================
-    // GOOGLE FLOW STEPPER NAVIGATION
+    // STEP NAVIGATION
     // ==========================================
     function goToStep(stepNum) {
         if (stepNum < 1 || stepNum > 4) return;
 
-        // Validation when leaving step 1
         if (currentStep === 1 && stepNum > 1) {
             const scriptVal = scriptInput.value.trim();
             if (!scriptVal) {
@@ -134,38 +128,27 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Update step panels
         for (let i = 1; i <= 4; i++) {
             const panel = document.getElementById(`stepPanel${i}`);
             const btn = document.getElementById(`stepBtn${i}`);
             if (panel) {
-                if (i === stepNum) {
-                    panel.classList.remove('hidden');
-                } else {
-                    panel.classList.add('hidden');
-                }
+                if (i === stepNum) panel.classList.remove('hidden');
+                else panel.classList.add('hidden');
             }
             if (btn) {
                 btn.classList.remove('active');
-                if (i < stepNum) {
-                    btn.classList.add('completed');
-                } else {
-                    btn.classList.remove('completed');
-                }
-                if (i === stepNum) {
-                    btn.classList.add('active');
-                }
+                if (i < stepNum) btn.classList.add('completed');
+                else btn.classList.remove('completed');
+                if (i === stepNum) btn.classList.add('active');
             }
         }
 
         currentStep = stepNum;
 
-        // If entering Step 4, update summary
         if (stepNum === 4) {
             updateStep4Summary();
         }
 
-        // Smooth scroll to top of controls panel
         const controlsPanel = document.querySelector('.controls-panel');
         if (controlsPanel) {
             controlsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -177,7 +160,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const dur = estDuration.textContent || "0s";
         const sumScriptLength = document.getElementById('sumScriptLength');
         const sumVoice = document.getElementById('sumVoice');
-        const sumPacing = document.getElementById('sumPacing');
+        const sumStoryboard = document.getElementById('sumStoryboard');
         const sumSubtitles = document.getElementById('sumSubtitles');
 
         if (sumScriptLength) sumScriptLength.textContent = `${words} words (~${dur})`;
@@ -185,9 +168,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const voiceOpt = voiceSelect.options[voiceSelect.selectedIndex];
             sumVoice.textContent = voiceOpt ? voiceOpt.text.split('[')[0].trim() : 'Neural Voice';
         }
-        if (sumPacing && bgSelect && bgSelect.options && bgSelect.selectedIndex >= 0) {
-            const bgOpt = bgSelect.options[bgSelect.selectedIndex];
-            sumPacing.textContent = bgOpt ? bgOpt.text.split('(')[0].trim() : 'AI Ultra';
+        if (sumStoryboard) {
+            sumStoryboard.textContent = currentMode === 'auto' ? '⚡ Auto (FLUX)' : '✂️ Manual Segment';
         }
         if (sumSubtitles) {
             const activePreset = document.querySelector('.preset-option.active .preset-label');
@@ -195,39 +177,26 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Step button event listeners
     for (let i = 1; i <= 4; i++) {
         const btn = document.getElementById(`stepBtn${i}`);
-        if (btn) {
-            btn.addEventListener('click', () => goToStep(i));
-        }
+        if (btn) btn.addEventListener('click', () => goToStep(i));
     }
 
-    // Continue / Back buttons
-    const toStep2Btn = document.getElementById('toStep2Btn');
-    if (toStep2Btn) toStep2Btn.addEventListener('click', () => goToStep(2));
+    document.getElementById('toStep2Btn')?.addEventListener('click', () => goToStep(2));
+    document.getElementById('backToStep1Btn')?.addEventListener('click', () => goToStep(1));
+    document.getElementById('toStep3Btn')?.addEventListener('click', () => goToStep(3));
+    document.getElementById('backToStep2Btn')?.addEventListener('click', () => goToStep(2));
+    document.getElementById('toStep4Btn')?.addEventListener('click', () => goToStep(4));
+    document.getElementById('backToStep3Btn')?.addEventListener('click', () => goToStep(3));
 
-    const backToStep1Btn = document.getElementById('backToStep1Btn');
-    if (backToStep1Btn) backToStep1Btn.addEventListener('click', () => goToStep(1));
-
-    const toStep3Btn = document.getElementById('toStep3Btn');
-    if (toStep3Btn) toStep3Btn.addEventListener('click', () => goToStep(3));
-
-    const backToStep2Btn = document.getElementById('backToStep2Btn');
-    if (backToStep2Btn) backToStep2Btn.addEventListener('click', () => goToStep(2));
-
-    const toStep4Btn = document.getElementById('toStep4Btn');
-    if (toStep4Btn) toStep4Btn.addEventListener('click', () => goToStep(4));
-
-    const backToStep3Btn = document.getElementById('backToStep3Btn');
-    if (backToStep3Btn) backToStep3Btn.addEventListener('click', () => goToStep(3));
-
-    // 1. Fetch initial configuration
+    // ==========================================
+    // INITIAL CONFIG
+    // ==========================================
     async function loadConfig() {
         try {
             const res = await fetch('/api/config');
             configData = await res.json();
-            
+
             // Populate voices
             voiceSelect.innerHTML = '';
             for (const [id, v] of Object.entries(configData.voices)) {
@@ -237,16 +206,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (id === 'en-US-ChristopherNeural') opt.selected = true;
                 voiceSelect.appendChild(opt);
             }
-
-            // Populate backgrounds
-            bgSelect.innerHTML = '';
-            configData.backgrounds.forEach(bg => {
-                const opt = document.createElement('option');
-                opt.value = bg.id;
-                opt.textContent = `${bg.name} (${bg.description})`;
-                if (bg.id === 'ai_gemini') opt.selected = true;
-                bgSelect.appendChild(opt);
-            });
 
             // Populate BGM tracks
             bgmSelect.innerHTML = '';
@@ -267,9 +226,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 templateSelect.appendChild(opt);
             }
 
-            // Populate Viral Hooks
+            // Populate Hooks
             hookSelect.innerHTML = '<option value="">🪝 Add Viral Hook...</option>';
-            configData.hooks.forEach((hook, i) => {
+            configData.hooks.forEach(hook => {
                 const opt = document.createElement('option');
                 opt.value = hook;
                 opt.textContent = hook.length > 42 ? hook.substring(0, 42) + '...' : hook;
@@ -281,7 +240,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 2. Script Stats & Duration Calculator
+    // Script stats calculation
     function updateScriptStats() {
         const text = scriptInput.value.trim();
         const words = text ? text.split(/\s+/).length : 0;
@@ -317,42 +276,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
     scriptInput.addEventListener('input', updateScriptStats);
     speedSelect.addEventListener('change', updateScriptStats);
-    bgSelect.addEventListener('change', () => {
-        if (!storyboardGrid.classList.contains('hidden') && scriptInput.value.trim()) {
-            loadStoryboard(true);
-        }
-    });
 
-    // 3. Template Selection
     templateSelect.addEventListener('change', (e) => {
         const key = e.target.value;
         if (key && configData && configData.templates[key]) {
             scriptInput.value = configData.templates[key].script;
             updateScriptStats();
-            sceneOverrides = {};
-            currentScenes = [];
-            storyboardGrid.classList.add('hidden');
-            storyboardToolbar.classList.add('hidden');
-            storyboardEmptyNotice.classList.remove('hidden');
+            currentSession = null;
+            renderSceneCards();
         }
     });
 
-    // 4. Hook Selection
     hookSelect.addEventListener('change', (e) => {
         const hook = e.target.value;
         if (hook) {
             const current = scriptInput.value.trim();
-            if (current) {
-                scriptInput.value = `${hook} ${current}`;
-            } else {
-                scriptInput.value = hook;
-            }
+            scriptInput.value = current ? `${hook} ${current}` : hook;
             updateScriptStats();
             hookSelect.value = '';
         }
     });
 
-    // 5. Subtitle Style Preset Click
     document.querySelectorAll('.preset-option').forEach(opt => {
         opt.addEventListener('click', () => {
             document.querySelectorAll('.preset-option').forEach(o => o.classList.remove('active'));
@@ -362,18 +306,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // 6. Volume Slider
     bgmVolume.addEventListener('input', (e) => {
         const pct = Math.round(parseFloat(e.target.value) * 100);
         volLabel.textContent = `${pct}%`;
     });
 
-    // 7. Voice Audition / Preview
     previewVoiceBtn.addEventListener('click', async () => {
         const sampleText = scriptInput.value.trim().substring(0, 100) || "Welcome to the ultimate YouTube Shorts Creator!";
-        const voice = voiceSelect.value;
-        const speed = speedSelect.value;
-
         previewVoiceBtn.textContent = "⏳ Loading...";
         previewVoiceBtn.disabled = true;
 
@@ -383,8 +322,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     text: sampleText,
-                    voice: voice,
-                    voice_rate: speed
+                    voice: voiceSelect.value,
+                    voice_rate: speedSelect.value
                 })
             });
             const data = await res.json();
@@ -400,388 +339,37 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // 8. Custom Full Video Background Upload
-    videoUploadInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+    // ==========================================
+    // STEP 2: FAST SCENE EDITOR (AUTO & MANUAL)
+    // ==========================================
 
-        uploadNotice.textContent = "Uploading video...";
-        uploadNotice.classList.remove('hidden');
-
-        const formData = new FormData();
-        formData.append('file', file);
-
-        try {
-            const res = await fetch('/api/upload_background', {
-                method: 'POST',
-                body: formData
-            });
-            const data = await res.json();
-            if (data.id) {
-                const opt = document.createElement('option');
-                opt.value = data.id;
-                opt.textContent = `Custom Upload: ${data.name}`;
-                opt.selected = true;
-                bgSelect.insertBefore(opt, bgSelect.firstChild);
-                uploadNotice.textContent = `Uploaded: ${data.name}`;
-            }
-        } catch (err) {
-            uploadNotice.textContent = "Upload failed.";
+    // Mode Toggle
+    modeAutoBtn.addEventListener('click', () => {
+        if (currentMode === 'auto') return;
+        currentMode = 'auto';
+        modeAutoBtn.classList.add('active');
+        modeManualBtn.classList.remove('active');
+        generateAllScenesBtn.textContent = '⚡ Generate Visuals';
+        if (currentSession) {
+            currentSession.mode = 'auto';
+            renderSceneCards();
         }
     });
 
-    // ==========================================
-    // 9. VISUAL STORYBOARD & MANUAL SCENE EDITOR
-    // ==========================================
-
-    function updateStoryboardStats() {
-        const customCount = Object.keys(sceneOverrides).length;
-        storyboardSceneCount.textContent = `${currentScenes.length} scenes`;
-        storyboardCustomCount.textContent = `${customCount} custom photo${customCount === 1 ? '' : 's'}`;
-    }
-
-    function renderStoryboard() {
-        storyboardGrid.innerHTML = '';
-        currentScenes.forEach((sc) => {
-            const overrideVal = sceneOverrides[sc.scene_id];
-            const isCustom = Boolean(overrideVal);
-            const displayImgUrl = isCustom ? overrideVal : sc.image_url;
-
-            const card = document.createElement('div');
-            card.className = `scene-card ${isCustom ? 'custom-active' : ''}`;
-            card.id = `sceneCard_${sc.scene_id}`;
-
-            // Build coherent Google Flow prompt (never copy raw narration directly)
-            let copyPromptText = sc.image_prompt || sc.prompt;
-            if (!copyPromptText || !copyPromptText.trim()) {
-                const desc = sc.visual_description || sc.text || "cinematic scene";
-                copyPromptText = `Photorealistic vertical 9:16 cinematic shot: ${desc}, 8k, dramatic lighting`;
-            }
-
-            // Validation score quality badge (>=80 green, 60-79 yellow, <60 red)
-            const score = sc.validation_score !== undefined ? sc.validation_score : 85;
-            let scoreClass = 'score-high';
-            if (score < 60) scoreClass = 'score-low';
-            else if (score < 80) scoreClass = 'score-med';
-
-            // Source tier badge
-            const tier = (sc.source_tier || '').toLowerCase();
-            let tierBadge = '';
-            if (tier.includes('failsafe') || tier.includes('failed') || tier.includes('dark_canvas')) {
-                tierBadge = `<span class="scene-tier-badge tier-failed" title="AI Generation Failed - Dark Canvas Failsafe">⚠️ AI GENERATION FAILED</span>`;
-            } else if (tier.includes('pollinations')) {
-                tierBadge = `<span class="scene-tier-badge tier-fallback" title="Source: Pollinations AI">POLLINATIONS AI</span>`;
-            } else if (tier.includes('flux')) {
-                tierBadge = `<span class="scene-tier-badge tier-primary" title="Source: Cloudflare FLUX">FLUX AI</span>`;
-            } else if (tier.includes('imagen')) {
-                tierBadge = `<span class="scene-tier-badge tier-primary" title="Source: Google Imagen 3">IMAGEN 3</span>`;
-            }
-
-            card.innerHTML = `
-                <div class="scene-header">
-                    <span>Scene ${sc.scene_id + 1}</span>
-                    <span class="scene-time">${sc.start_time}s - ${sc.end_time}s (${sc.duration}s)</span>
-                </div>
-                <div class="scene-preview-box">
-                    <img src="${displayImgUrl}" class="scene-thumb" id="sceneImg_${sc.scene_id}" alt="Scene ${sc.scene_id + 1}" loading="lazy">
-                    <span class="scene-badge ${isCustom ? 'badge-custom' : 'badge-auto'}" id="sceneBadge_${sc.scene_id}" title="${sc.visual_description || ''}">
-                        ${isCustom ? 'CUSTOM' : (tier.includes('failsafe') || tier.includes('failed') || tier.includes('dark_canvas') ? 'DARK CANVAS' : (sc.shot_type ? sc.shot_type.toUpperCase() : 'AI ULTRA'))}
-                    </span>
-                    <span class="scene-score-badge ${scoreClass}" title="Quality Score: ${score}/100">
-                        ${score}%
-                    </span>
-                    ${tierBadge}
-                </div>
-                <div class="scene-body">
-                    <div class="scene-script-text" title="${sc.visual_description ? 'Director: ' + sc.visual_description + ' | ' : ''}${sc.text}">"${sc.text}"</div>
-                    <div class="scene-actions">
-                        <button class="btn-copy-prompt" data-prompt="${copyPromptText.replace(/"/g, '&quot;')}" title="Copy exact prompt for Google Flow">
-                            📋 Copy Prompt
-                        </button>
-                        <label class="btn-replace-img" title="Upload your Google Flow image for this scene">
-                            📁 Replace
-                            <input type="file" class="scene-file-input" data-scene-id="${sc.scene_id}" accept="image/jpeg,image/png,image/webp" style="display:none;">
-                        </label>
-                        <button class="btn-refresh-scene" data-scene-id="${sc.scene_id}" title="Get alternate authentic photo or re-roll AI image">
-                            🔄 Alt
-                        </button>
-                    </div>
-                </div>
-            `;
-
-            storyboardGrid.appendChild(card);
-        });
-
-        // Hook copy prompt buttons for Google Flow
-        document.querySelectorAll('.btn-copy-prompt').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                const promptText = btn.getAttribute('data-prompt');
-                try {
-                    if (navigator.clipboard && window.isSecureContext) {
-                        await navigator.clipboard.writeText(promptText);
-                    } else {
-                        const textArea = document.createElement("textarea");
-                        textArea.value = promptText;
-                        textArea.style.position = "fixed";
-                        textArea.style.left = "-999999px";
-                        document.body.appendChild(textArea);
-                        textArea.focus();
-                        textArea.select();
-                        document.execCommand('copy');
-                        textArea.remove();
-                    }
-                    showToast("📋 Copied prompt for Google Flow! Paste into flow.google", "success");
-                    const oldText = btn.innerHTML;
-                    btn.innerHTML = "✅ Copied!";
-                    setTimeout(() => { btn.innerHTML = oldText; }, 2000);
-                } catch (err) {
-                    showToast("Failed to copy prompt: " + err.message, "error");
-                }
-            });
-        });
-
-        // Hook single scene upload inputs
-        document.querySelectorAll('.scene-file-input').forEach(input => {
-            input.addEventListener('change', async (e) => {
-                const file = e.target.files[0];
-                const sceneId = parseInt(e.target.getAttribute('data-scene-id'));
-                if (!file) return;
-
-                const card = document.getElementById(`sceneCard_${sceneId}`);
-                const img = document.getElementById(`sceneImg_${sceneId}`);
-                const badge = document.getElementById(`sceneBadge_${sceneId}`);
-
-                badge.textContent = "UPLOADING...";
-                badge.className = "scene-badge badge-custom";
-
-                const formData = new FormData();
-                formData.append('file', file);
-                formData.append('scene_id', sceneId);
-
-                try {
-                    const res = await fetch('/api/upload_scene_image', {
-                        method: 'POST',
-                        body: formData
-                    });
-                    const data = await res.json();
-                    if (data.local_path) {
-                        sceneOverrides[sceneId] = data.local_path;
-                        img.src = data.image_url;
-                        badge.textContent = "CUSTOM";
-                        card.classList.add('custom-active');
-                        updateStoryboardStats();
-                    }
-                } catch (err) {
-                    showToast('Image upload failed: ' + err.message, 'error');
-                    badge.textContent = "ERROR";
-                }
-            });
-        });
-
-        // Hook alternate image refresh buttons
-        document.querySelectorAll('.btn-refresh-scene').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                const sceneId = parseInt(btn.getAttribute('data-scene-id'));
-                const sc = currentScenes[sceneId];
-                if (!sc) return;
-
-                btn.textContent = "⏳";
-                btn.disabled = true;
-
-                // Collect excluded URLs so it doesn't pick an already used one
-                const excluded = currentScenes.map(s => s.image_url);
-                Object.values(sceneOverrides).forEach(v => excluded.push(v));
-
-                try {
-                    const res = await fetch('/api/refresh_scene_image', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            script: scriptInput.value.trim(),
-                            scene_id: sceneId,
-                            scene_text: sc.text,
-                            exclude_urls: excluded,
-                            bg_choice: bgSelect.value
-                        })
-                    });
-                    const data = await res.json();
-                    if (data.found && data.image_url) {
-                        sceneOverrides[sceneId] = data.image_url;
-                        const img = document.getElementById(`sceneImg_${sceneId}`);
-                        const badge = document.getElementById(`sceneBadge_${sceneId}`);
-                        const card = document.getElementById(`sceneCard_${sceneId}`);
-
-                        img.src = data.image_url;
-                        badge.textContent = bgSelect.value === 'ai_gemini' ? "AI ULTRA" : "AUTHENTIC";
-                        badge.className = "scene-badge badge-auto";
-                        card.classList.remove('custom-active');
-                        updateStoryboardStats();
-                        showToast("✨ Alternative scene image applied!", "success");
-                    } else {
-                        showToast(data.message || 'No additional alternative photo found.', 'warning');
-                    }
-                } catch (err) {
-                    console.error('Alternate failed:', err);
-                    showToast('Failed to get alternative image: ' + err.message, 'error');
-                } finally {
-                    btn.textContent = "🔄 Alt";
-                    btn.disabled = false;
-                }
-            });
-        });
-    }
-
-    async function loadStoryboard(useOverrides = true) {
-        const script = scriptInput.value.trim();
-        if (!script) {
-            showToast("Please write or paste your script first before opening the storyboard!", "warning");
-            scriptInput.focus();
-            return;
+    modeManualBtn.addEventListener('click', () => {
+        if (currentMode === 'manual') return;
+        currentMode = 'manual';
+        modeManualBtn.classList.add('active');
+        modeAutoBtn.classList.remove('active');
+        generateAllScenesBtn.textContent = '✂️ Plan Scenes (No AI)';
+        if (currentSession) {
+            currentSession.mode = 'manual';
+            renderSceneCards();
         }
-
-        // Show progress indicator and disable button
-        if (previewScenesBtn) previewScenesBtn.disabled = true;
-        if (storyboardProgressCard) storyboardProgressCard.classList.remove('hidden');
-        if (storyboardEmptyNotice) storyboardEmptyNotice.classList.add('hidden');
-        if (storyboardToolbar) storyboardToolbar.classList.add('hidden');
-        if (storyboardGrid) storyboardGrid.classList.add('hidden');
-
-        const isAi = bgSelect.value === 'ai_gemini';
-        let progress = 5;
-
-        function setProgress(pct, statusText, stepText) {
-            progress = pct;
-            if (storyboardProgressBar) storyboardProgressBar.style.width = `${pct}%`;
-            if (storyboardProgressPct) storyboardProgressPct.textContent = `${pct}%`;
-            if (statusText && storyboardProgressStatus) storyboardProgressStatus.textContent = statusText;
-            if (stepText && storyboardProgressStep) storyboardProgressStep.textContent = stepText;
-            if (previewScenesBtn) {
-                previewScenesBtn.innerHTML = `<span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></span> Auto-Matching (${pct}%)...`;
-            }
-        }
-
-        setProgress(8, "Auto-Matching Scenes...", "Analyzing script structure & visual pacing...");
-
-        // Progress simulation timer calibrated for engine mode
-        const timerSteps = isAi ? [
-            { at: 500, pct: 20, status: "Directing AI Scenes...", step: "Consulting Gemini AI visual director..." },
-            { at: 1500, pct: 38, status: "Generating Prompts...", step: "Crafting photorealistic 9:16 scene prompts..." },
-            { at: 3200, pct: 58, status: "Synthesizing Visuals...", step: "Generating high-definition visual assets..." },
-            { at: 5500, pct: 74, status: "Downloading Assets...", step: "Rendering cinematic scene visuals..." },
-            { at: 8000, pct: 88, status: "Verifying Scenes...", step: "Formatting 9:16 vertical frames & aspect ratios..." }
-        ] : [
-            { at: 250, pct: 25, status: "Detecting Topic...", step: "Identifying historical & encyclopedic entities..." },
-            { at: 650, pct: 52, status: "Querying Archives...", step: "Matching authentic Wikimedia Commons archives..." },
-            { at: 1300, pct: 75, status: "Filtering Visuals...", step: "Verifying high-resolution imagery & licensing..." },
-            { at: 2000, pct: 88, status: "Formatting Storyboard...", step: "Arranging scene cards & timestamps..." }
-        ];
-
-        const timeouts = [];
-        timerSteps.forEach(s => {
-            timeouts.push(setTimeout(() => {
-                setProgress(s.pct, s.status, s.step);
-            }, s.at));
-        });
-
-        const creepInterval = setInterval(() => {
-            if (progress < 94) {
-                setProgress(progress + 1);
-            }
-        }, isAi ? 600 : 250);
-
-        try {
-            const res = await fetch('/api/prepare_scenes', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    script: script,
-                    voice_rate: speedSelect.value,
-                    bg_choice: bgSelect.value,
-                    scene_overrides: useOverrides ? sceneOverrides : {}
-                })
-            });
-            if (!res.ok) {
-                let errMsg = `Server returned ${res.status}`;
-                try {
-                    const errData = await res.json();
-                    if (errData && errData.detail) errMsg = errData.detail;
-                } catch (_) {
-                    errMsg = await res.text();
-                }
-                throw new Error(errMsg);
-            }
-            const data = await res.json();
-            currentScenes = data.scenes || [];
-
-            // Clear timers
-            timeouts.forEach(t => clearTimeout(t));
-            clearInterval(creepInterval);
-
-            // 100% completion
-            setProgress(100, "Scenes Matched!", `Ready! Loaded ${currentScenes.length} scenes.`);
-            previewScenesBtn.innerHTML = '✅ Matched (100%)';
-
-            storyboardTopic.innerHTML = `Topic: <strong>${data.topic}</strong>`;
-            const callsEl = document.getElementById('storyboardCallsCount');
-            if (callsEl && typeof data.gemini_calls_used === 'number') {
-                callsEl.textContent = `⚡ ${data.gemini_calls_used} API call${data.gemini_calls_used === 1 ? '' : 's'}`;
-            }
-            updateStoryboardStats();
-
-            // Short delay so user clearly sees 100% completion
-            await new Promise(r => setTimeout(r, 450));
-
-            if (storyboardProgressCard) storyboardProgressCard.classList.add('hidden');
-            if (storyboardToolbar) storyboardToolbar.classList.remove('hidden');
-            if (storyboardGrid) storyboardGrid.classList.remove('hidden');
-
-            renderStoryboard();
-
-            if (data.warning) {
-                showToast(data.warning, 'warning', 15000);
-                let warningBanner = document.getElementById('storyboardWarningBanner');
-                if (!warningBanner) {
-                    warningBanner = document.createElement('div');
-                    warningBanner.id = 'storyboardWarningBanner';
-                    warningBanner.className = 'storyboard-warning-banner';
-                    const container = document.getElementById('storyboardContainer');
-                    const grid = document.getElementById('storyboardGrid');
-                    if (container && grid) {
-                        container.insertBefore(warningBanner, grid);
-                    }
-                }
-                warningBanner.innerHTML = `<span>${data.warning}</span>`;
-                warningBanner.classList.remove('hidden');
-            } else {
-                const warningBanner = document.getElementById('storyboardWarningBanner');
-                if (warningBanner) warningBanner.classList.add('hidden');
-                showToast(`✨ Storyboard ready! Loaded ${currentScenes.length} scenes.`, 'success');
-            }
-        } catch (err) {
-            timeouts.forEach(t => clearTimeout(t));
-            clearInterval(creepInterval);
-            if (storyboardProgressCard) storyboardProgressCard.classList.add('hidden');
-            if (storyboardEmptyNotice) storyboardEmptyNotice.classList.remove('hidden');
-            showToast('Failed to prepare storyboard scenes: ' + err.message, 'error');
-        } finally {
-            if (previewScenesBtn) {
-                previewScenesBtn.innerHTML = '🔍 Auto-Match & Preview Scenes';
-                previewScenesBtn.disabled = false;
-            }
-        }
-    }
-
-    previewScenesBtn.addEventListener('click', () => loadStoryboard(true));
-    resetStoryboardBtn.addEventListener('click', () => {
-        sceneOverrides = {};
-        loadStoryboard(false);
     });
 
-    // Batch Image Upload Handler
-    batchImageInput.addEventListener('change', async (e) => {
-        const files = Array.from(e.target.files);
-        if (files.length === 0) return;
-
+    // Generate / Plan All Scenes
+    generateAllScenesBtn.addEventListener('click', async () => {
         const script = scriptInput.value.trim();
         if (!script) {
             showToast("Please write or paste your script first!", "warning");
@@ -789,255 +377,590 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        previewScenesBtn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span> Uploading...';
-        previewScenesBtn.disabled = true;
+        generateAllScenesBtn.disabled = true;
+        storyboardProgressCard.classList.remove('hidden');
+        storyboardEmptyNotice.classList.add('hidden');
+        sceneCardsList.innerHTML = '';
 
-        const formData = new FormData();
-        files.forEach(f => formData.append('files', f));
+        let pct = 10;
+        storyboardProgressBar.style.width = '10%';
+        storyboardProgressPct.textContent = '10%';
+        storyboardProgressStatus.textContent = currentMode === 'auto' ? 'Auto-Generating Visuals...' : 'Planning Manual Segments...';
+        storyboardProgressStep.textContent = 'Splitting script into story beats...';
+
+        const progressTimer = setInterval(() => {
+            if (pct < 90) {
+                pct += 5;
+                storyboardProgressBar.style.width = `${pct}%`;
+                storyboardProgressPct.textContent = `${pct}%`;
+                if (pct > 30 && currentMode === 'auto') {
+                    storyboardProgressStep.textContent = 'Directing scenes with Gemini & rendering FLUX visuals...';
+                }
+            }
+        }, 600);
 
         try {
-            const res = await fetch('/api/upload_batch_images', {
-                method: 'POST',
-                body: formData
-            });
-            const data = await res.json();
-            const uploaded = data.uploaded || [];
-
-            if (uploaded.length > 0) {
-                // If scenes are not yet loaded, load them
-                if (currentScenes.length === 0) {
-                    await loadStoryboard(false);
-                }
-
-                // Map uploaded photos sequentially to scenes
-                uploaded.forEach((u, i) => {
-                    if (i < currentScenes.length) {
-                        sceneOverrides[i] = u.local_path;
-                    }
+            let res;
+            if (currentMode === 'auto') {
+                res = await fetch('/api/auto/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ script })
                 });
-
-                updateStoryboardStats();
-                renderStoryboard();
-                showToast(`Successfully assigned ${uploaded.length} custom photo(s) to scenes!`, 'success');
+            } else {
+                res = await fetch('/api/segments/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        script,
+                        mode: 'manual',
+                        manual_delimiter: script.includes('|||')
+                    })
+                });
             }
+
+            clearInterval(progressTimer);
+
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || 'Failed to generate scenes');
+            }
+
+            storyboardProgressBar.style.width = '100%';
+            storyboardProgressPct.textContent = '100%';
+            storyboardProgressStatus.textContent = 'Scenes Ready!';
+            storyboardProgressStep.textContent = 'Loading scene cards...';
+
+            currentSession = await res.json();
+            renderSceneCards();
+            showToast(`✨ Generated ${currentSession.segments.length} scenes in ${currentMode === 'auto' ? 'Auto' : 'Manual'} mode!`, 'success');
+
         } catch (err) {
-            showToast('Batch upload failed: ' + err.message, 'error');
+            clearInterval(progressTimer);
+            showToast('Generation failed: ' + err.message, 'error');
+            storyboardEmptyNotice.classList.remove('hidden');
         } finally {
-            previewScenesBtn.innerHTML = '🔍 Auto-Match & Preview Scenes';
-            previewScenesBtn.disabled = false;
-            batchImageInput.value = '';
+            setTimeout(() => {
+                storyboardProgressCard.classList.add('hidden');
+                generateAllScenesBtn.disabled = false;
+            }, 400);
         }
     });
 
-    // ==========================================
-    // 9B. SEGMENT STUDIO (MANUAL SEGMENTATION)
-    // ==========================================
+    // Generate Missing Media
+    async function triggerGenerateMissing() {
+        if (!currentSession) return;
+        generateMissingBtn.disabled = true;
+        bannerGenerateMissingBtn.disabled = true;
+        showToast('Generating visuals for blank scenes via FLUX...', 'info');
 
-    function autoResizeTextarea(el) {
-        if (!el) return;
-        el.style.height = 'auto';
-        el.style.height = Math.max(el.scrollHeight, 40) + 'px';
+        try {
+            const res = await fetch(`/api/segments/${currentSession.session_id}/generate_missing`, {
+                method: 'POST'
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || 'Failed to generate missing media');
+            }
+            currentSession = await res.json();
+            renderSceneCards();
+            showToast('✨ Missing scene visuals generated!', 'success');
+        } catch (err) {
+            showToast('Failed to generate missing: ' + err.message, 'error');
+        } finally {
+            generateMissingBtn.disabled = false;
+            bannerGenerateMissingBtn.disabled = false;
+        }
     }
 
-    function renderSegmentStudio() {
-        if (!currentSession || !segmentStudioCards) return;
+    generateMissingBtn.addEventListener('click', triggerGenerateMissing);
+    bannerGenerateMissingBtn.addEventListener('click', triggerGenerateMissing);
 
-        const segs = currentSession.segments || [];
-        const dirtyCount = segs.filter(s => s.dirty).length;
-
-        if (segmentStudioStats) {
-            segmentStudioStats.textContent = `${segs.length} segment${segs.length === 1 ? '' : 's'} • ${currentSession.total_duration}s total`;
+    // Multi-File Upload & Toolbar Dropzone
+    async function handleMultiFileUpload(files) {
+        if (!files || files.length === 0) return;
+        const script = scriptInput.value.trim();
+        if (!script) {
+            showToast("Please enter a script first!", "warning");
+            return;
         }
 
-        if (segmentStudioDirtyBadge) {
-            if (dirtyCount > 0) {
-                segmentStudioDirtyBadge.textContent = `${dirtyCount} DIRTY`;
-                segmentStudioDirtyBadge.classList.remove('hidden');
-            } else {
-                segmentStudioDirtyBadge.classList.add('hidden');
+        if (!currentSession) {
+            try {
+                const cRes = await fetch('/api/segments/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ script, mode: currentMode })
+                });
+                currentSession = await cRes.json();
+            } catch (err) {
+                showToast("Failed to create session for media: " + err.message, "error");
+                return;
             }
         }
 
-        if (replanDirtyBtn) {
-            replanDirtyBtn.disabled = dirtyCount === 0;
-            replanDirtyBtn.textContent = `↻ Re-plan Dirty (${dirtyCount})`;
+        showToast(`Uploading ${files.length} file(s) across scenes...`, 'info');
+        const segs = currentSession.segments || [];
+
+        for (let i = 0; i < files.length && i < segs.length; i++) {
+            const file = files[i];
+            const seg = segs[i];
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('segment_id', seg.segment_id);
+
+            try {
+                const uRes = await fetch(`/api/segments/${currentSession.session_id}/upload_media`, {
+                    method: 'POST',
+                    body: formData
+                });
+                if (uRes.ok) {
+                    currentSession = await uRes.json();
+                }
+            } catch (err) {
+                console.error(`Upload error on scene ${i}:`, err);
+            }
         }
 
-        segmentStudioCards.innerHTML = '';
+        renderSceneCards();
+        showToast("✨ Files assigned to scenes!", "success");
+    }
+
+    multiMediaInput.addEventListener('change', (e) => {
+        handleMultiFileUpload(Array.from(e.target.files));
+        multiMediaInput.value = '';
+    });
+
+    toolbarDropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        toolbarDropzone.classList.add('dragover');
+    });
+
+    toolbarDropzone.addEventListener('dragleave', () => {
+        toolbarDropzone.classList.remove('dragover');
+    });
+
+    toolbarDropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        toolbarDropzone.classList.remove('dragover');
+        handleMultiFileUpload(Array.from(e.dataTransfer.files));
+    });
+
+    // Add Scene Beat
+    addBeatBtn.addEventListener('click', async () => {
+        if (!currentSession || !currentSession.segments || currentSession.segments.length === 0) {
+            showToast("Please generate or plan scenes first!", "warning");
+            return;
+        }
+        const text = prompt("Enter narration text for the new scene:");
+        if (!text || !text.trim()) return;
+
+        const lastSeg = currentSession.segments[currentSession.segments.length - 1];
+        try {
+            const res = await fetch(`/api/segments/${currentSession.session_id}/add`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    after_segment_id: lastSeg.segment_id,
+                    text: text.trim()
+                })
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || 'Failed to add scene');
+            }
+            currentSession = await res.json();
+            renderSceneCards();
+            showToast("➕ Scene added!", "success");
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    });
+
+    // Render Scene Cards
+    function renderSceneCards() {
+        sceneCardsList.innerHTML = '';
+
+        if (!currentSession || !currentSession.segments || currentSession.segments.length === 0) {
+            storyboardEmptyNotice.classList.remove('hidden');
+            storyboardSceneCount.textContent = '0 scenes';
+            storyboardTotalDur.textContent = '0.0s total';
+            storyboardVisualsCount.textContent = '0 visuals loaded';
+            blankScenesWarning.classList.add('hidden');
+            generateMissingBtn.classList.add('hidden');
+            return;
+        }
+
+        storyboardEmptyNotice.classList.add('hidden');
+        const segs = currentSession.segments;
+
+        // Calculate stats
+        let loadedVisuals = 0;
+        let blankCount = 0;
+        segs.forEach(s => {
+            const hasMedia = Boolean(s.image_path || s.image_url) && s.media_type !== 'blank';
+            if (hasMedia) loadedVisuals++;
+            else blankCount++;
+        });
+
+        storyboardSceneCount.textContent = `${segs.length} scenes`;
+        storyboardTotalDur.textContent = `${currentSession.total_duration}s total`;
+        storyboardVisualsCount.textContent = `${loadedVisuals} visuals loaded`;
+
+        // Warning banner
+        if (blankCount > 0) {
+            blankScenesWarning.classList.remove('hidden');
+            blankWarningText.textContent = `${blankCount} scene${blankCount === 1 ? '' : 's'} have no visual media and will render as black background.`;
+            if (currentMode === 'auto') {
+                generateMissingBtn.classList.remove('hidden');
+                bannerGenerateMissingBtn.style.display = 'inline-block';
+            } else {
+                generateMissingBtn.classList.add('hidden');
+                bannerGenerateMissingBtn.style.display = 'none';
+            }
+        } else {
+            blankScenesWarning.classList.add('hidden');
+            generateMissingBtn.classList.add('hidden');
+        }
 
         segs.forEach((seg, idx) => {
             const card = document.createElement('div');
-            card.className = `segment-card ${seg.dirty ? 'dirty-card' : ''}`;
-            card.id = `segmentCard_${seg.segment_id}`;
+            const hasMedia = Boolean(seg.image_path || seg.image_url) && seg.media_type !== 'blank';
+            card.className = `scene-editor-card ${hasMedia ? '' : 'blank-card'}`;
+            card.id = `sceneCard_${seg.segment_id}`;
 
-            const words = seg.text.trim().split(/\s+/).filter(Boolean);
-            const canSplit = words.length >= 2;
-            const isLast = idx === segs.length - 1;
-            const canDelete = segs.length > 1;
+            const activeTab = activePromptTabs[seg.segment_id] || 'image';
+            const promptText = activeTab === 'video' ? (seg.video_prompt || '') : (seg.image_prompt || '');
+
+            const isVideo = seg.media_type === 'video' || (typeof seg.image_url === 'string' && (seg.image_url.endsWith('.mp4') || seg.image_url.endsWith('.webm')));
 
             card.innerHTML = `
-                <div class="segment-card-header">
-                    <div class="segment-card-title">
-                        <span class="segment-number">SEGMENT #${idx + 1}</span>
+                <div class="scene-card-top">
+                    <div class="scene-card-badge-group">
+                        <span class="scene-idx-badge">SCENE #${idx + 1}</span>
                         <span class="segment-card-dur">${seg.duration}s</span>
-                        ${seg.dirty ? '<span class="badge-dirty">DIRTY</span>' : ''}
-                        ${seg.is_custom ? '<span class="badge" style="color:var(--accent-green)">CUSTOM</span>' : ''}
+                        ${seg.source === 'manual' ? '<span class="badge" style="color:var(--accent-green);font-size:0.7rem;font-weight:700;">MANUAL</span>' : ''}
+                        ${!hasMedia ? '<span class="badge" style="color:#f59e0b;font-size:0.7rem;font-weight:700;">BLANK</span>' : ''}
                     </div>
-                    <div class="segment-header-actions">
-                        <button class="segment-btn btn-copy-prompt" data-segment-id="${seg.segment_id}" title="Copy visual prompt to clipboard">
-                            📋 Copy Prompt
+                    <div class="segment-card-actions">
+                        <button class="segment-btn btn-split" data-segment-id="${seg.segment_id}" title="Split into two scenes">
+                            ✂️ Split
+                        </button>
+                        <button class="segment-btn btn-merge" data-segment-id="${seg.segment_id}" ${idx === segs.length - 1 ? 'disabled' : ''} title="Merge with next scene">
+                            🔗 Merge
+                        </button>
+                        <button class="segment-btn btn-danger btn-del" data-segment-id="${seg.segment_id}" ${segs.length <= 1 ? 'disabled' : ''} title="Delete scene">
+                            🗑️
                         </button>
                     </div>
                 </div>
 
-                <div class="segment-field-group">
-                    <label class="segment-field-label">NARRATION</label>
-                    <textarea class="segment-card-textarea segment-narration-textarea" data-segment-id="${seg.segment_id}" placeholder="Spoken narration for this segment...">${seg.text}</textarea>
-                </div>
+                <div class="scene-card-main">
+                    <!-- Left: Media Slot -->
+                    <div class="scene-media-slot" id="mediaSlot_${seg.segment_id}" title="Click, drop file, or paste image/video here">
+                        ${hasMedia ? (
+                            isVideo ? `
+                                <video src="${seg.image_url}" class="scene-media-thumb" muted loop playsinline></video>
+                                <span class="badge" style="position:absolute;top:4px;left:4px;font-size:0.6rem;background:rgba(0,0,0,0.7);">VIDEO</span>
+                            ` : `
+                                <img src="${seg.image_url}" class="scene-media-thumb" alt="Scene ${idx + 1}">
+                            `
+                        ) : `
+                            <div class="scene-media-empty">
+                                <span class="empty-icon">📁</span>
+                                <span class="empty-text">Drop or Paste Media</span>
+                            </div>
+                        `}
+                        <div class="scene-media-overlay-btns">
+                            <label class="media-mini-btn" title="Replace visual file">
+                                📁 Replace
+                                <input type="file" class="single-media-input" data-segment-id="${seg.segment_id}" accept="image/*,video/*" style="display:none;">
+                            </label>
+                            ${hasMedia ? `
+                                <button type="button" class="media-mini-btn btn-clear-media" data-segment-id="${seg.segment_id}" title="Clear visual">
+                                    ✕ Clear
+                                </button>
+                            ` : ''}
+                            ${currentMode === 'auto' ? `
+                                <button type="button" class="media-mini-btn btn-reroll-media" data-segment-id="${seg.segment_id}" title="Re-generate via FLUX">
+                                    ↻ Re-roll
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
 
-                <div class="segment-field-group" style="margin-top: 8px;">
-                    <label class="segment-field-label">VISUAL GENERATION PROMPT</label>
-                    <textarea class="segment-card-textarea segment-prompt-textarea" data-segment-id="${seg.segment_id}" placeholder="Visual prompt (Subject, Action, Environment, Composition, Lighting, Style: photorealistic 9:16, no text, no watermark)...">${seg.image_prompt || ''}</textarea>
-                </div>
+                    <!-- Right: Text & Prompts -->
+                    <div class="scene-content-col">
+                        <div class="segment-field-group">
+                            <label class="segment-field-label">SPOKEN NARRATION</label>
+                            <textarea class="segment-card-textarea narration-textarea" data-segment-id="${seg.segment_id}">${seg.text}</textarea>
+                        </div>
 
-                <div class="segment-card-actions">
-                    <button class="segment-btn btn-split" data-segment-id="${seg.segment_id}" ${canSplit ? '' : 'disabled'} title="Split into two segments">
-                        ✂️ Split
-                    </button>
-                    <button class="segment-btn btn-merge" data-segment-id="${seg.segment_id}" ${!isLast ? '' : 'disabled'} title="Merge with next segment">
-                        🔗 Merge Next
-                    </button>
-                    <button class="segment-btn btn-add" data-segment-id="${seg.segment_id}" title="Add new segment after this">
-                        ➕ Add After
-                    </button>
-                    <button class="segment-btn btn-danger btn-del" data-segment-id="${seg.segment_id}" ${canDelete ? '' : 'disabled'} title="Delete this segment">
-                        🗑️ Delete
-                    </button>
+                        <div class="segment-field-group">
+                            <div class="prompt-tabs">
+                                <span class="segment-field-label" style="margin-right:8px;">PROMPT:</span>
+                                <button type="button" class="prompt-tab-btn ${activeTab === 'image' ? 'active' : ''}" data-tab="image" data-segment-id="${seg.segment_id}">
+                                    🖼️ Image
+                                </button>
+                                <button type="button" class="prompt-tab-btn ${activeTab === 'video' ? 'active' : ''}" data-tab="video" data-segment-id="${seg.segment_id}">
+                                    🎬 Video
+                                </button>
+                                <button type="button" class="segment-btn btn-copy-prompt" style="margin-left:auto;" data-segment-id="${seg.segment_id}" title="Copy prompt for external generator">
+                                    📋 Copy
+                                </button>
+                            </div>
+                            <textarea class="segment-card-textarea segment-prompt-textarea prompt-textarea" data-segment-id="${seg.segment_id}">${promptText}</textarea>
+                        </div>
+                    </div>
                 </div>
             `;
 
-            // Textarea auto-resize
-            const narrationTextarea = card.querySelector('.segment-narration-textarea');
-            const promptTextarea = card.querySelector('.segment-prompt-textarea');
+            // Setup single media input
+            const fileInput = card.querySelector('.single-media-input');
+            if (fileInput) {
+                fileInput.addEventListener('change', async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('segment_id', seg.segment_id);
 
-            [narrationTextarea, promptTextarea].forEach(ta => {
-                if (ta) {
-                    ta.addEventListener('input', () => autoResizeTextarea(ta));
-                    setTimeout(() => autoResizeTextarea(ta), 0);
-                }
-            });
+                    try {
+                        const res = await fetch(`/api/segments/${currentSession.session_id}/upload_media`, {
+                            method: 'POST',
+                            body: formData
+                        });
+                        if (!res.ok) throw new Error("Upload failed");
+                        currentSession = await res.json();
+                        renderSceneCards();
+                        showToast("Visual uploaded!", "success");
+                    } catch (err) {
+                        showToast(err.message, "error");
+                    }
+                });
+            }
 
-            // Narration textarea edit handling
-            let initialNarration = seg.text;
-            narrationTextarea.addEventListener('blur', async () => {
-                const newVal = narrationTextarea.value.trim();
-                if (!newVal || newVal === initialNarration) return;
+            // Setup Media Slot Drag & Drop and Paste
+            const mediaSlot = card.querySelector('.scene-media-slot');
+            if (mediaSlot) {
+                mediaSlot.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    mediaSlot.classList.add('dragover');
+                });
+                mediaSlot.addEventListener('dragleave', () => {
+                    mediaSlot.classList.remove('dragover');
+                });
+                mediaSlot.addEventListener('drop', async (e) => {
+                    e.preventDefault();
+                    mediaSlot.classList.remove('dragover');
+                    const file = e.dataTransfer.files[0];
+                    if (!file) return;
+
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('segment_id', seg.segment_id);
+
+                    try {
+                        const res = await fetch(`/api/segments/${currentSession.session_id}/upload_media`, {
+                            method: 'POST',
+                            body: formData
+                        });
+                        if (!res.ok) throw new Error("Upload failed");
+                        currentSession = await res.json();
+                        renderSceneCards();
+                        showToast("Visual dropped!", "success");
+                    } catch (err) {
+                        showToast(err.message, "error");
+                    }
+                });
+
+                // Paste from clipboard
+                mediaSlot.tabIndex = 0;
+                mediaSlot.addEventListener('paste', async (e) => {
+                    const items = e.clipboardData.items;
+                    for (let i = 0; i < items.length; i++) {
+                        if (items[i].type.indexOf('image') !== -1 || items[i].type.indexOf('video') !== -1) {
+                            const file = items[i].getAsFile();
+                            const formData = new FormData();
+                            formData.append('file', file);
+                            formData.append('segment_id', seg.segment_id);
+
+                            try {
+                                const res = await fetch(`/api/segments/${currentSession.session_id}/upload_media`, {
+                                    method: 'POST',
+                                    body: formData
+                                });
+                                if (!res.ok) throw new Error("Paste failed");
+                                currentSession = await res.json();
+                                renderSceneCards();
+                                showToast("Visual pasted from clipboard!", "success");
+                            } catch (err) {
+                                showToast(err.message, "error");
+                            }
+                            break;
+                        }
+                    }
+                });
+            }
+
+            // Clear Media
+            const clearBtn = card.querySelector('.btn-clear-media');
+            if (clearBtn) {
+                clearBtn.addEventListener('click', async () => {
+                    try {
+                        const res = await fetch(`/api/segments/${currentSession.session_id}/clear_media`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ segment_id: seg.segment_id })
+                        });
+                        if (!res.ok) throw new Error("Failed to clear media");
+                        currentSession = await res.json();
+                        renderSceneCards();
+                        showToast("Media cleared.", "info");
+                    } catch (err) {
+                        showToast(err.message, "error");
+                    }
+                });
+            }
+
+            // Re-roll single scene via FLUX
+            const rerollBtn = card.querySelector('.btn-reroll-media');
+            if (rerollBtn) {
+                rerollBtn.addEventListener('click', async () => {
+                    rerollBtn.textContent = '⏳';
+                    rerollBtn.disabled = true;
+                    try {
+                        const res = await fetch(`/api/segments/${currentSession.session_id}/generate`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ segment_id: seg.segment_id })
+                        });
+                        if (!res.ok) throw new Error("Re-roll failed");
+                        currentSession = await res.json();
+                        renderSceneCards();
+                        showToast("✨ Scene visual regenerated!", "success");
+                    } catch (err) {
+                        showToast(err.message, "error");
+                    } finally {
+                        rerollBtn.textContent = '↻ Re-roll';
+                        rerollBtn.disabled = false;
+                    }
+                });
+            }
+
+            // Inline Narration Edit
+            const narrTextarea = card.querySelector('.narration-textarea');
+            narrTextarea.addEventListener('blur', async () => {
+                const newVal = narrTextarea.value.trim();
+                if (!newVal || newVal === seg.text) return;
                 try {
                     const res = await fetch(`/api/segments/${currentSession.session_id}/edit_text`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ segment_id: seg.segment_id, new_text: newVal })
                     });
-                    if (!res.ok) {
-                        const err = await res.json();
-                        throw new Error(err.detail || 'Edit failed');
+                    if (res.ok) {
+                        currentSession = await res.json();
+                        renderSceneCards();
                     }
-                    currentSession = await res.json();
-                    renderSegmentStudio();
                 } catch (err) {
-                    showToast('Failed to update segment text: ' + err.message, 'error');
-                    narrationTextarea.value = initialNarration;
+                    console.error(err);
                 }
             });
 
-            // Visual prompt textarea edit handling
-            let initialPrompt = seg.image_prompt || '';
+            // Prompt Tabs (Image vs Video)
+            const promptBtns = card.querySelectorAll('.prompt-tab-btn');
+            const promptTextarea = card.querySelector('.prompt-textarea');
+
+            promptBtns.forEach(pBtn => {
+                pBtn.addEventListener('click', () => {
+                    const tabKind = pBtn.getAttribute('data-tab');
+                    activePromptTabs[seg.segment_id] = tabKind;
+                    promptBtns.forEach(b => b.classList.remove('active'));
+                    pBtn.classList.add('active');
+                    promptTextarea.value = tabKind === 'video' ? (seg.video_prompt || '') : (seg.image_prompt || '');
+                });
+            });
+
+            // Inline Prompt Edit
             promptTextarea.addEventListener('blur', async () => {
                 const newPrompt = promptTextarea.value.trim();
-                if (!newPrompt || newPrompt === initialPrompt) return;
+                const curKind = activePromptTabs[seg.segment_id] || 'image';
+                const oldPrompt = curKind === 'video' ? seg.video_prompt : seg.image_prompt;
+                if (!newPrompt || newPrompt === oldPrompt) return;
+
                 try {
                     const res = await fetch(`/api/segments/${currentSession.session_id}/edit_prompt`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ segment_id: seg.segment_id, new_prompt: newPrompt })
+                        body: JSON.stringify({
+                            segment_id: seg.segment_id,
+                            new_prompt: newPrompt,
+                            kind: curKind
+                        })
                     });
-                    if (!res.ok) {
-                        const err = await res.json();
-                        throw new Error(err.detail || 'Prompt update failed');
+                    if (res.ok) {
+                        currentSession = await res.json();
+                        showToast("Prompt updated!", "info", 1500);
                     }
-                    currentSession = await res.json();
-                    initialPrompt = newPrompt;
-                    showToast('Visual prompt saved!', 'info', 1500);
                 } catch (err) {
-                    showToast('Failed to save prompt: ' + err.message, 'error');
-                    promptTextarea.value = initialPrompt;
+                    console.error(err);
                 }
             });
 
-            // Copy prompt button handling
-            const copyPromptBtn = card.querySelector('.btn-copy-prompt');
-            if (copyPromptBtn) {
-                copyPromptBtn.addEventListener('click', () => {
-                    const promptToCopy = promptTextarea.value.trim() || seg.image_prompt || '';
-                    if (!promptToCopy) {
-                        showToast('No prompt to copy!', 'warning');
-                        return;
-                    }
-                    navigator.clipboard.writeText(promptToCopy).then(() => {
-                        const origText = copyPromptBtn.textContent;
-                        copyPromptBtn.textContent = '✅ Copied!';
-                        setTimeout(() => { copyPromptBtn.textContent = origText; }, 1800);
-                        showToast('📋 Visual prompt copied to clipboard!', 'success', 2000);
-                    }).catch(() => {
-                        promptTextarea.select();
-                        document.execCommand('copy');
-                        showToast('📋 Copied!', 'success', 1800);
-                    });
-                });
-            }
+            // Copy Prompt
+            const copyBtn = card.querySelector('.btn-copy-prompt');
+            copyBtn.addEventListener('click', async () => {
+                const curPrompt = promptTextarea.value.trim();
+                if (!curPrompt) return;
+                try {
+                    await navigator.clipboard.writeText(curPrompt);
+                    copyBtn.textContent = '✅ Copied!';
+                    setTimeout(() => { copyBtn.textContent = '📋 Copy'; }, 1800);
+                    showToast("Prompt copied to clipboard!", "success");
+                } catch (e) {
+                    promptTextarea.select();
+                    document.execCommand('copy');
+                }
+            });
 
-            // Split handling
+            // Split Scene
             const splitBtn = card.querySelector('.btn-split');
-            if (splitBtn && canSplit) {
-                splitBtn.addEventListener('click', async () => {
-                    const maxSplit = words.length - 1;
-                    const defaultSplit = Math.max(1, Math.floor(words.length / 2));
-                    const input = prompt(`Split segment at word index (1 to ${maxSplit}):\n\nWords: "${seg.text}"`, defaultSplit);
-                    if (input === null) return;
-                    const splitIdx = parseInt(input.trim());
-                    if (isNaN(splitIdx) || splitIdx < 1 || splitIdx > maxSplit) {
-                        showToast(`Invalid word index. Must be between 1 and ${maxSplit}.`, 'warning');
-                        return;
-                    }
+            splitBtn.addEventListener('click', async () => {
+                const words = seg.text.trim().split(/\s+/).filter(Boolean);
+                if (words.length < 2) {
+                    showToast("Sentence too short to split.", "warning");
+                    return;
+                }
+                const defaultSplit = Math.max(1, Math.floor(words.length / 2));
+                const input = prompt(`Split at word index (1 to ${words.length - 1}):\n\n"${seg.text}"`, defaultSplit);
+                if (input === null) return;
+                const splitIdx = parseInt(input.trim());
+                if (isNaN(splitIdx) || splitIdx < 1 || splitIdx >= words.length) return;
 
-                    try {
-                        splitBtn.disabled = true;
-                        const res = await fetch(`/api/segments/${currentSession.session_id}/split`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ segment_id: seg.segment_id, split_at_word_index: splitIdx })
-                        });
-                        if (!res.ok) {
-                            const err = await res.json();
-                            throw new Error(err.detail || 'Split failed');
-                        }
-                        currentSession = await res.json();
-                        renderSegmentStudio();
-                        showToast('✂️ Segment split successfully!', 'success');
-                    } catch (err) {
-                        showToast(err.message, 'error');
-                    } finally {
-                        splitBtn.disabled = false;
+                try {
+                    const res = await fetch(`/api/segments/${currentSession.session_id}/split`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ segment_id: seg.segment_id, split_at_word_index: splitIdx })
+                    });
+                    if (!res.ok) {
+                        const err = await res.json();
+                        throw new Error(err.detail || 'Split failed');
                     }
-                });
-            }
+                    currentSession = await res.json();
+                    renderSceneCards();
+                    showToast("✂️ Scene split!", "success");
+                } catch (err) {
+                    showToast(err.message, "error");
+                }
+            });
 
-            // Merge Next handling
+            // Merge Scene
             const mergeBtn = card.querySelector('.btn-merge');
-            if (mergeBtn && !isLast) {
+            if (mergeBtn && idx < segs.length - 1) {
                 mergeBtn.addEventListener('click', async () => {
                     try {
-                        mergeBtn.disabled = true;
                         const res = await fetch(`/api/segments/${currentSession.session_id}/merge`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -1048,53 +971,20 @@ document.addEventListener('DOMContentLoaded', () => {
                             throw new Error(err.detail || 'Merge failed');
                         }
                         currentSession = await res.json();
-                        renderSegmentStudio();
-                        showToast('🔗 Segments merged successfully!', 'success');
+                        renderSceneCards();
+                        showToast("🔗 Scenes merged!", "success");
                     } catch (err) {
-                        showToast(err.message, 'error');
-                    } finally {
-                        mergeBtn.disabled = false;
+                        showToast(err.message, "error");
                     }
                 });
             }
 
-            // Add After handling
-            const addBtn = card.querySelector('.btn-add');
-            if (addBtn) {
-                addBtn.addEventListener('click', async () => {
-                    const text = prompt('Enter narration text for the new segment:');
-                    if (!text || !text.trim()) return;
-
-                    try {
-                        addBtn.disabled = true;
-                        const res = await fetch(`/api/segments/${currentSession.session_id}/add`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ after_segment_id: seg.segment_id, text: text.trim() })
-                        });
-                        if (!res.ok) {
-                            const err = await res.json();
-                            throw new Error(err.detail || 'Add segment failed');
-                        }
-                        currentSession = await res.json();
-                        renderSegmentStudio();
-                        showToast('➕ New segment added!', 'success');
-                    } catch (err) {
-                        showToast(err.message, 'error');
-                    } finally {
-                        addBtn.disabled = false;
-                    }
-                });
-            }
-
-            // Delete handling
+            // Delete Scene
             const delBtn = card.querySelector('.btn-del');
-            if (delBtn && canDelete) {
+            if (delBtn && segs.length > 1) {
                 delBtn.addEventListener('click', async () => {
-                    if (!confirm(`Are you sure you want to delete segment #${idx + 1}?`)) return;
-
+                    if (!confirm(`Delete Scene #${idx + 1}?`)) return;
                     try {
-                        delBtn.disabled = true;
                         const res = await fetch(`/api/segments/${currentSession.session_id}/delete`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -1105,198 +995,51 @@ document.addEventListener('DOMContentLoaded', () => {
                             throw new Error(err.detail || 'Delete failed');
                         }
                         currentSession = await res.json();
-                        renderSegmentStudio();
-                        showToast('🗑️ Segment deleted.', 'info');
+                        renderSceneCards();
+                        showToast("🗑️ Scene deleted.", "info");
                     } catch (err) {
-                        showToast(err.message, 'error');
-                    } finally {
-                        delBtn.disabled = false;
+                        showToast(err.message, "error");
                     }
                 });
             }
 
-            segmentStudioCards.appendChild(card);
+            sceneCardsList.appendChild(card);
         });
     }
 
-    async function openSegmentStudio() {
-        const script = scriptInput.value.trim();
-        if (!script) {
-            showToast('Please enter or paste your script first before opening Segment Studio!', 'warning');
-            scriptInput.focus();
-            return;
-        }
-
-        if (toggleSegmentStudioBtn) {
-            toggleSegmentStudioBtn.disabled = true;
-            toggleSegmentStudioBtn.textContent = '⏳ Loading...';
-        }
-
-        try {
-            if (!currentSession) {
-                const manualDelim = script.includes('|||');
-                const res = await fetch('/api/segments/create', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ script: script, manual_delimiter: manualDelim })
-                });
-                if (!res.ok) {
-                    const err = await res.json();
-                    throw new Error(err.detail || 'Failed to initialize session');
-                }
-                currentSession = await res.json();
-            }
-
-            if (segmentStudioContainer) segmentStudioContainer.classList.remove('hidden');
-            if (storyboardEmptyNotice) storyboardEmptyNotice.classList.add('hidden');
-            renderSegmentStudio();
-            showToast(`✂️ Segment Studio opened with ${currentSession.segments.length} segments.`, 'info');
-        } catch (err) {
-            showToast('Failed to open Segment Studio: ' + err.message, 'error');
-        } finally {
-            if (toggleSegmentStudioBtn) {
-                toggleSegmentStudioBtn.disabled = false;
-                toggleSegmentStudioBtn.textContent = '✂️ Segment Studio';
-            }
-        }
-    }
-
-    function closeSegmentStudio() {
-        if (segmentStudioContainer) segmentStudioContainer.classList.add('hidden');
-    }
-
-    async function replanDirtySegments() {
-        if (!currentSession) return;
-
-        if (replanDirtyBtn) {
-            replanDirtyBtn.disabled = true;
-            replanDirtyBtn.textContent = '⏳ Re-planning...';
-        }
-
-        try {
-            const res = await fetch(`/api/segments/${currentSession.session_id}/replan_dirty`, {
-                method: 'POST'
-            });
-            if (!res.ok) {
-                const err = await res.json();
-                throw new Error(err.detail || 'Re-plan failed');
-            }
-            currentSession = await res.json();
-            renderSegmentStudio();
-
-            const callsEl = document.getElementById('storyboardCallsCount');
-            if (callsEl && typeof currentSession.gemini_calls_used === 'number') {
-                callsEl.textContent = `⚡ ${currentSession.gemini_calls_used} API call${currentSession.gemini_calls_used === 1 ? '' : 's'}`;
-            }
-            showToast('✨ Re-planned dirty segments successfully!', 'success');
-        } catch (err) {
-            showToast('Re-plan failed: ' + err.message, 'error');
-        } finally {
-            if (replanDirtyBtn) {
-                const dirtyCount = (currentSession.segments || []).filter(s => s.dirty).length;
-                replanDirtyBtn.disabled = dirtyCount === 0;
-                replanDirtyBtn.textContent = `↻ Re-plan Dirty (${dirtyCount})`;
-            }
-        }
-    }
-
-    function useSegmentsInStoryboard() {
-        if (!currentSession || !currentSession.segments || currentSession.segments.length === 0) {
-            showToast('No segments available to apply.', 'warning');
-            return;
-        }
-
-        let startTime = 0.0;
-        currentScenes = currentSession.segments.map((seg, idx) => {
-            const sTime = startTime;
-            const dur = seg.duration;
-            startTime = parseFloat((startTime + dur).toFixed(2));
-            return {
-                scene_id: idx,
-                start_time: sTime,
-                end_time: startTime,
-                duration: dur,
-                text: seg.text,
-                image_url: seg.image_url || "/static/placeholder.jpg",
-                image_path: seg.image_path || "",
-                prompt: seg.image_prompt,
-                image_prompt: seg.image_prompt,
-                visual_description: seg.visual_description,
-                shot_type: seg.shot_type,
-                camera_motion: seg.camera_motion,
-                source: seg.source,
-                source_tier: seg.source,
-                validation_score: seg.validation_score,
-                is_custom: seg.is_custom
-            };
-        });
-
-        // Sync back joined script text if modified in studio
-        const joinedScript = currentSession.segments.map(s => s.text.trim()).join(' ');
-        if (joinedScript && joinedScript !== scriptInput.value.trim()) {
-            scriptInput.value = joinedScript;
-        }
-
-        renderStoryboard();
-        updateStoryboardStats();
-
-        if (storyboardToolbar) storyboardToolbar.classList.remove('hidden');
-        if (storyboardGrid) storyboardGrid.classList.remove('hidden');
-        if (storyboardEmptyNotice) storyboardEmptyNotice.classList.add('hidden');
-        if (segmentStudioContainer) segmentStudioContainer.classList.add('hidden');
-
-        showToast(`✅ Storyboard updated with ${currentScenes.length} scenes from Segment Studio!`, 'success');
-    }
-
-    if (toggleSegmentStudioBtn) toggleSegmentStudioBtn.addEventListener('click', openSegmentStudio);
-    if (closeSegmentStudioBtn) closeSegmentStudioBtn.addEventListener('click', closeSegmentStudio);
-    if (replanDirtyBtn) replanDirtyBtn.addEventListener('click', replanDirtySegments);
-    if (useSegmentsBtn) useSegmentsBtn.addEventListener('click', useSegmentsInStoryboard);
-
     // ==========================================
-    // 10. GENERATE MASTER VIDEO (1080x1920)
+    // STEP 4: GENERATE MASTER VIDEO (1080x1920)
     // ==========================================
-
     generateBtn.addEventListener('click', async () => {
         const script = scriptInput.value.trim();
-        if (!script) {
+        if (!script && (!currentSession || !currentSession.script_text)) {
             showToast("Please enter or paste your script first!", "warning");
             scriptInput.focus();
             return;
         }
 
+        // Check for blank scenes
+        if (currentSession && currentSession.segments) {
+            const blankCount = currentSession.segments.filter(s => !s.image_path && !s.image_url).length;
+            if (blankCount > 0) {
+                const proceed = confirm(`⚠️ Warning: ${blankCount} scene(s) have no visual media and will render as black background.\n\nDo you want to continue rendering anyway?`);
+                if (!proceed) return;
+            }
+        }
+
         const selectedStyleRadio = document.querySelector('input[name="subtitleStyle"]:checked');
         const subtitleStyle = selectedStyleRadio ? selectedStyleRadio.value : 'mrbeast';
-
-        // Gather exact previewed scenes from storyboard so the video locks in those approved visuals
-        let previewScenesPayload = null;
-        if (currentScenes && currentScenes.length > 0) {
-            previewScenesPayload = currentScenes.map(sc => {
-                const activeImg = sceneOverrides[sc.scene_id] || sc.image_url;
-                return {
-                    scene_id: sc.scene_id,
-                    text: sc.text,
-                    image_url: activeImg,
-                    duration: sc.duration,
-                    start_time: sc.start_time,
-                    end_time: sc.end_time
-                };
-            });
-        }
 
         const payload = {
             script: script,
             voice: voiceSelect.value,
             voice_rate: speedSelect.value,
             subtitle_style: subtitleStyle,
-            bg_choice: bgSelect.value,
             bgm_track: bgmSelect.value,
             bgm_volume: parseFloat(bgmVolume.value),
-            scene_overrides: Object.keys(sceneOverrides).length > 0 ? sceneOverrides : null,
-            preview_scenes: previewScenesPayload
+            session_id: currentSession ? currentSession.session_id : null
         };
 
-        // UI State: Rendering
         generateBtn.disabled = true;
         generateBtn.innerHTML = '<span class="spinner" style="width:20px;height:20px;border-width:2px;"></span> Rendering Viral Short...';
         progressCard.classList.remove('hidden');
@@ -1356,7 +1099,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         progressStatus.textContent = 'Ready!';
                         progressStep.textContent = 'Your viral short is finished.';
 
-                        // Reveal video player
                         playerPlaceholder.style.display = 'none';
                         finalVideoPlayer.style.display = 'block';
                         finalVideoPlayer.src = status.video_url;
@@ -1365,7 +1107,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         playerActions.classList.remove('hidden');
                         downloadVideoBtn.href = status.video_url;
 
-                        // Reveal SEO Kit
                         if (status.metadata) {
                             seoTitle.value = status.metadata.title;
                             seoDesc.value = status.metadata.description;
@@ -1373,7 +1114,6 @@ document.addEventListener('DOMContentLoaded', () => {
                             seoKitCard.classList.remove('hidden');
                         }
 
-                        // Reset button
                         generateBtn.disabled = false;
                         generateBtn.innerHTML = '<span class="btn-icon">⚡</span><span class="btn-text">GENERATE VIRAL SHORT (1080x1920)</span>';
                         showToast("🎉 Your viral 1080x1920 Short is ready!", "success", 5000);
@@ -1397,7 +1137,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // 11. Copy SEO Elements
+    // Copy SEO Elements
     document.querySelectorAll('.btn-copy').forEach(btn => {
         btn.addEventListener('click', () => {
             const targetId = btn.getAttribute('data-target');
@@ -1413,7 +1153,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Load initial setup
+    // Initial load
     loadConfig();
     updateScriptStats();
 });

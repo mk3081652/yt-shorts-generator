@@ -22,7 +22,7 @@ from engine.visual_director import (
     ContinuityAnchor,
     enforce_continuity_in_prompt
 )
-from engine.gemini_visuals import prepare_gemini_scenes_data
+from engine.visual_director.segment_session import create_session
 
 
 def test_mystery_story():
@@ -130,22 +130,19 @@ def test_json_safety_and_fallback():
 
 
 def test_existing_pipeline_integration():
-    print("\n--- [TEST 5: Existing Scenes Data Pipeline Compatibility] ---")
+    print("\n--- [TEST 5: Storyboard Session Integration Compatibility] ---")
     script = "The mystery began when Room 307 door opened. The guards stood frozen in the corridor."
-    scenes = prepare_gemini_scenes_data(
-        script_text=script,
-        total_duration=6.0,
-        scene_overrides={"0": "https://example.com/custom_override.jpg"}
+    session = create_session(
+        script=script,
+        mode="manual"
     )
+    scenes = session.segments
     assert len(scenes) >= 2
-    # Verify exact schema expected by app.py and frontend
-    s0 = scenes[0]
-    required_keys = ["scene_id", "start_time", "end_time", "duration", "text", "image_url", "is_custom"]
+    s0 = scenes[0].to_dict()
+    required_keys = ["segment_id", "duration", "text", "image_url", "is_custom", "media_type"]
     for k in required_keys:
-        assert k in s0, f"Missing key {k} in scene data"
-    assert s0["is_custom"] is True, "Scene 0 override was not applied"
-    assert s0["image_url"] == "https://example.com/custom_override.jpg"
-    print("Manual image override and schema backward-compatibility verified.")
+        assert k in s0, f"Missing key {k} in segment data"
+    print("Storyboard session schema compatibility verified.")
     print(">>> Test 5 PASSED!")
 
 

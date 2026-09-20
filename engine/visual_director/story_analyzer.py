@@ -15,14 +15,9 @@ Analyzes the full script prior to scene planning to establish:
 import os
 import re
 import json
-import urllib.request
 from typing import Dict, Any, List, Optional
 
-GEMINI_MODELS = [
-    "gemini-flash-latest",
-    "gemini-flash-lite-latest",
-    "gemini-pro-latest"
-]
+from engine.gemini_client import generate_content
 
 STORY_ANALYZER_SYSTEM_PROMPT = """You are a Master Narrative Analyst and Visual Director for YouTube Shorts.
 Analyze the following video narration script and extract a comprehensive Story Analysis JSON object.
@@ -374,44 +369,21 @@ def analyze_story(
     if not clean_text:
         return fallback_story_analysis("")
 
-    resolved_key = api_key or os.environ.get("GEMINI_API_KEY", "")
-    if not resolved_key:
-        print("[Story Analyzer] WARNING: No GEMINI_API_KEY configured. Running in degraded semantic fallback mode.")
-        res = fallback_story_analysis(clean_text)
-        res["ai_analyzed"] = False
-        return res
+    prompt = f"{STORY_ANALYZER_SYSTEM_PROMPT}\n\nNarration Script:\n{clean_text}"
+    raw_text, model_name = generate_content(
+        prompt,
+        thinking_level="medium",
+        max_output_tokens=3000,
+        json_mode=True,
+        api_key=api_key
+    )
 
-    body = {
-        "contents": [{
-            "parts": [{
-                "text": f"{STORY_ANALYZER_SYSTEM_PROMPT}\n\nNarration Script:\n{clean_text}"
-            }]
-        }],
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "maxOutputTokens": 2000,
-            "temperature": 0.1
-        }
-    }
-
-    for model_name in GEMINI_MODELS:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={resolved_key}"
-        try:
-            req = urllib.request.Request(
-                url,
-                data=json.dumps(body).encode("utf-8"),
-                headers={"Content-Type": "application/json"}
-            )
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
-                parsed = extract_json(raw_text)
-                if parsed and "story_type" in parsed:
-                    print(f"[Story Analyzer] Successfully analyzed story with {model_name} (Type: {parsed.get('story_type')})")
-                    parsed["ai_analyzed"] = True
-                    return parsed
-        except Exception as e:
-            print(f"[Story Analyzer] {model_name} attempt failed: {e}")
+    if raw_text:
+        parsed = extract_json(raw_text)
+        if parsed and "story_type" in parsed:
+            print(f"[Story Analyzer] Successfully analyzed story with {model_name} (Type: {parsed.get('story_type')})")
+            parsed["ai_analyzed"] = True
+            return parsed
 
     print("[Story Analyzer] WARNING: Gemini analysis unavailable. Using semantic fallback analysis.")
     res = fallback_story_analysis(clean_text)

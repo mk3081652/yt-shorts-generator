@@ -49,20 +49,39 @@ python -m uvicorn app:app --host 127.0.0.1 --port 8000
 
 Then open your browser to **[http://localhost:8000](http://localhost:8000)**.
 
-### 🔑 Recommended: Configure `GEMINI_API_KEY` for Visual Director AI
+### 🔑 Environment Configuration (`.env`)
 
-For accurate, scene-by-scene visual beat detection and cinematic prompt generation (especially when copying prompts into **Google Flow**):
-1. Get a free API key from **[Google AI Studio](https://aistudio.google.com/apikey)**.
-2. Set the environment variable:
-   - **Windows PowerShell**:
-     ```powershell
-     $env:GEMINI_API_KEY="your_api_key_here"
-     ```
-   - **Linux / macOS / Render Dashboard**:
-     Add `GEMINI_API_KEY` to your Environment Variables in the hosting dashboard (e.g. Render) or in a `.env` file.
+Copy `.env.example` to `.env` or set environment variables:
+
+```bash
+cp .env.example .env
+```
+
+Key environment variables:
+- `GEMINI_API_KEY`: Get a free key from **[Google AI Studio](https://aistudio.google.com/apikey)**. Powers the Visual Director AI for intelligent scene-by-scene beat splitting and cinematic 9:16 prompt generation.
+- `CLOUDFLARE_ACCOUNT_ID` & `CLOUDFLARE_API_TOKEN`: Optional. Powers FLUX.1-schnell image generation in ⚡ Auto mode via Cloudflare Workers AI.
 
 > [!NOTE]
-> **Degraded Fallback Mode**: Without `GEMINI_API_KEY`, the app runs in a degraded semantic fallback mode. It will still function using heuristic keyword grounding, but setting the key enables Gemini to write tailored, highly accurate visual prompts for every scene.
+> **Graceful Fallbacks**:
+> - Without `GEMINI_API_KEY`, the app runs in a deterministic semantic fallback mode, maintaining continuity anchors and shot variety.
+> - Without Cloudflare FLUX credentials, scenes default to blank canvas clips with Ken Burns subtle motion, allowing quick manual image/video drops.
+
+---
+
+## 🎬 Step 2: Visual Storyboard Modes
+
+Step 2 provides a fast scene editor with two dedicated workflows:
+
+1. **⚡ Auto Mode**:
+   - The script is automatically split into visual beats.
+   - Gemini analyzes the story and writes targeted 9:16 image prompts.
+   - Cloudflare FLUX.1-schnell generates vertical visual scenes.
+   - You can replace or re-roll any scene image individually or drop your own media.
+
+2. **✂️ Manual Segment Mode**:
+   - The script is segmented scene-by-scene with both an **Image Prompt** and a **Video Prompt** per scene.
+   - The user edits narration and prompts, copies prompts for external AI generation tools, and drops in generated images or videos (`.mp4`, `.mov`, `.webp`, `.jpg`, `.png`).
+   - Nothing is auto-generated in this mode, giving you complete creative control.
 
 ---
 

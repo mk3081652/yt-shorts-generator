@@ -128,6 +128,7 @@ CORE DIRECTIVES
       "duration": 3.5,
       "visual_description": "Concrete 1-sentence director summary explaining subject, action, location, object, and spatial relationship.",
       "image_prompt": "Photorealistic vertical 9:16 cinematic shot of [subject performing physical action in environment with lighting, scale, and continuity details], 8k, photorealistic",
+      "video_prompt": "1-2 sentence image-to-video prompt specifying camera movement and subject motion for animation tools.",
       "search_query": "specific search phrase describing visual event",
       "shot_type": "wide shot | medium shot | close-up | macro | POV | CCTV | tracking shot",
       "camera_motion": "push in | pull out | pan right | pan left | tilt up",

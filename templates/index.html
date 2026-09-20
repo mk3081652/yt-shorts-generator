@@ -27,7 +27,7 @@
             </div>
         </header>
 
-        <!-- Google Flow Stepper Navigation -->
+        <!-- Step Navigation Bar -->
         <nav class="google-stepper" id="googleStepper">
             <button class="step-btn active" data-step="1" id="stepBtn1">
                 <span class="step-circle">1</span>
@@ -146,114 +146,87 @@
                     </div>
                 </div>
 
-                <!-- STEP 2: Visual Storyboard & Scene Image Customizer -->
+                <!-- STEP 2: Visual Storyboard & Scene Editor -->
                 <div class="step-panel hidden" id="stepPanel2">
-                    <!-- Visual Cut Pacing & Motion -->
-                    <div class="card">
-                        <div class="card-header">
-                            <div class="card-title">
-                                <span class="icon">🎬</span>
-                                <h3>Visual Cut Pacing & Motion</h3>
+                    <!-- Mode Switch & Toolbar -->
+                    <div class="card editor-controls-card">
+                        <div class="editor-header-row">
+                            <div class="mode-switch-group">
+                                <span class="mode-label">Mode:</span>
+                                <div class="mode-toggle">
+                                    <button type="button" class="mode-btn active" id="modeAutoBtn" data-mode="auto">
+                                        ⚡ Auto
+                                    </button>
+                                    <button type="button" class="mode-btn" id="modeManualBtn" data-mode="manual">
+                                        ✂️ Manual Segment
+                                    </button>
+                                </div>
                             </div>
-                            <label class="btn-secondary btn-sm upload-label" title="Or upload custom video clip">
-                                📤 Custom Video
-                                <input type="file" id="videoUploadInput" accept="video/mp4,video/quicktime,video/webm" style="display:none;">
-                            </label>
+                            <div class="editor-actions-row">
+                                <button type="button" id="generateAllScenesBtn" class="btn-storyboard" title="Generate all scene prompts and visuals">
+                                    ⚡ Generate Visuals
+                                </button>
+                                <button type="button" id="generateMissingBtn" class="btn-secondary btn-sm hidden" title="Generate visuals for blank scenes">
+                                    ↻ Generate Missing
+                                </button>
+                                <label class="btn-secondary btn-sm dropzone-btn" title="Drop or select multiple media files to assign sequentially">
+                                    📥 Drop / Upload Files
+                                    <input type="file" id="multiMediaInput" accept="image/*,video/*" multiple style="display:none;">
+                                </label>
+                            </div>
                         </div>
 
-                        <div class="form-group">
-                            <label for="bgSelect">Cut Pacing & Visual Engine</label>
-                            <select id="bgSelect" class="form-select"></select>
+                        <!-- Multi-file Toolbar Dropzone -->
+                        <div id="toolbarDropzone" class="toolbar-dropzone">
+                            <span class="dropzone-icon">📁</span>
+                            <span class="dropzone-text">Drop multiple images or videos here to auto-fill scenes in order</span>
                         </div>
-                        <div class="broll-features-hint">
-                            <span class="hint-bullet">⚡</span> Auto-matches script words • <strong>Zero repeats</strong> • 5 continuous camera motions
+
+                        <!-- Stats & Info Bar -->
+                        <div id="storyboardToolbar" class="storyboard-toolbar">
+                            <div class="storyboard-stats">
+                                <span id="storyboardSceneCount">0 scenes</span> •
+                                <span id="storyboardTotalDur">0.0s total</span> •
+                                <span id="storyboardVisualsCount">0 visuals loaded</span>
+                            </div>
+                            <div class="toolbar-right-actions">
+                                <button type="button" id="addBeatBtn" class="btn-secondary btn-xs" title="Add a new scene at the end">
+                                    ➕ Add Scene
+                                </button>
+                            </div>
                         </div>
-                        <div id="uploadNotice" class="upload-notice hidden"></div>
+
+                        <!-- Blank Scene Warning Banner -->
+                        <div id="blankScenesWarning" class="warning-banner hidden">
+                            <span class="warning-icon">⚠️</span>
+                            <span id="blankWarningText" class="warning-text">0 scenes have no visual media and will render as black background.</span>
+                            <button type="button" id="bannerGenerateMissingBtn" class="btn-warning-action">Generate Missing</button>
+                        </div>
                     </div>
 
-                    <!-- Visual Storyboard Card -->
-                    <div class="card storyboard-card" id="storyboardCard">
-                        <div class="card-header">
-                            <div class="card-title">
-                                <span class="icon">🖼️</span>
-                                <h3>Visual Storyboard (What You See Is What You Get)</h3>
+                    <!-- Scene Cards Container -->
+                    <div class="storyboard-container" id="storyboardContainer">
+                        <!-- Loading Progress Card -->
+                        <div id="storyboardProgressCard" class="card progress-card hidden" style="margin: 8px 0 16px 0; background: rgba(13, 17, 28, 0.95); border: 1px solid rgba(139, 92, 246, 0.45); padding: 18px 22px; border-radius: 12px; box-shadow: 0 8px 25px rgba(0,0,0,0.6);">
+                            <div class="progress-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                                <div style="display: flex; align-items: center; gap: 14px;">
+                                    <div class="spinner" style="width: 22px; height: 22px; border-width: 3px; border-top-color: #a855f7;"></div>
+                                    <div class="progress-info">
+                                        <h4 id="storyboardProgressStatus" style="font-size: 1rem; font-weight: 700; color: #fff; margin: 0;">Generating Storyboard...</h4>
+                                        <span id="storyboardProgressStep" style="font-size: 0.82rem; color: var(--text-muted);">Splitting script & planning scenes...</span>
+                                    </div>
+                                </div>
+                                <span id="storyboardProgressPct" class="progress-pct" style="font-size: 1.35rem; font-weight: 800; color: #a855f7;">0%</span>
                             </div>
-                            <div class="storyboard-actions-row">
-                                <a href="https://flow.google" target="_blank" rel="noopener noreferrer" class="btn-google-flow" title="Open Google Flow to generate cinematic 9:16 images">
-                                    🚀 Google Flow
-                                </a>
-                                <button id="toggleSegmentStudioBtn" class="btn-secondary" style="font-size: 0.82rem; font-weight: 600; padding: 6px 12px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px;" title="Open Segment Studio for manual script cutting and segment timing">
-                                    ✂️ Segment Studio
-                                </button>
-                                <label class="btn-upload-batch" title="Upload multiple photos from computer">
-                                    📥 Upload Images
-                                    <input type="file" id="batchImageInput" accept="image/jpeg,image/png,image/webp" multiple style="display:none;">
-                                </label>
-                                <button id="previewScenesBtn" class="btn-storyboard" title="Auto-match images to script and preview scenes in storyboard">
-                                    🔍 Auto-Match & Preview Scenes
-                                </button>
+                            <div class="progress-bar-bg" style="height: 10px; background: rgba(255, 255, 255, 0.1); border-radius: 5px; overflow: hidden;">
+                                <div id="storyboardProgressBar" class="progress-bar-fill" style="width: 0%; height: 100%; background: linear-gradient(90deg, #8b5cf6, #ec4899); transition: width 0.25s ease; border-radius: 5px;"></div>
                             </div>
                         </div>
 
-                        <div id="storyboardToolbar" class="storyboard-toolbar hidden">
-                            <div class="storyboard-stats">
-                                <span id="storyboardTopic">Topic: <strong>Detecting...</strong></span> • 
-                                <span id="storyboardSceneCount">0 scenes</span> • 
-                                <span id="storyboardCustomCount" style="color:var(--accent-green)">0 custom</span> •
-                                <span id="storyboardCallsCount" style="color: #c084fc; font-weight: 600;">⚡ 0 API calls</span>
-                            </div>
-                            <button id="resetStoryboardBtn" class="btn-secondary btn-sm" title="Re-match all scenes from authentic archive">
-                                🔄 Auto-Match All
-                            </button>
+                        <div class="storyboard-empty" id="storyboardEmptyNotice">
+                            <p>💡 Click <strong>⚡ Generate Visuals</strong> to automatically split your script into scenes, write visual prompts with Gemini, and generate images with FLUX, or switch to <strong>✂️ Manual Segment</strong> to drop in your own visuals!</p>
                         </div>
-
-                        <div id="storyboardContainer">
-                            <!-- Storyboard Loading Progress Card -->
-                            <div id="storyboardProgressCard" class="card progress-card hidden" style="margin: 8px 0 16px 0; background: rgba(13, 17, 28, 0.95); border: 1px solid rgba(139, 92, 246, 0.45); padding: 18px 22px; border-radius: 12px; box-shadow: 0 8px 25px rgba(0,0,0,0.6);">
-                                <div class="progress-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                                    <div style="display: flex; align-items: center; gap: 14px;">
-                                        <div class="spinner" style="width: 22px; height: 22px; border-width: 3px; border-top-color: #a855f7;"></div>
-                                        <div class="progress-info">
-                                            <h4 id="storyboardProgressStatus" style="font-size: 1rem; font-weight: 700; color: #fff; margin: 0;">Auto-Matching Scenes...</h4>
-                                            <span id="storyboardProgressStep" style="font-size: 0.82rem; color: var(--text-muted);">Analyzing script semantics & visual pacing...</span>
-                                        </div>
-                                    </div>
-                                    <span id="storyboardProgressPct" class="progress-pct" style="font-size: 1.35rem; font-weight: 800; color: #a855f7;">0%</span>
-                                </div>
-                                <div class="progress-bar-bg" style="height: 10px; background: rgba(255, 255, 255, 0.1); border-radius: 5px; overflow: hidden;">
-                                    <div id="storyboardProgressBar" class="progress-bar-fill" style="width: 0%; height: 100%; background: linear-gradient(90deg, #8b5cf6, #ec4899); transition: width 0.25s ease; border-radius: 5px;"></div>
-                                </div>
-                            </div>
-
-                            <!-- Segment Studio Panel -->
-                            <div id="segmentStudioContainer" class="segment-studio-panel hidden">
-                                <div class="segment-studio-header">
-                                    <div class="segment-studio-title-group">
-                                        <span class="icon">✂️</span>
-                                        <h4 style="margin: 0; font-size: 1rem; font-weight: 700; color: #fff;">Segment Studio</h4>
-                                        <span id="segmentStudioStats" class="segment-studio-stats">0 segments • 0.0s total</span>
-                                        <span id="segmentStudioDirtyBadge" class="badge-dirty hidden">0 DIRTY</span>
-                                    </div>
-                                    <div class="segment-studio-actions">
-                                        <button id="replanDirtyBtn" class="btn-replan-dirty" disabled title="Re-plan prompt and validation for dirty segments">
-                                            ↻ Re-plan Dirty (0)
-                                        </button>
-                                        <button id="useSegmentsBtn" class="btn-use-segments" title="Apply these segments to storyboard scenes">
-                                            ✅ Use These Segments
-                                        </button>
-                                        <button id="closeSegmentStudioBtn" class="btn-close-studio" title="Close Segment Studio">
-                                            ✕ Close
-                                        </button>
-                                    </div>
-                                </div>
-                                <div id="segmentStudioCards" class="segment-cards-list"></div>
-                            </div>
-
-                            <div class="storyboard-empty" id="storyboardEmptyNotice">
-                                <p>💡 Click <strong>🔍 Auto-Match & Preview Scenes</strong> to preview your visual beats, copy any prompt with <strong>📋 Copy Prompt</strong> for <a href="https://flow.google" target="_blank" rel="noopener noreferrer" style="color: #8ab4f8; text-decoration: underline; font-weight: 600;">Google Flow</a>, or click <strong>📥 Upload Images</strong> to drop in your custom visuals!</p>
-                            </div>
-                            <div id="storyboardGrid" class="storyboard-grid hidden"></div>
-                        </div>
+                        <div id="sceneCardsList" class="scene-cards-list"></div>
                     </div>
 
                     <!-- Step 2 Navigation Footer -->
@@ -369,8 +342,8 @@
                                 <span class="summary-val" id="sumVoice">Neural Voice</span>
                             </div>
                             <div class="summary-item">
-                                <span class="summary-label">Visual Engine:</span>
-                                <span class="summary-val" id="sumPacing">Gemini AI Ultra</span>
+                                <span class="summary-label">Storyboard:</span>
+                                <span class="summary-val" id="sumStoryboard">⚡ Auto (FLUX)</span>
                             </div>
                             <div class="summary-item">
                                 <span class="summary-label">Subtitles:</span>

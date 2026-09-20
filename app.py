@@ -1,8 +1,10 @@
 import os
 import sys
+import json
 import uuid
 import shutil
 import logging
+from typing import Optional, Dict, List, Any
 
 logger = logging.getLogger("yt_shorts_app")
 
@@ -19,7 +21,6 @@ if os.path.exists(_env_file):
     except Exception:
         pass
 
-from typing import Optional, Dict, List, Any
 from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks, HTTPException
 
 # Enforce UTF-8 console output on Windows to prevent UnicodeEncodeError
@@ -27,6 +28,7 @@ if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 if hasattr(sys.stderr, 'reconfigure'):
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,12 +36,12 @@ from pydantic import BaseModel
 
 from engine.tts import get_available_voices, generate_speech_with_words
 from engine.subtitles import STYLE_PRESETS
-from engine.backgrounds import get_available_backgrounds, get_target_cut_duration
 from engine.audio import get_available_bgm
 from engine.metadata import get_viral_hooks, get_script_templates, generate_youtube_metadata
 from engine.compositor import render_shorts_video
 from engine.visual_director.segment_session import (
     create_session,
+    generate_auto_session,
     split_segment,
     merge_segment,
     add_segment,
@@ -47,15 +49,21 @@ from engine.visual_director.segment_session import (
     edit_segment_text,
     edit_segment_prompt,
     replan_dirty_segments,
+    upload_segment_media,
+    clear_segment_media,
+    generate_segment_media,
+    generate_missing_media,
     load_session
 )
 
 app = FastAPI(title="Viral YouTube Shorts Creator Tool")
 
+
 def log_and_raise_safe(e: Exception, user_message: str, status_code: int = 500):
     """Logs full exception and traceback server-side, returning only generic message to client."""
     logger.error(f"[Server Error] {user_message}: {e}", exc_info=True)
     raise HTTPException(status_code=status_code, detail=user_message)
+
 
 # Explicit CORS allowlist
 allowed_origins_env = os.environ.get("ALLOWED_ORIGINS", "").strip()
@@ -79,6 +87,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.middleware("http")
 async def add_no_cache_headers(request, call_next):
     response = await call_next(request)
@@ -87,12 +96,12 @@ async def add_no_cache_headers(request, call_next):
     response.headers["Expires"] = "0"
     return response
 
+
 # Mount static and output folders
 os.makedirs("static", exist_ok=True)
 os.makedirs("outputs", exist_ok=True)
 os.makedirs("outputs/custom_scenes", exist_ok=True)
 os.makedirs("outputs/ai_previews", exist_ok=True)
-os.makedirs("assets/backgrounds", exist_ok=True)
 os.makedirs("assets/bgm", exist_ok=True)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -104,14 +113,16 @@ JOBS = {}
 JOBS_DIR = os.path.abspath("outputs/jobs")
 os.makedirs(JOBS_DIR, exist_ok=True)
 
+
 def save_job(job_id: str, data: dict):
     JOBS[job_id] = data
     try:
         j_path = os.path.join(JOBS_DIR, f"{job_id}.json")
         with open(j_path, "w", encoding="utf-8") as f:
             json.dump(data, f)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error(f"Failed to save job {job_id}: {e}")
+
 
 def load_job(job_id: str) -> Optional[dict]:
     if job_id in JOBS:
@@ -127,70 +138,79 @@ def load_job(job_id: str) -> Optional[dict]:
             pass
     return None
 
+
 class RenderRequest(BaseModel):
-    script: str
+    script: str = ""
     voice: str = "en-US-ChristopherNeural"
     voice_rate: str = "+10%"
     subtitle_style: str = "mrbeast"
-    bg_choice: str = "ai_gemini"
     bgm_track: str = "phonk_energetic"
     bgm_volume: float = 0.18
     scene_overrides: Optional[Dict[str, str]] = None
     preview_scenes: Optional[List[Dict[str, Any]]] = None
+    session_id: Optional[str] = None
+    bg_choice: Optional[str] = None  # Ignored, for backward compatibility
 
-class PrepareScenesRequest(BaseModel):
-    script: str
-    voice_rate: str = "+10%"
-    bg_choice: str = "ai_gemini"
-    scene_overrides: Optional[Dict[str, str]] = None
-    force_refresh: bool = False
-
-class RefreshSceneRequest(BaseModel):
-    script: str
-    scene_id: int
-    scene_text: str
-    exclude_urls: List[str] = []
-    bg_choice: Optional[str] = "smart_fast"
 
 class VoicePreviewRequest(BaseModel):
     text: str = "Welcome to the ultimate YouTube Shorts Creator!"
     voice: str = "en-US-ChristopherNeural"
     voice_rate: str = "+10%"
 
+
 class MetadataRequest(BaseModel):
     script: str
 
+
+class AutoGenerateRequest(BaseModel):
+    script: str
+
+
 class CreateSegmentsRequest(BaseModel):
     script: str
+    mode: str = "manual"  # "auto" | "manual"
     manual_delimiter: bool = False
+
 
 class SplitSegmentRequest(BaseModel):
     segment_id: str
     split_at_word_index: int
 
+
 class MergeSegmentRequest(BaseModel):
     segment_id: str
     direction: str = "next"
+
 
 class AddSegmentRequest(BaseModel):
     after_segment_id: str
     text: str
 
+
 class DeleteSegmentRequest(BaseModel):
     segment_id: str
+
 
 class EditTextRequest(BaseModel):
     segment_id: str
     new_text: str
 
+
 class EditPromptRequest(BaseModel):
     segment_id: str
     new_prompt: str
+    kind: str = "image"  # "image" | "video"
+
+
+class SegmentActionRequest(BaseModel):
+    segment_id: str
+
 
 @app.get("/", response_class=HTMLResponse)
 def serve_home():
     with open("templates/index.html", "r", encoding="utf-8") as f:
         return HTMLResponse(content=f.read())
+
 
 @app.get("/api/config")
 def get_config():
@@ -201,19 +221,19 @@ def get_config():
             k: {"name": v["name"], "font": v["font_name"]}
             for k, v in STYLE_PRESETS.items()
         },
-        "backgrounds": get_available_backgrounds(),
         "bgm_tracks": get_available_bgm(),
         "hooks": get_viral_hooks(),
         "templates": get_script_templates(),
         "ai_planner_configured": bool(os.environ.get("GEMINI_API_KEY", "").strip())
     }
 
+
 @app.post("/api/preview_voice")
 async def preview_voice(req: VoicePreviewRequest):
     """Generates a quick audio preview for the selected voice."""
     preview_id = str(uuid.uuid4())[:8]
     output_path = f"outputs/preview_{preview_id}.mp3"
-    
+
     sample_text = req.text[:120] if req.text.strip() else "Welcome to viral YouTube Shorts Creator!"
     await generate_speech_with_words(
         text=sample_text,
@@ -221,193 +241,94 @@ async def preview_voice(req: VoicePreviewRequest):
         rate=req.voice_rate,
         output_audio_path=output_path
     )
-    
+
     return {
         "audio_url": f"/outputs/preview_{preview_id}.mp3"
     }
 
-@app.post("/api/prepare_scenes")
-def prepare_scenes(req: PrepareScenesRequest):
-    """
-    Analyzes the script and returns all scenes with their assigned
-    authentic topic images, timestamps, and text for the visual storyboard.
-    """
-    script = req.script.strip()
-    if not script:
+
+@app.post("/api/auto/generate")
+def api_auto_generate(req: AutoGenerateRequest):
+    """Auto mode: splits script, plans prompts with Gemini, generates images with FLUX."""
+    if not req.script.strip():
         raise HTTPException(status_code=400, detail="Script cannot be empty.")
-
-    # Calculate estimated duration based on words & speed
-    words = script.split()
-    speed_mult = 1.10
-    if req.voice_rate == "+15%":
-        speed_mult = 1.15
-    elif req.voice_rate == "+20%":
-        speed_mult = 1.20
-    elif req.voice_rate == "+0%":
-        speed_mult = 1.0
-
-    est_duration = max(3.0, (len(words) / (2.5 * speed_mult)))
-    target_cut = get_target_cut_duration(req.bg_choice)
-
-    ai_configured = bool(os.environ.get("GEMINI_API_KEY", "").strip())
-    warning = None if ai_configured else (
-        "⚠️ GEMINI_API_KEY is not configured on the server. "
-        "Visual beats and image prompts are running in degraded fallback mode. "
-        "To get accurate AI scene prompts for Google Flow, set GEMINI_API_KEY in your environment."
-    )
-
     try:
-        from engine.gemini_visuals import prepare_gemini_scenes_data
-        call_stats = {"gemini_calls": 0}
-        scenes = prepare_gemini_scenes_data(
-            script_text=script,
-            total_duration=est_duration,
-            target_cut_duration=target_cut,
-            scene_overrides=req.scene_overrides,
-            api_key=os.environ.get("GEMINI_API_KEY", None),
-            force_refresh=req.force_refresh,
-            call_stats=call_stats
+        session = generate_auto_session(
+            script=req.script,
+            api_key=os.environ.get("GEMINI_API_KEY", None)
         )
-        primary_topic = "Visual Director"
-
-        return {
-            "topic": primary_topic,
-            "est_duration": round(est_duration, 1),
-            "scenes": scenes,
-            "ai_planner_configured": ai_configured,
-            "warning": warning,
-            "gemini_calls_used": call_stats["gemini_calls"]
-        }
+        return session.to_dict()
     except Exception as e:
-        log_and_raise_safe(e, "Failed to prepare scenes", status_code=500)
+        log_and_raise_safe(e, "Failed to auto-generate scenes", status_code=500)
 
-@app.post("/api/upload_scene_image")
-def upload_scene_image(
-    file: UploadFile = File(...),
-    scene_id: int = Form(...)
-):
-    """Uploads a manual replacement image for a specific scene (source: manual)."""
-    allowed_exts = ('.jpg', '.jpeg', '.png', '.webp', '.bmp')
-    ext = os.path.splitext(file.filename)[1].lower()
-    if ext not in allowed_exts:
-        raise HTTPException(status_code=400, detail="Invalid image format. Supported: JPG, PNG, WEBP.")
-
-    safe_name = f"scene_{scene_id}_{uuid.uuid4().hex[:6]}{ext}"
-    dest_path = os.path.abspath(os.path.join("outputs/custom_scenes", safe_name))
-    with open(dest_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    return {
-        "scene_id": scene_id,
-        "image_url": f"/outputs/custom_scenes/{safe_name}",
-        "local_path": dest_path,
-        "filename": file.filename,
-        "source": "manual",
-        "is_custom": True
-    }
-
-@app.post("/api/upload_batch_images")
-def upload_batch_images(files: List[UploadFile] = File(...)):
-    """Uploads multiple custom images at once to map across scenes (source: manual)."""
-    allowed_exts = ('.jpg', '.jpeg', '.png', '.webp', '.bmp')
-    saved = []
-
-    for f in files:
-        ext = os.path.splitext(f.filename)[1].lower()
-        if ext in allowed_exts:
-            safe_name = f"custom_{uuid.uuid4().hex[:8]}{ext}"
-            dest_path = os.path.abspath(os.path.join("outputs/custom_scenes", safe_name))
-            with open(dest_path, "wb") as buffer:
-                shutil.copyfileobj(f.file, buffer)
-            saved.append({
-                "filename": f.filename,
-                "image_url": f"/outputs/custom_scenes/{safe_name}",
-                "local_path": dest_path,
-                "source": "manual",
-                "is_custom": True
-            })
-
-    return {"uploaded": saved}
-
-@app.post("/api/refresh_scene_image")
-def refresh_scene_image(req: RefreshSceneRequest):
-    """Finds an alternative unique authentic image or AI re-roll for a single scene using Visual Director."""
-    import random
-    from engine.visual_director import plan_visual_storyboard, generate_and_validate_scene
-
-    plan = plan_visual_storyboard(req.scene_text, 3.0)
-    sc_plan = plan.get("scenes", [{}])[0] if plan.get("scenes") else {}
-    ai_p = sc_plan.get("image_prompt", f"Vertical 9:16 cinematic shot of {req.scene_text}, photorealistic 8k")
-
-    seed = random.randint(1000, 999999)
-    varied_prompt = f"{ai_p}, alternative cinematic angle, dramatic lighting, variation {seed}"
-    
-    safe_name = f"refresh_{req.scene_id}_{seed}.jpg"
-    dest_path = os.path.abspath(os.path.join("outputs/ai_previews", safe_name))
-    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-
-    from engine.visual_director.generator import generate_cloudflare_flux_image, generate_pollinations_image
-    ok = generate_cloudflare_flux_image(varied_prompt, dest_path)
-    if ok and os.path.exists(dest_path):
-        return {
-            "found": True,
-            "image_url": f"/outputs/ai_previews/{safe_name}",
-            "image_title": f"AI FLUX: {ai_p[:35]}...",
-            "badge": "AI FLUX",
-            "source": "generated"
-        }
-    
-    # Fallback to Pollinations
-    import urllib.parse, re
-    clean_p = re.sub(r'[^a-zA-Z0-9\s,.-]', '', ai_p)[:180].strip()
-    img_url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(clean_p)}?width=1080&height=1920&nologo=true&seed={seed}"
-    return {
-        "found": True,
-        "image_url": img_url,
-        "image_title": f"AI: {ai_p[:35]}...",
-        "badge": "AI ULTRA",
-        "source": "generated"
-    }
-
-@app.post("/api/upload_background")
-def upload_background(file: UploadFile = File(...)):
-    """Allows uploading custom full background video."""
-    allowed_exts = ('.mp4', '.mov', '.webm', '.mkv')
-    ext = os.path.splitext(file.filename)[1].lower()
-    if ext not in allowed_exts:
-        raise HTTPException(status_code=400, detail="Invalid video format.")
-    
-    safe_name = f"custom_{uuid.uuid4().hex[:6]}{ext}"
-    dest_path = os.path.join("assets/backgrounds", safe_name)
-    with open(dest_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-        
-    return {
-        "id": f"file_{safe_name}",
-        "name": file.filename,
-        "filename": safe_name
-    }
-
-@app.post("/api/generate_metadata")
-def get_metadata(req: MetadataRequest):
-    """Generates YouTube Shorts Title, Description & Tags."""
-    meta = generate_youtube_metadata(req.script)
-    return meta
 
 @app.post("/api/segments/create")
 def api_create_segments(req: CreateSegmentsRequest):
-    """Creates a new StoryboardSession for manual/interactive segmentation."""
+    """Creates a new StoryboardSession in Auto or Manual Segment mode."""
     if not req.script.strip():
         raise HTTPException(status_code=400, detail="Script cannot be empty.")
     try:
         session = create_session(
             script=req.script,
+            mode=req.mode,
             manual_delimiter=req.manual_delimiter,
             api_key=os.environ.get("GEMINI_API_KEY", None)
         )
         return session.to_dict()
     except Exception as e:
         log_and_raise_safe(e, "Failed to create segment session", status_code=500)
+
+
+@app.post("/api/segments/{id}/upload_media")
+def api_upload_segment_media(
+    id: str,
+    file: UploadFile = File(...),
+    segment_id: str = Form(...)
+):
+    """Attaches an uploaded image or video to a segment."""
+    allowed_exts = ('.jpg', '.jpeg', '.png', '.webp', '.bmp', '.mp4', '.mov', '.webm')
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in allowed_exts:
+        raise HTTPException(status_code=400, detail="Unsupported file format. Supported: JPG, PNG, WEBP, MP4, MOV, WEBM.")
+
+    safe_name = f"media_{uuid.uuid4().hex[:8]}{ext}"
+    dest_path = os.path.abspath(os.path.join("outputs/ai_previews", safe_name))
+    with open(dest_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    media_type = "video" if ext in ('.mp4', '.mov', '.webm') else "image"
+    session, err, code = upload_segment_media(id, segment_id, dest_path, media_type)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return session.to_dict()
+
+
+@app.post("/api/segments/{id}/clear_media")
+def api_clear_segment_media(id: str, req: SegmentActionRequest):
+    """Clears media for a segment, marking it blank / needs_manual."""
+    session, err, code = clear_segment_media(id, req.segment_id)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return session.to_dict()
+
+
+@app.post("/api/segments/{id}/generate")
+def api_generate_segment_media(id: str, req: SegmentActionRequest):
+    """Regenerates media for a single segment using FLUX."""
+    session, err, code = generate_segment_media(id, req.segment_id, api_key=os.environ.get("GEMINI_API_KEY", None))
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return session.to_dict()
+
+
+@app.post("/api/segments/{id}/generate_missing")
+def api_generate_missing_media(id: str):
+    """Generates media for all segments missing visuals in parallel."""
+    session, err, code = generate_missing_media(id, api_key=os.environ.get("GEMINI_API_KEY", None))
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return session.to_dict()
+
 
 @app.post("/api/segments/{id}/split")
 def api_split_segment(id: str, req: SplitSegmentRequest):
@@ -417,6 +338,7 @@ def api_split_segment(id: str, req: SplitSegmentRequest):
         raise HTTPException(status_code=code, detail=err)
     return session.to_dict()
 
+
 @app.post("/api/segments/{id}/merge")
 def api_merge_segment(id: str, req: MergeSegmentRequest):
     """Merges a segment with its next or previous neighbor."""
@@ -424,6 +346,7 @@ def api_merge_segment(id: str, req: MergeSegmentRequest):
     if err:
         raise HTTPException(status_code=code, detail=err)
     return session.to_dict()
+
 
 @app.post("/api/segments/{id}/add")
 def api_add_segment(id: str, req: AddSegmentRequest):
@@ -433,6 +356,7 @@ def api_add_segment(id: str, req: AddSegmentRequest):
         raise HTTPException(status_code=code, detail=err)
     return session.to_dict()
 
+
 @app.post("/api/segments/{id}/delete")
 def api_delete_segment(id: str, req: DeleteSegmentRequest):
     """Removes a segment from the session and shrinks total duration."""
@@ -440,6 +364,7 @@ def api_delete_segment(id: str, req: DeleteSegmentRequest):
     if err:
         raise HTTPException(status_code=code, detail=err)
     return session.to_dict()
+
 
 @app.post("/api/segments/{id}/edit_text")
 def api_edit_segment_text(id: str, req: EditTextRequest):
@@ -449,13 +374,15 @@ def api_edit_segment_text(id: str, req: EditTextRequest):
         raise HTTPException(status_code=code, detail=err)
     return session.to_dict()
 
+
 @app.post("/api/segments/{id}/edit_prompt")
 def api_edit_segment_prompt(id: str, req: EditPromptRequest):
-    """Edits a segment's visual generation prompt manually."""
-    session, err, code = edit_segment_prompt(id, req.segment_id, req.new_prompt)
+    """Edits a segment's visual generation prompt (image or video)."""
+    session, err, code = edit_segment_prompt(id, req.segment_id, req.new_prompt, kind=req.kind)
     if err:
         raise HTTPException(status_code=code, detail=err)
     return session.to_dict()
+
 
 @app.post("/api/segments/{id}/replan_dirty")
 def api_replan_dirty_segments(id: str):
@@ -465,6 +392,7 @@ def api_replan_dirty_segments(id: str):
         raise HTTPException(status_code=code, detail=err)
     return session.to_dict()
 
+
 @app.get("/api/segments/{id}")
 def api_get_segment_session(id: str):
     """Retrieves an existing StoryboardSession by ID."""
@@ -472,6 +400,14 @@ def api_get_segment_session(id: str):
     if not session:
         raise HTTPException(status_code=404, detail="Segment session not found.")
     return session.to_dict()
+
+
+@app.post("/api/generate_metadata")
+def get_metadata(req: MetadataRequest):
+    """Generates YouTube Shorts Title, Description & Tags."""
+    meta = generate_youtube_metadata(req.script)
+    return meta
+
 
 def run_render_task(job_id: str, req: RenderRequest):
     def update_progress(msg: str, pct: int):
@@ -485,12 +421,12 @@ def run_render_task(job_id: str, req: RenderRequest):
             voice=req.voice,
             voice_rate=req.voice_rate,
             subtitle_style=req.subtitle_style,
-            bg_choice=req.bg_choice,
             bgm_track=req.bgm_track,
             bgm_volume=req.bgm_volume,
             progress_callback=update_progress,
             scene_overrides=req.scene_overrides,
-            preview_scenes=req.preview_scenes
+            preview_scenes=req.preview_scenes,
+            session_id=req.session_id
         )
         metadata = generate_youtube_metadata(req.script)
         cur = load_job(job_id) or {}
@@ -504,6 +440,7 @@ def run_render_task(job_id: str, req: RenderRequest):
         })
         save_job(job_id, cur)
     except Exception as e:
+        logger.error(f"Render failed for job {job_id}: {e}", exc_info=True)
         cur = load_job(job_id) or {}
         cur.update({
             "status": "error",
@@ -512,10 +449,17 @@ def run_render_task(job_id: str, req: RenderRequest):
         })
         save_job(job_id, cur)
 
+
 @app.post("/api/generate_short")
 async def generate_short(req: RenderRequest, background_tasks: BackgroundTasks):
     """Starts video generation in background and returns job ID."""
-    if not req.script.strip():
+    script_to_check = req.script.strip()
+    if not script_to_check and req.session_id:
+        sess = load_session(req.session_id)
+        if sess and sess.script_text.strip():
+            script_to_check = sess.script_text.strip()
+
+    if not script_to_check:
         raise HTTPException(status_code=400, detail="Script text cannot be empty.")
 
     job_id = str(uuid.uuid4())[:8]
@@ -526,9 +470,10 @@ async def generate_short(req: RenderRequest, background_tasks: BackgroundTasks):
         "video_url": None,
         "metadata": None
     })
-    
+
     background_tasks.add_task(run_render_task, job_id, req)
     return {"job_id": job_id}
+
 
 @app.get("/api/status/{job_id}")
 async def get_status(job_id: str):
@@ -537,6 +482,7 @@ async def get_status(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found.")
     return job
+
 
 if __name__ == "__main__":
     import uvicorn

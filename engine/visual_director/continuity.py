@@ -10,7 +10,7 @@ Establishes and preserves visual anchors across scenes:
 """
 
 from typing import Dict, Any, Optional, List
-from engine.smart_visuals import clean_words
+from engine.beats import clean_words
 
 
 class ContinuityAnchor:
