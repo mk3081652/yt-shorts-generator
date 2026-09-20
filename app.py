@@ -163,6 +163,24 @@ class MetadataRequest(BaseModel):
     script: str
 
 
+class GenerateScriptRequest(BaseModel):
+    topic: str
+
+
+def sanitize_spoken_script(text: str) -> str:
+    """Removes accidental prompt wrappers or markdown meta-instructions pasted into script box."""
+    if not text:
+        return text
+    s = text.strip()
+    # Strip patterns like: "For the ... video, use this ... prompt:\s*(**Image prompt:** >)?"
+    s = re.sub(r'^For the .*? video,?\s*(?:use this .*? prompt:?)?\s*', '', s, flags=re.IGNORECASE)
+    # Strip "**Image prompt:** >" or "Image prompt:"
+    s = re.sub(r'^\*{0,2}Image prompt:\*{0,2}\s*>?\s*', '', s, flags=re.IGNORECASE)
+    # Strip leading markdown blockquotes "> "
+    s = re.sub(r'^>\s*', '', s)
+    return s.strip() or text.strip()
+
+
 class AutoGenerateRequest(BaseModel):
     script: str
     manual_delimiter: bool = False
@@ -271,14 +289,66 @@ async def preview_voice(req: VoicePreviewRequest):
     }
 
 
+@app.post("/api/generate_script")
+def api_generate_script(req: GenerateScriptRequest):
+    """Generates a viral 30-45 second spoken narration script for YouTube Shorts using Gemini."""
+    topic = req.topic.strip()
+    if not topic:
+        raise HTTPException(status_code=400, detail="Topic cannot be empty.")
+
+    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        raise HTTPException(status_code=500, detail="Gemini API key is not configured on server.")
+
+    prompt = f"""You are a master viral YouTube Shorts scriptwriter.
+Write a high-retention 60-90 word spoken voiceover script about: "{topic}".
+
+STRICT RULES:
+1. The first sentence MUST be an irresistible 3-second hook that immediately stops viewers from scrolling.
+2. Fast-paced, intriguing storytelling with surprising facts, mystery, or drama.
+3. Total word count MUST be between 60 and 90 words (about 30 to 45 seconds of speech).
+4. OUTPUT SPOKEN NARRATION WORDS ONLY!
+   - DO NOT include scene directions or camera angles.
+   - DO NOT include bracketed sound effects or notes like [Dramatic pause], [Cut to plane].
+   - DO NOT include prompt instructions or image descriptions.
+   - DO NOT include labels like "Voiceover:", "Narrator:", "Hook:", "Image prompt:".
+   - Return ONLY the exact words the voice actor will speak aloud.
+"""
+    try:
+        from engine.gemini_client import generate_content
+        text, model = generate_content(
+            prompt,
+            thinking_level="low",
+            max_output_tokens=1000,
+            json_mode=False,
+            api_key=api_key
+        )
+        if not text:
+            raise HTTPException(status_code=500, detail="Gemini failed to generate script.")
+
+        # Clean any accidental prefixes or quotes
+        clean_text = text.strip()
+        clean_text = re.sub(r'^(?:Voiceover|Narrator|Script|Hook):\s*', '', clean_text, flags=re.IGNORECASE)
+        clean_text = re.sub(r'^["\']|["\']$', '', clean_text)
+        clean_text = re.sub(r'\[.*?\]', '', clean_text)  # remove bracketed directions
+        clean_text = sanitize_spoken_script(clean_text)
+
+        return {"topic": topic, "script": clean_text, "model": model}
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_and_raise_safe(e, "Failed to generate script with Gemini", status_code=500)
+
+
 @app.post("/api/auto/generate")
 def api_auto_generate(req: AutoGenerateRequest):
     """Auto mode: splits script, plans prompts with Gemini, generates images with FLUX."""
-    if not req.script.strip():
+    cleaned = sanitize_spoken_script(req.script)
+    if not cleaned:
         raise HTTPException(status_code=400, detail="Script cannot be empty.")
     try:
         session = generate_auto_session(
-            script=req.script,
+            script=cleaned,
             manual_delimiter=req.manual_delimiter,
             api_key=os.environ.get("GEMINI_API_KEY", None)
         )
@@ -313,11 +383,12 @@ def startup_cleanup():
 @app.post("/api/segments/create")
 def api_create_segments(req: CreateSegmentsRequest):
     """Creates a new StoryboardSession in Auto or Manual Segment mode."""
-    if not req.script.strip():
+    cleaned = sanitize_spoken_script(req.script)
+    if not cleaned:
         raise HTTPException(status_code=400, detail="Script cannot be empty.")
     try:
         session = create_session(
-            script=req.script,
+            script=cleaned,
             mode=req.mode or "auto",
             start=req.start,
             manual_delimiter=req.manual_delimiter,
@@ -603,6 +674,8 @@ def run_render_task(job_id: str, req: RenderRequest):
 @app.post("/api/generate_short")
 async def generate_short(req: RenderRequest, background_tasks: BackgroundTasks):
     """Starts video generation in background and returns job ID."""
+    if req.script:
+        req.script = sanitize_spoken_script(req.script)
     script_to_check = req.script.strip()
     if not script_to_check and req.session_id:
         sess = load_session(req.session_id)

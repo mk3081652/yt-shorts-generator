@@ -1,5 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     // DOM Elements - Step 1
+    const topicInput = document.getElementById('topicInput');
+    const generateScriptBtn = document.getElementById('generateScriptBtn');
     const scriptInput = document.getElementById('scriptInput');
     const wordCount = document.getElementById('wordCount');
     const estDuration = document.getElementById('estDuration');
@@ -19,7 +21,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const generateAllScenesBtn = document.getElementById('generateAllScenesBtn');
     const generateMissingBtn = document.getElementById('generateMissingBtn');
     const multiMediaInput = document.getElementById('multiMediaInput');
-    const toolbarDropzone = document.getElementById('toolbarDropzone');
     const addBeatBtn = document.getElementById('addBeatBtn');
     const blankScenesWarning = document.getElementById('blankScenesWarning');
     const blankWarningText = document.getElementById('blankWarningText');
@@ -32,17 +33,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const storyboardTotalDur = document.getElementById('storyboardTotalDur');
     const storyboardVisualsCount = document.getElementById('storyboardVisualsCount');
 
-    const styleLockInput = document.getElementById('styleLockInput');
-    const saveStyleLockBtn = document.getElementById('saveStyleLockBtn');
     const undoBtn = document.getElementById('undoBtn');
     const redoBtn = document.getElementById('redoBtn');
     const copyAllPromptsBtn = document.getElementById('copyAllPromptsBtn');
     const splitModal = document.getElementById('splitModal');
     const closeSplitModal = document.getElementById('closeSplitModal');
     const splitWordChips = document.getElementById('splitWordChips');
-    const suggestModal = document.getElementById('suggestModal');
-    const closeSuggestModal = document.getElementById('closeSuggestModal');
-    const suggestPromptsList = document.getElementById('suggestPromptsList');
 
     const storyboardProgressCard = document.getElementById('storyboardProgressCard');
     const storyboardProgressStatus = document.getElementById('storyboardProgressStatus');
@@ -79,10 +75,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentStep = 1;
     let currentMode = 'auto'; // 'auto' | 'manual'
     let currentSession = null;
-    let activePromptTabs = {}; // segment_id -> 'image' | 'video'
     let focusedSegmentId = null;
     let activeSplitSegId = null;
-    let activeSuggestSegId = null;
 
     // ==========================================
     // TOAST NOTIFICATIONS
@@ -333,6 +327,51 @@ document.addEventListener('DOMContentLoaded', () => {
             scriptInput.value = current ? `${hook} ${current}` : hook;
             updateScriptStats();
             hookSelect.value = '';
+        }
+    });
+
+    // AI Script Generator
+    async function handleGenerateScript() {
+        const topic = topicInput ? topicInput.value.trim() : '';
+        if (!topic) {
+            showToast("Please enter a topic to generate a script!", "warning");
+            if (topicInput) topicInput.focus();
+            return;
+        }
+
+        generateScriptBtn.disabled = true;
+        const origBtnText = generateScriptBtn.innerHTML;
+        generateScriptBtn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;margin-right:6px;vertical-align:middle;"></span> Writing...';
+
+        try {
+            const res = await fetch('/api/generate_script', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ topic })
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.detail || 'Failed to generate script');
+            }
+            const data = await res.json();
+            scriptInput.value = data.script;
+            updateScriptStats();
+            currentSession = null;
+            renderSceneCards();
+            showToast(`✨ Generated viral script for "${topic}"!`, "success", 4000);
+        } catch (err) {
+            showToast("Script generation error: " + err.message, "error");
+        } finally {
+            generateScriptBtn.disabled = false;
+            generateScriptBtn.innerHTML = origBtnText;
+        }
+    }
+
+    generateScriptBtn?.addEventListener('click', handleGenerateScript);
+    topicInput?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleGenerateScript();
         }
     });
 
@@ -624,28 +663,6 @@ document.addEventListener('DOMContentLoaded', () => {
     undoBtn?.addEventListener('click', triggerUndo);
     redoBtn?.addEventListener('click', triggerRedo);
 
-    // Style Lock
-    async function applyStyleLock() {
-        if (!currentSession) return;
-        const styleVal = styleLockInput.value.trim();
-        try {
-            const res = await fetch(`/api/segments/${currentSession.session_id}/edit_meta`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ style_lock: styleVal })
-            });
-            if (res.ok) {
-                currentSession = await res.json();
-                showToast("🔒 Style lock updated!", "success", 2000);
-            }
-        } catch (err) {
-            console.error(err);
-        }
-    }
-
-    saveStyleLockBtn?.addEventListener('click', applyStyleLock);
-    styleLockInput?.addEventListener('blur', applyStyleLock);
-
     // Copy All Prompts
     copyAllPromptsBtn?.addEventListener('click', async () => {
         if (!currentSession) return;
@@ -714,89 +731,6 @@ document.addEventListener('DOMContentLoaded', () => {
         splitModal.classList.add('hidden');
     });
 
-    // Suggest Prompts Modal
-    async function openSuggestModal(segmentId) {
-        activeSuggestSegId = segmentId;
-        suggestPromptsList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);"><span class="spinner" style="width:20px;height:20px;border-width:2px;display:inline-block;margin-right:8px;"></span> Gemini is generating 3 alternative prompts...</div>';
-        suggestModal.classList.remove('hidden');
-
-        try {
-            const res = await fetch(`/api/segments/${currentSession.session_id}/suggest_prompts`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ segment_id: segmentId })
-            });
-            if (!res.ok) throw new Error("Failed to get suggestions");
-            const data = await res.json();
-            const prompts = data.prompts || [];
-            suggestPromptsList.innerHTML = '';
-            prompts.forEach((p, idx) => {
-                const item = document.createElement('div');
-                item.className = 'suggest-prompt-item';
-                item.innerHTML = `
-                    <span class="suggest-num">#${idx + 1}</span>
-                    <p class="suggest-text">${escapeHtml(p)}</p>
-                    <button type="button" class="btn-secondary btn-xs btn-use-suggest">Use This</button>
-                `;
-                item.querySelector('.btn-use-suggest').addEventListener('click', async () => {
-                    suggestModal.classList.add('hidden');
-                    const curKind = activePromptTabs[activeSuggestSegId] || 'image';
-                    try {
-                        const editRes = await fetch(`/api/segments/${currentSession.session_id}/edit_prompt`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                segment_id: activeSuggestSegId,
-                                new_prompt: p,
-                                kind: curKind
-                            })
-                        });
-                        if (editRes.ok) {
-                            currentSession = await editRes.json();
-                            renderSceneCards();
-                            showToast("✨ Prompt updated from suggestion!", "success");
-                        }
-                    } catch (err) {
-                        showToast(err.message, "error");
-                    }
-                });
-                suggestPromptsList.appendChild(item);
-            });
-        } catch (err) {
-            suggestPromptsList.innerHTML = `<div style="padding:16px;color:#ef4444;">Error loading suggestions: ${escapeHtml(err.message)}</div>`;
-        }
-    }
-
-    closeSuggestModal?.addEventListener('click', () => {
-        suggestModal.classList.add('hidden');
-    });
-
-    // Seam boundary shift
-    async function shiftBoundary(segmentId, direction) {
-        if (!currentSession) return;
-        try {
-            const res = await fetch(`/api/segments/${currentSession.session_id}/move_boundary`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    segment_id: segmentId,
-                    direction: direction,
-                    words: 1
-                })
-            });
-            if (!res.ok) {
-                const err = await res.json();
-                throw new Error(err.detail || 'Boundary shift failed');
-            }
-            currentSession = await res.json();
-            syncScriptFromSession();
-            renderSceneCards();
-            showToast(`Seam shifted ${direction === 'left' ? '◀ left' : '▶ right'}!`, 'info', 1500);
-        } catch (err) {
-            showToast(err.message, 'warning');
-        }
-    }
-
     // Motion selection
     async function updateMotion(segmentId, motion) {
         if (!currentSession) return;
@@ -818,7 +752,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Multi-File Upload & Toolbar Dropzone
+    // Multi-File Upload
     async function handleMultiFileUpload(files) {
         if (!files || files.length === 0) return;
         const script = scriptInput.value.trim();
@@ -866,24 +800,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    multiMediaInput.addEventListener('change', (e) => {
+    multiMediaInput?.addEventListener('change', (e) => {
         handleMultiFileUpload(Array.from(e.target.files));
         multiMediaInput.value = '';
-    });
-
-    toolbarDropzone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        toolbarDropzone.classList.add('dragover');
-    });
-
-    toolbarDropzone.addEventListener('dragleave', () => {
-        toolbarDropzone.classList.remove('dragover');
-    });
-
-    toolbarDropzone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        toolbarDropzone.classList.remove('dragover');
-        handleMultiFileUpload(Array.from(e.dataTransfer.files));
     });
 
     // Global keyboard shortcuts for Undo/Redo and Paste
@@ -972,9 +891,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (undoBtn) undoBtn.disabled = !currentSession || !currentSession.can_undo;
         if (redoBtn) redoBtn.disabled = !currentSession || !currentSession.can_redo;
-        if (styleLockInput && currentSession) {
-            styleLockInput.value = currentSession.style_lock || '';
-        }
 
         if (!currentSession || !currentSession.segments || currentSession.segments.length === 0) {
             storyboardEmptyNotice.classList.remove('hidden');
@@ -1041,8 +957,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 card.classList.add('card-focused');
             });
 
-            const activeTab = activePromptTabs[seg.segment_id] || 'image';
-            const promptText = activeTab === 'video' ? (seg.video_prompt || '') : (seg.image_prompt || '');
+            const promptText = seg.image_prompt || '';
             const isVideo = seg.media_type === 'video' || (typeof seg.image_url === 'string' && (seg.image_url.endsWith('.mp4') || seg.image_url.endsWith('.webm')));
 
             // Status chip markup
@@ -1067,12 +982,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 statusChipHtml = '<span class="status-chip status-empty">⚪ Empty</span>';
             }
 
-            // QA warning markup
-            let qaChipHtml = '';
-            if (seg.qa_score !== null && seg.qa_score !== undefined && seg.qa_score < 80) {
-                qaChipHtml = `<span class="badge badge-qa-warning" title="${escapeHtml(seg.qa_note || 'Low visual alignment')}">⚠️ QA: ${seg.qa_score}%</span>`;
-            }
-
             const motions = ["push in", "pull out", "pan right", "pan left", "tilt up", "static"];
             const curMotion = seg.motion || seg.camera_motion || "push in";
             let motionOptionsHtml = '';
@@ -1089,13 +998,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         <span class="scene-idx-badge">SCENE #${idx + 1}</span>
                         <span class="segment-card-dur">${durDisplay}</span>
                         ${statusChipHtml}
-                        ${qaChipHtml}
                     </div>
                     <div class="segment-card-actions">
-                        <div class="seam-controls">
-                            <button type="button" class="segment-btn btn-seam-left" data-segment-id="${seg.segment_id}" title="Shift 1 word left across seam (◀)">◀</button>
-                            <button type="button" class="segment-btn btn-seam-right" data-segment-id="${seg.segment_id}" title="Shift 1 word right across seam (▶)">▶</button>
-                        </div>
                         <button type="button" class="segment-btn btn-split" data-segment-id="${seg.segment_id}" title="Interactive click-to-split">
                             ✂️ Split
                         </button>
@@ -1156,17 +1060,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
 
                         <div class="segment-field-group">
-                            <div class="prompt-tabs">
-                                <span class="segment-field-label" style="margin-right:8px;">PROMPT:</span>
-                                <button type="button" class="prompt-tab-btn ${activeTab === 'image' ? 'active' : ''}" data-tab="image" data-segment-id="${seg.segment_id}">
-                                    🖼️ Image
-                                </button>
-                                <button type="button" class="prompt-tab-btn ${activeTab === 'video' ? 'active' : ''}" data-tab="video" data-segment-id="${seg.segment_id}">
-                                    🎬 Video
-                                </button>
-                                <button type="button" class="segment-btn btn-suggest-prompt" style="margin-left:auto;margin-right:4px;" data-segment-id="${seg.segment_id}" title="Suggest 3 Gemini prompt alternatives">
-                                    💡 Suggest
-                                </button>
+                            <div class="prompt-header-row">
+                                <label class="segment-field-label">VISUAL PROMPT</label>
                                 <button type="button" class="segment-btn btn-copy-prompt" data-segment-id="${seg.segment_id}" title="Copy prompt for external generator">
                                     📋 Copy
                                 </button>
@@ -1313,26 +1208,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
 
-            // Wire up Prompt tabs
-            const promptBtns = card.querySelectorAll('.prompt-tab-btn');
-            const promptTextarea = card.querySelector('.prompt-textarea');
-
-            promptBtns.forEach(pBtn => {
-                pBtn.addEventListener('click', () => {
-                    const tabKind = pBtn.getAttribute('data-tab');
-                    activePromptTabs[seg.segment_id] = tabKind;
-                    promptBtns.forEach(b => b.classList.remove('active'));
-                    pBtn.classList.add('active');
-                    promptTextarea.value = tabKind === 'video' ? (seg.video_prompt || '') : (seg.image_prompt || '');
-                });
-            });
-
             // Wire up Prompt blur edit
+            const promptTextarea = card.querySelector('.prompt-textarea');
             promptTextarea.addEventListener('blur', async () => {
                 const newPrompt = promptTextarea.value.trim();
-                const curKind = activePromptTabs[seg.segment_id] || 'image';
-                const oldPrompt = curKind === 'video' ? seg.video_prompt : seg.image_prompt;
-                if (!newPrompt || newPrompt === oldPrompt) return;
+                if (!newPrompt || newPrompt === seg.image_prompt) return;
 
                 try {
                     const res = await fetch(`/api/segments/${currentSession.session_id}/edit_prompt`, {
@@ -1341,7 +1221,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         body: JSON.stringify({
                             segment_id: seg.segment_id,
                             new_prompt: newPrompt,
-                            kind: curKind
+                            kind: 'image'
                         })
                     });
                     if (res.ok) {
@@ -1356,14 +1236,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Wire up Copy Prompt
             const copyBtn = card.querySelector('.btn-copy-prompt');
             copyBtn.addEventListener('click', async () => {
-                let curPrompt = promptTextarea.value.trim();
+                const curPrompt = promptTextarea.value.trim();
                 if (!curPrompt) return;
-                if (currentSession.style_lock && currentSession.style_lock.trim()) {
-                    const prefix = currentSession.style_lock.trim().replace(/,+$/, '');
-                    if (!curPrompt.toLowerCase().includes(prefix.toLowerCase())) {
-                        curPrompt = `${prefix}, ${curPrompt}`;
-                    }
-                }
                 try {
                     await navigator.clipboard.writeText(curPrompt);
                     copyBtn.textContent = '✅ Copied!';
@@ -1373,24 +1247,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     promptTextarea.select();
                     document.execCommand('copy');
                 }
-            });
-
-            // Wire up Suggest Prompt
-            const suggestBtn = card.querySelector('.btn-suggest-prompt');
-            suggestBtn.addEventListener('click', () => {
-                openSuggestModal(seg.segment_id);
-            });
-
-            // Wire up Seam boundary shift buttons
-            const seamLeftBtn = card.querySelector('.btn-seam-left');
-            const seamRightBtn = card.querySelector('.btn-seam-right');
-            seamLeftBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                shiftBoundary(seg.segment_id, 'left');
-            });
-            seamRightBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                shiftBoundary(seg.segment_id, 'right');
             });
 
             // Wire up Split Scene (opens interactive word-chip modal)

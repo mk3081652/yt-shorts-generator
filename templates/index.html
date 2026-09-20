@@ -86,8 +86,16 @@
                             </div>
                         </div>
 
+                        <!-- AI Script Generator Row -->
+                        <div class="ai-script-gen-row">
+                            <input type="text" id="topicInput" placeholder="✨ Enter topic (e.g. MH370 Mystery, Why Rome Fell, Quantum Secrets)..." class="topic-input">
+                            <button type="button" id="generateScriptBtn" class="btn-primary btn-sm" title="Generate viral spoken voiceover script with Gemini">
+                                ✨ Generate Script
+                            </button>
+                        </div>
+
                         <div class="textarea-wrapper">
-                            <textarea id="scriptInput" placeholder="Paste your script here or select a viral template above...&#10;&#10;Tip: The best YouTube Shorts are 20-45 seconds long with a powerful 3-second hook!"></textarea>
+                            <textarea id="scriptInput" placeholder="Paste your spoken script here, select a viral template, or enter a topic above...&#10;&#10;Tip: The best YouTube Shorts are 20-45 seconds long with a powerful 3-second hook!"></textarea>
                         </div>
 
                         <div class="script-stats">
@@ -176,18 +184,6 @@
                             </div>
                         </div>
 
-                        <!-- Style Lock Row -->
-                        <div class="style-lock-row">
-                            <label for="styleLockInput" class="style-lock-label">🔒 Style Lock:</label>
-                            <input type="text" id="styleLockInput" class="style-lock-input" placeholder="e.g. cinematic anime, 8k resolution, dramatic volumetric lighting (prepended to all prompts)">
-                            <button type="button" id="saveStyleLockBtn" class="btn-secondary btn-xs">Apply</button>
-                        </div>
-
-                        <!-- Multi-file Toolbar Dropzone -->
-                        <div id="toolbarDropzone" class="toolbar-dropzone">
-                            <span class="dropzone-icon">📁</span>
-                            <span class="dropzone-text">Drop multiple images, videos, or a .zip archive here to auto-fill scenes</span>
-                        </div>
 
                         <!-- Stats & Info Bar -->
                         <div id="storyboardToolbar" class="storyboard-toolbar">
@@ -233,17 +229,6 @@
                         </div>
                     </div>
 
-                    <!-- Suggest Prompts Modal -->
-                    <div id="suggestModal" class="modal-overlay hidden">
-                        <div class="modal-box">
-                            <div class="modal-header">
-                                <h4>💡 Select Alternative Prompt</h4>
-                                <button type="button" id="closeSuggestModal" class="modal-close-btn">&times;</button>
-                            </div>
-                            <p class="modal-subtext">Choose one of the Gemini-suggested prompts to replace current scene prompt:</p>
-                            <div id="suggestPromptsList" class="suggest-prompts-list"></div>
-                        </div>
-                    </div>
 
                     <!-- Scene Cards Container -->
                     <div class="storyboard-container" id="storyboardContainer">
