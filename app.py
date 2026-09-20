@@ -29,7 +29,7 @@ from engine.tts import get_available_voices, generate_speech_with_words
 from engine.subtitles import STYLE_PRESETS
 from engine.audio import get_available_bgm
 from engine.metadata import get_viral_hooks, get_script_templates, generate_youtube_metadata
-from engine.compositor import render_shorts_video
+from engine.render import render_shorts_video
 from engine.visual_director.segment_session import (
     create_session,
     generate_auto_session,
@@ -903,6 +903,7 @@ def run_render_task(job_id: str, req: RenderRequest):
             progress_callback=update_progress,
             scene_overrides=req.scene_overrides,
             preview_scenes=req.preview_scenes,
+            project_id=req.project_id,
             session_id=req.session_id
         )
         metadata = generate_youtube_metadata(req.script)
