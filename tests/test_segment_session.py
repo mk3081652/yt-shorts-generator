@@ -1,6 +1,6 @@
 """
 test_segment_session.py - Unit tests for StoryboardSession operations & REST endpoints.
-Phase 3 Segment Studio tests.
+Fast Scene Editor tests.
 """
 
 import os

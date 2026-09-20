@@ -3,8 +3,7 @@ import json
 
 payload = {
     'script': 'The tiny mechanics install the suspension. Then they tighten the wheel bolts. Finally, they place the windshield.',
-    'voice_rate': '+10%',
-    'bg_choice': 'ai_gemini'
+    'voice_rate': '+10%'
 }
 
 req = urllib.request.Request(

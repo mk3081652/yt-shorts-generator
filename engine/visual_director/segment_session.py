@@ -1,5 +1,5 @@
 """
-segment_session.py - Server-owned Segment Studio Data Model & Operations
+segment_session.py - Server-owned Fast Scene Editor Data Model & Operations
 Part of the Visual Director system for YouTube Shorts.
 
 Supports two modes:

@@ -3,8 +3,7 @@ import json
 
 payload = {
     'script': "The hallway was completely empty. Then Room 307's door slowly opened. Security rushed toward the room.",
-    'voice_rate': '+10%',
-    'bg_choice': 'ai_gemini'
+    'voice_rate': '+10%'
 }
 
 req = urllib.request.Request(
