@@ -30,15 +30,19 @@ def create_story_beats(
     script_text: str,
     total_duration: float,
     min_dur: float = 2.0,
-    max_dur: float = 6.0
+    max_dur: float = 5.5
 ) -> List[Tuple[str, float]]:
     """
     Intelligent narrative story-beat segmentation:
-    - ONE SEGMENT = ONE CLEAR VISUAL IDEA.
-    - Script is analyzed as a complete narrative.
-    - Divides into narrative visual beats (sentences and major visual clauses).
-    - Verbatim preservation: Original script words are 100% preserved in exact order.
-    - Duration calculated from realistic Shorts speaking speed (~0.38s/word, clamped to min 1.5s).
+    - ONE SEGMENT = ONE CLEAR VISUAL IDEA (~3.0s to 5.5s).
+    - Splits on:
+      1. Explicit delimiters '|||'
+      2. Line breaks (\n+)
+      3. Sentence boundaries (. ! ?)
+      4. Colons followed by space or newline
+      5. Clause boundaries for long sentences (> 14 words)
+    - 100% Verbatim script preservation: Concatenation of all beats equals the exact original words.
+    - Durations proportional to word count, clamped to min 1.5s.
     """
     clean_script = script_text.strip()
     if not clean_script:
@@ -49,76 +53,114 @@ def create_story_beats(
     if total_words == 0:
         return []
 
-    # 1. Split by sentence boundaries (. ! ? or newlines)
-    raw_sentences = re.split(r'([.!?]+(?:\s+|\n+|$))', clean_script)
-    sentences = []
-    i = 0
-    while i < len(raw_sentences):
-        s = raw_sentences[i].strip()
-        if i + 1 < len(raw_sentences):
-            delim = raw_sentences[i + 1].strip()
-            if delim:
-                s = s + delim
-            i += 2
-        else:
-            i += 1
-        if s:
-            sentences.append(s)
+    # 1. If explicit '|||' delimiters exist, split on them directly
+    if '|||' in clean_script:
+        raw_parts = [p.strip() for p in clean_script.split('|||') if p.strip()]
+    else:
+        # 2. Split line by line, then sentence by sentence, then clause by clause
+        raw_parts = []
+        for line in clean_script.splitlines():
+            line_clean = line.strip()
+            if not line_clean:
+                continue
 
-    if not sentences:
-        sentences = [clean_script]
+            # Split line on sentence terminators (. ! ?) or colon followed by space
+            # Pattern matches punctuation and captures it with trailing whitespace
+            sent_chunks = re.split(r'([.!?]+(?:\s+|$)|:(?:\s+|$))', line_clean)
+            line_sents = []
+            i = 0
+            while i < len(sent_chunks):
+                s = sent_chunks[i].strip()
+                if i + 1 < len(sent_chunks):
+                    delim = sent_chunks[i + 1].strip()
+                    if delim:
+                        s = s + delim
+                    i += 2
+                else:
+                    i += 1
+                if s:
+                    line_sents.append(s)
 
-    # 2. Refine sentences into narrative visual beats
-    # If a sentence is long (> 16 words), check if it can be split at a major clause boundary
-    beats_text: List[str] = []
-    for sent in sentences:
-        s_words = sent.split()
-        if len(s_words) > 16:
-            clause_parts = re.split(r'(?<=[,;:])\s+(?=(?:and|but|while|as|where|yet|before|after|with|when)\b)', sent, flags=re.IGNORECASE)
-            if len(clause_parts) > 1 and all(len(cp.split()) >= 5 for cp in clause_parts):
-                beats_text.extend(cp.strip() for cp in clause_parts if cp.strip())
-            else:
-                sub_parts = re.split(r'([,;:]\s+)', sent)
-                merged_parts = []
-                curr = ""
-                for p in sub_parts:
-                    curr += p
-                    if len(curr.split()) >= 8:
-                        merged_parts.append(curr.strip())
-                        curr = ""
-                if curr.strip():
-                    if merged_parts:
-                        merged_parts[-1] += " " + curr.strip()
+            if not line_sents:
+                line_sents = [line_clean]
+
+            # Refine any long sentence (> 14 words) into visual clauses
+            for sent in line_sents:
+                s_words = sent.split()
+                if len(s_words) > 14:
+                    # Split at major conjunction clauses
+                    clause_parts = re.split(
+                        r'(?<=[,;])\s+(?=(?:and|but|while|as|where|yet|before|after|with|when|so|because)\b)',
+                        sent,
+                        flags=re.IGNORECASE
+                    )
+                    if len(clause_parts) > 1 and all(len(cp.split()) >= 4 for cp in clause_parts):
+                        raw_parts.extend(cp.strip() for cp in clause_parts if cp.strip())
                     else:
-                        merged_parts.append(curr.strip())
-                beats_text.extend(merged_parts)
-        else:
-            beats_text.append(sent)
+                        # Split at comma / semicolon
+                        sub_parts = re.split(r'([,;]\s+)', sent)
+                        buf = ""
+                        for p in sub_parts:
+                            buf += p
+                            if len(buf.split()) >= 7:
+                                raw_parts.append(buf.strip())
+                                buf = ""
+                        if buf.strip():
+                            if raw_parts:
+                                raw_parts[-1] += " " + buf.strip()
+                            else:
+                                raw_parts.append(buf.strip())
+                else:
+                    raw_parts.append(sent)
 
-    combined_beats = [b for b in beats_text if b.strip()]
+    combined_beats = [b for b in raw_parts if b.strip()]
     if not combined_beats:
         combined_beats = [clean_script]
 
-    # 4. Strict Verbatim Preservation Check:
-    # Ensure concatenation of all beats equals the exact original words
-    joined_words = " ".join(combined_beats).split()
-    if joined_words != words:
-        combined_beats = [s for s in sentences if s.strip()]
-        if " ".join(combined_beats).split() != words:
-            combined_beats = [clean_script]
-
-    # 5. Calculate realistic duration for each beat based on speaking rate
-    # Short narration = shorter duration, long narration = longer duration
-    beats: List[Tuple[str, float]] = []
+    # Combine adjacent tiny beats (< 4 words) if combined <= 14 words
+    merged_beats: List[str] = []
+    curr_beat = ""
     for b in combined_beats:
-        b_word_cnt = len(b.split())
-        b_ratio = b_word_cnt / max(1, total_words)
-        dur = max(1.5, round(b_ratio * total_duration, 2))
+        b_clean = b.strip()
+        if not b_clean:
+            continue
+        if not curr_beat:
+            curr_beat = b_clean
+        else:
+            curr_len = len(curr_beat.split())
+            b_len = len(b_clean.split())
+            if curr_len < 4 and (curr_len + b_len) <= 14:
+                curr_beat = f"{curr_beat} {b_clean}"
+            elif b_len < 3 and (curr_len + b_len) <= 14:
+                curr_beat = f"{curr_beat} {b_clean}"
+            else:
+                merged_beats.append(curr_beat)
+                curr_beat = b_clean
+    if curr_beat:
+        merged_beats.append(curr_beat)
+
+    if not merged_beats:
+        merged_beats = [clean_script]
+
+    # 4. Strict Verbatim Check
+    joined_words = " ".join(merged_beats).split()
+    if joined_words != words:
+        # Guaranteed verbatim fallback: chunk words into 8-12 word segments
+        merged_beats = []
+        step = 10
+        for idx in range(0, total_words, step):
+            merged_beats.append(" ".join(words[idx:idx + step]))
+
+    # 5. Duration assignment
+    beats: List[Tuple[str, float]] = []
+    for b in merged_beats:
+        b_cnt = len(b.split())
+        ratio = b_cnt / max(1, total_words)
+        dur = max(min_dur, round(ratio * total_duration, 2))
         beats.append((b, dur))
 
-    # Normalize sum of durations to match total_duration
     sum_dur = sum(d for _, d in beats)
     if sum_dur > 0:
-        beats = [(t, max(1.0, round((d / sum_dur) * total_duration, 2))) for t, d in beats]
+        beats = [(t, max(1.5, round((d / sum_dur) * total_duration, 2))) for t, d in beats]
 
     return beats

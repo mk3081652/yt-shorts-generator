@@ -92,6 +92,9 @@ SEMANTIC_VISUAL_MAP = {
     "skyscrapers": ("futuristic city skyscrapers glowing with neon at night", "city skyscrapers night", "wide establishing shot", "slow zoom out"),
     
     # Aviation & Maritime
+    "mh370": ("commercial Boeing 777 passenger airliner flying over dark stormy ocean at night", "commercial airliner night", "wide establishing shot", "slow pan"),
+    "boeing": ("commercial Boeing 777 passenger airliner in flight", "commercial airliner", "wide establishing shot", "slow pan"),
+    "boeing 777": ("commercial Boeing 777 passenger airliner flying over dark stormy ocean at night", "commercial airliner night", "wide establishing shot", "slow pan"),
     "airplane": ("commercial Boeing passenger airliner in flight", "commercial airliner", "wide establishing shot", "slow pan"),
     "airliner": ("commercial Boeing passenger airliner in flight", "commercial airliner", "wide establishing shot", "slow pan"),
     "flight": ("commercial passenger airliner flying through clouds", "commercial airliner flight", "wide establishing shot", "slow pan"),
@@ -118,7 +121,9 @@ SEMANTIC_VISUAL_MAP = {
     "corridor": ("long empty upscale hotel hallway with warm wall sconces at night", "hotel corridor hallway", "wide establishing shot", "push in"),
     "hallway": ("long empty upscale hotel hallway with warm wall sconces at night", "hotel corridor hallway", "wide establishing shot", "push in"),
     "suitcase": ("vibrant red vintage travel suitcase resting on table", "vintage suitcase", "close-up detail", "slow push in"),
-    "key": ("small ornate antique silver key resting on table", "antique silver key", "close-up detail", "macro push in"),
+    "red suitcase": ("vibrant red vintage travel suitcase resting on table", "vintage suitcase", "close-up detail", "slow push in"),
+    "silver key": ("small ornate antique silver key resting on table", "antique silver key", "close-up detail", "macro push in"),
+    "antique key": ("small ornate antique silver key resting on table", "antique silver key", "close-up detail", "macro push in"),
     "cctv": ("high-angle CCTV security camera surveillance monitor view", "cctv security camera", "close-up detail", "slow push in"),
     "security": ("hotel security guards in dark navy uniforms in hallway", "security guard uniform", "medium shot", "tracking push"),
     "guard": ("security guard in dark navy uniform on night patrol", "security guard uniform", "medium shot", "tracking push"),

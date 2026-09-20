@@ -149,8 +149,102 @@ def fallback_story_analysis(script_text: str) -> Dict[str, Any]:
             ]
         }
 
-    # 2. Mystery / Room 307
-    if any(k in s_lower for k in ["room 307", "hotel", "security", "corridor", "hallway", "cctv", "creak"]):
+    # 1. Aviation / Documentary (MH370, flights, ocean search)
+    if any(k in s_lower for k in ["mh370", "flight", "plane", "airliner", "radar", "black box", "sonar", "pilot", "cockpit", "aviation"]):
+        return {
+            "story_type": "documentary",
+            "setting": "Aviation tracking control rooms and deep oceanic search sectors",
+            "time_period": "Modern day investigative documentary",
+            "main_characters": [],
+            "secondary_characters": [],
+            "important_objects": [
+                {
+                    "id": "radar_screen",
+                    "name": "Radar Display",
+                    "description": "Glowing green cathode ray / LCD radar display with sweeping sector line and blips"
+                },
+                {
+                    "id": "black_box",
+                    "name": "Flight Data Recorder",
+                    "description": "Bright cylindrical orange flight data recorder black box"
+                }
+            ],
+            "important_locations": [
+                {
+                    "id": "atc_room",
+                    "name": "Air Traffic Control Center",
+                    "description": "Dark operational control room with illuminated monitors"
+                },
+                {
+                    "id": "ocean_floor",
+                    "name": "Deep Ocean Floor",
+                    "description": "Abyssal ocean floor scanned by submersible spotlights"
+                }
+            ],
+            "events": [
+                "Aircraft departs on scheduled flight",
+                "Radar contact lost over open water",
+                "Deep-sea search conducted for wreckage and flight recorder"
+            ],
+            "visual_style": "cinematic documentary photography, high contrast realism",
+            "tone": "serious, investigative, suspenseful",
+            "continuity_requirements": [
+                "Radar displays must show green phosphorescent sweep",
+                "Black box must be high-visibility bright orange on seabed"
+            ]
+        }
+
+    # 2. Miniature Car Assembly
+    if any(k in s_lower for k in ["miniature", "1:18", "tiny mechanic", "model car"]) or (all(k in s_lower for k in ["mechanic", "suspension"]) or all(k in s_lower for k in ["mechanic", "wheel"])):
+        return {
+            "story_type": "fictional story",
+            "setting": "Miniature automotive assembly workshop workbench, macro diorama scale",
+            "time_period": "Modern day",
+            "main_characters": [
+                {
+                    "id": "tiny_mechanics",
+                    "name_or_role": "Tiny Mechanics",
+                    "description": "Tiny 1:18 scale figurine mechanics wearing matching dark blue workshop overalls and safety gear"
+                }
+            ],
+            "secondary_characters": [],
+            "important_objects": [
+                {
+                    "id": "miniature_supercar",
+                    "name": "Red Miniature Supercar",
+                    "description": "Vibrant red 1:18 scale miniature diecast supercar chassis with realistic metallic paint finish"
+                },
+                {
+                    "id": "micro_tools",
+                    "name": "Micro Tools",
+                    "description": "Hyper-detailed miniature scale tools: tiny wrenches, chrome suspension springs, micro wheel bolts"
+                }
+            ],
+            "important_locations": [
+                {
+                    "id": "micro_workshop",
+                    "name": "Miniature Workshop Workbench",
+                    "description": "Macro-scale workbench surface with miniature tool racks and overhead task lighting"
+                }
+            ],
+            "events": [
+                "Tiny mechanics assemble miniature car components",
+                "Mechanics install suspension springs on chassis",
+                "Mechanics tighten wheel bolts with micro wrenches",
+                "Windshield and body panels installed"
+            ],
+            "visual_style": "photorealistic macro miniature factory, shallow depth of field, realistic miniature materials",
+            "tone": "precise craftsmanship, engaging macro storytelling",
+            "continuity_requirements": [
+                "Strict miniature 1:18 scale throughout",
+                "Same red miniature supercar across every scene",
+                "Same tiny mechanics in dark blue uniforms",
+                "Zero full-size people or vehicles"
+            ]
+        }
+
+    # 3. Mystery / Room 307
+    if "room 307" in s_lower or "307" in s_lower or (("hotel" in s_lower or "corridor" in s_lower or "hallway" in s_lower) and ("guard" in s_lower or "security" in s_lower or "cctv" in s_lower)):
         return {
             "story_type": "mystery",
             "setting": "Quiet upscale hotel hallway at night with burgundy carpet and dark walnut doors",
@@ -203,8 +297,8 @@ def fallback_story_analysis(script_text: str) -> Dict[str, Any]:
             ]
         }
 
-    # 3. Specific Object (Suitcase / Key)
-    if any(k in s_lower for k in ["suitcase", "key", "luggage"]):
+    # 4. Specific Object (Suitcase / Key)
+    if "suitcase" in s_lower or "luggage" in s_lower or ("key" in s_lower and "silver" in s_lower):
         return {
             "story_type": "mystery",
             "setting": "Intimate interior setting with dramatic focused lighting",
@@ -248,8 +342,8 @@ def fallback_story_analysis(script_text: str) -> Dict[str, Any]:
             ]
         }
 
-    # 4. Location Continuity (Kitchen / Refrigerator)
-    if any(k in s_lower for k in ["kitchen", "refrigerator", "fridge", "bottle", "water"]):
+    # 5. Location Continuity (Kitchen / Refrigerator)
+    if "kitchen" in s_lower or "refrigerator" in s_lower or "fridge" in s_lower:
         return {
             "story_type": "fictional story",
             "setting": "Modern residential kitchen with clean countertops and stainless steel appliances",
@@ -291,51 +385,6 @@ def fallback_story_analysis(script_text: str) -> Dict[str, Any]:
             "continuity_requirements": [
                 "Exact same kitchen layout and cabinet style across all cuts",
                 "Same refrigerator design and interior contents"
-            ]
-        }
-
-    # 5. Aviation / Documentary
-    if any(k in s_lower for k in ["flight", "plane", "radar", "ocean", "black box", "sonar", "pilot"]):
-        return {
-            "story_type": "documentary",
-            "setting": "Aviation tracking control rooms and deep oceanic search sectors",
-            "time_period": "Modern day investigative documentary",
-            "main_characters": [],
-            "secondary_characters": [],
-            "important_objects": [
-                {
-                    "id": "radar_screen",
-                    "name": "Radar Display",
-                    "description": "Glowing green cathode ray / LCD radar display with sweeping sector line and blips"
-                },
-                {
-                    "id": "black_box",
-                    "name": "Flight Data Recorder",
-                    "description": "Bright cylindrical orange flight data recorder black box"
-                }
-            ],
-            "important_locations": [
-                {
-                    "id": "atc_room",
-                    "name": "Air Traffic Control Center",
-                    "description": "Dark operational control room with illuminated monitors"
-                },
-                {
-                    "id": "ocean_floor",
-                    "name": "Deep Ocean Floor",
-                    "description": "Abyssal ocean floor scanned by submersible spotlights"
-                }
-            ],
-            "events": [
-                "Aircraft departs on scheduled flight",
-                "Radar contact lost over open water",
-                "Deep-sea search conducted for wreckage and flight recorder"
-            ],
-            "visual_style": "cinematic documentary photography, high contrast realism",
-            "tone": "serious, investigative, suspenseful",
-            "continuity_requirements": [
-                "Radar displays must show green phosphorescent sweep",
-                "Black box must be high-visibility bright orange on seabed"
             ]
         }
 

@@ -123,7 +123,24 @@ def build_continuity_bible(
 
     # Fallback directly from script keywords
     s_lower = script_text.lower()
-    if any(k in s_lower for k in ["miniature", "scale", "mechanic", "tiny", "chassis", "suspension", "model car"]):
+    # 1. Aviation / Documentary (MH370, flight, ocean, radar)
+    if any(k in s_lower for k in ["mh370", "flight", "plane", "airliner", "radar", "black box", "sonar", "pilot", "cockpit", "aviation"]):
+        return {
+            "characters": [],
+            "locations": [
+                {"id": "atc_room", "description": "air traffic control center with glowing radar screens"},
+                {"id": "ocean_floor", "description": "dark deep ocean seabed with submersible spotlights"}
+            ],
+            "objects": [
+                {"id": "radar_screen", "description": "glowing green radar display sweeping in dark room"},
+                {"id": "black_box", "description": "bright orange cylindrical flight data recorder"}
+            ],
+            "style": {
+                "visual_style": "cinematic documentary photography, high contrast realism",
+                "aspect_ratio": "9:16"
+            }
+        }
+    elif any(k in s_lower for k in ["miniature", "1:18", "tiny mechanic", "model car"]) or (all(k in s_lower for k in ["mechanic", "suspension"]) or all(k in s_lower for k in ["mechanic", "wheel"])):
         return {
             "characters": [
                 {"id": "tiny_mechanics", "description": "tiny 1:18 scale figurine mechanics in matching dark blue workshop overalls"}
@@ -140,7 +157,7 @@ def build_continuity_bible(
                 "aspect_ratio": "9:16"
             }
         }
-    elif any(k in s_lower for k in ["room 307", "hotel", "security", "guard", "corridor", "hallway"]):
+    elif "room 307" in s_lower or "307" in s_lower or (("hotel" in s_lower or "corridor" in s_lower or "hallway" in s_lower) and ("guard" in s_lower or "security" in s_lower or "cctv" in s_lower)):
         return {
             "characters": [
                 {"id": "guards", "description": "two hotel security guards in dark navy uniforms with identification badges"}
@@ -156,7 +173,7 @@ def build_continuity_bible(
                 "aspect_ratio": "9:16"
             }
         }
-    elif any(k in s_lower for k in ["suitcase", "key"]):
+    elif "suitcase" in s_lower or "luggage" in s_lower or ("key" in s_lower and "silver" in s_lower):
         return {
             "characters": [
                 {"id": "woman", "description": "woman in private room handling luggage"}
@@ -173,7 +190,7 @@ def build_continuity_bible(
                 "aspect_ratio": "9:16"
             }
         }
-    elif any(k in s_lower for k in ["kitchen", "refrigerator", "water"]):
+    elif "kitchen" in s_lower or "refrigerator" in s_lower or "fridge" in s_lower:
         return {
             "characters": [
                 {"id": "resident", "description": "person in domestic indoor attire"}
@@ -261,26 +278,35 @@ def enforce_continuity_in_prompt(
             if isinstance(char, dict):
                 desc = char.get("description", "")
                 cid = char.get("id", "")
-                if desc and (cid.lower() in s_lower or any(w in s_lower for w in clean_words(desc)[:3])):
+                name = char.get("name", "")
+                if desc and ((cid and cid.lower() in s_lower) or (name and name.lower() in s_lower)):
                     if desc.lower() not in p.lower():
                         p = f"{p}, {desc}"
         for obj in bible.get("objects", []):
             if isinstance(obj, dict):
                 desc = obj.get("description", "")
                 oid = obj.get("id", "")
-                if desc and (oid.lower() in s_lower or any(w in s_lower for w in clean_words(desc)[:2])):
+                name = obj.get("name", "")
+                if desc and ((oid and oid.lower() in s_lower) or (name and name.lower() in s_lower)):
                     if desc.lower() not in p.lower():
                         p = f"{p}, {desc}"
         for loc in bible.get("locations", []):
             if isinstance(loc, dict):
                 desc = loc.get("description", "")
                 lid = loc.get("id", "")
-                if desc and (lid.lower() in s_lower or any(w in s_lower for w in clean_words(desc)[:2])):
+                name = loc.get("name", "")
+                if desc and ((lid and lid.lower() in s_lower) or (name and name.lower() in s_lower)):
                     if desc.lower() not in p.lower():
                         p = f"{p}, in {desc}"
 
+    bible_str = str(bible).lower() if bible else ""
+    is_room_307_story = "307" in bible_str
+    is_miniature_story = "miniature" in bible_str or "1:18" in bible_str
+    is_suitcase_story = "suitcase" in bible_str
+    is_kitchen_story = "kitchen" in bible_str or "refrigerator" in bible_str
+
     # 1. Miniature Car Assembly
-    if any(k in s_lower for k in ["miniature", "scale", "mechanic", "tiny", "suspension", "wheel", "chassis", "bolt", "windshield"]):
+    if is_miniature_story or any(k in s_lower for k in ["miniature", "1:18", "tiny mechanic", "wheel bolt", "suspension"]):
         if "1:18" not in p and "1:24" not in p and "miniature" not in p.lower():
             p = f"{p}, strict 1:18 miniature scale diorama, tiny figurine mechanics in matching dark blue factory uniforms"
         if "red" not in p.lower() and any(k in s_lower for k in ["car", "supercar", "vehicle", "chassis"]):
@@ -289,24 +315,24 @@ def enforce_continuity_in_prompt(
             p = f"{p}, macro tilt-shift lens, realistic micro tools"
 
     # 2. Mystery / Room 307
-    if any(k in s_lower for k in ["room 307", "hotel", "security", "guard", "corridor", "hallway", "door"]):
+    if is_room_307_story or "room 307" in s_lower or "307" in s_lower:
         if "307" not in p and any(k in s_lower for k in ["door", "room"]):
             p = f"{p}, dark wooden hotel door with brass plaque reading 'Room 307'"
-        if "guard" in s_lower and "navy" not in p.lower():
+        if any(k in s_lower for k in ["guard", "security"]) and "navy" not in p.lower():
             p = f"{p}, two hotel security guards in matching dark navy uniforms"
         if "corridor" in s_lower or "hallway" in s_lower:
             p = f"{p}, same upscale hotel hallway with burgundy patterned carpet"
 
     # 3. Suitcase / Key
-    if any(k in s_lower for k in ["suitcase", "key", "luggage"]):
+    if is_suitcase_story or "suitcase" in s_lower:
         if "suitcase" in s_lower and "red" not in p.lower():
             p = f"{p}, vibrant red travel suitcase with metal clasps"
-        if "key" in s_lower and "silver" not in p.lower():
+        if ("silver key" in s_lower or ("key" in s_lower and "suitcase" in s_lower) or (is_suitcase_story and "key" in s_lower)) and "silver" not in p.lower():
             p = f"{p}, small silver key"
 
     # 4. Kitchen / Refrigerator
-    if any(k in s_lower for k in ["kitchen", "refrigerator", "fridge", "water"]):
-        if "kitchen" not in p.lower():
+    if is_kitchen_story or "kitchen" in s_lower:
+        if "kitchen" in s_lower and "kitchen" not in p.lower():
             p = f"{p}, in the same modern kitchen with clean countertops"
         if ("refrigerator" in s_lower or "fridge" in s_lower) and "refrigerator" not in p.lower():
             p = f"{p}, stainless steel refrigerator with cool interior illumination"
