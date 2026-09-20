@@ -251,15 +251,56 @@ def generate_pollinations_image(prompt: str, output_path: str, max_retries: int 
     return False
 
 
+def generate_google_imagen_image(prompt: str, output_path: str, api_key: Optional[str] = None) -> bool:
+    """
+    Generates a vertical 9:16 photorealistic image using Google's Imagen 3 model
+    (imagen-3.0-generate-002) via Google AI Studio / Generative Language API.
+    """
+    key = api_key or os.environ.get("GEMINI_API_KEY", "")
+    if not key or not key.startswith("AIzaSy"):
+        return False
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key={key}"
+    body = json.dumps({
+        "instances": [{"prompt": prompt}],
+        "parameters": {
+            "sampleCount": 1,
+            "aspectRatio": "9:16"
+        }
+    }).encode("utf-8")
+    try:
+        req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            preds = data.get("predictions", [])
+            if preds:
+                b64_data = preds[0].get("bytesBase64Encoded")
+                if b64_data:
+                    img_bytes = base64.b64decode(b64_data)
+                    if len(img_bytes) > 5000:
+                        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+                        with open(output_path, "wb") as f:
+                            f.write(img_bytes)
+                        print(f"[Google Imagen 3] Generated {len(img_bytes)} bytes for: {prompt[:45]}...")
+                        return True
+    except Exception as e:
+        print(f"[Google Imagen 3] Error: {e}")
+    return False
+
+
 def single_visual_attempt(
     prompt: str,
     search_query: str,
     output_path: str,
     scene_text: str = "",
-    used_urls: Optional[Set[str]] = None
+    used_urls: Optional[Set[str]] = None,
+    api_key: Optional[str] = None
 ) -> bool:
     """Executes a single visual acquisition attempt across tiers."""
-    # Tier 1: Cloudflare FLUX
+    # Tier 1: Google Imagen 3 (Exact AI generation for script prompt)
+    if generate_google_imagen_image(prompt, output_path, api_key=api_key):
+        return True
+
+    # Tier 2: Cloudflare FLUX
     if generate_cloudflare_flux_image(prompt, output_path):
         return True
 

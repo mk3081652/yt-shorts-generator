@@ -454,7 +454,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="scene-body">
                     <div class="scene-script-text" title="${sc.visual_description ? 'Director: ' + sc.visual_description + ' | ' : ''}${sc.text}">"${sc.text}"</div>
                     <div class="scene-actions">
-                        <label class="btn-replace-img" title="Upload your own photo for this scene">
+                        <button class="btn-copy-prompt" data-prompt="${(sc.image_prompt || sc.prompt || sc.visual_description || sc.text).replace(/"/g, '&quot;')}" title="Copy exact prompt for Google Flow">
+                            📋 Copy Prompt
+                        </button>
+                        <label class="btn-replace-img" title="Upload your Google Flow image for this scene">
                             📁 Replace
                             <input type="file" class="scene-file-input" data-scene-id="${sc.scene_id}" accept="image/jpeg,image/png,image/webp" style="display:none;">
                         </label>
@@ -466,6 +469,34 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
 
             storyboardGrid.appendChild(card);
+        });
+
+        // Hook copy prompt buttons for Google Flow
+        document.querySelectorAll('.btn-copy-prompt').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const promptText = btn.getAttribute('data-prompt');
+                try {
+                    if (navigator.clipboard && window.isSecureContext) {
+                        await navigator.clipboard.writeText(promptText);
+                    } else {
+                        const textArea = document.createElement("textarea");
+                        textArea.value = promptText;
+                        textArea.style.position = "fixed";
+                        textArea.style.left = "-999999px";
+                        document.body.appendChild(textArea);
+                        textArea.focus();
+                        textArea.select();
+                        document.execCommand('copy');
+                        textArea.remove();
+                    }
+                    showToast("📋 Copied prompt for Google Flow! Paste into flow.google", "success");
+                    const oldText = btn.innerHTML;
+                    btn.innerHTML = "✅ Copied!";
+                    setTimeout(() => { btn.innerHTML = oldText; }, 2000);
+                } catch (err) {
+                    showToast("Failed to copy prompt: " + err.message, "error");
+                }
+            });
         });
 
         // Hook single scene upload inputs
