@@ -98,18 +98,18 @@ def create_story_beats(
                         raw_parts.extend(cp.strip() for cp in clause_parts if cp.strip())
                     else:
                         # Split at comma / semicolon
-                        sub_parts = re.split(r'([,;]\s+)', sent)
-                        buf = ""
-                        for p in sub_parts:
-                            buf += p
-                            if len(buf.split()) >= 7:
-                                raw_parts.append(buf.strip())
-                                buf = ""
-                        if buf.strip():
-                            if raw_parts:
-                                raw_parts[-1] += " " + buf.strip()
+                        sent_words = sent.split()
+                        buf_words = []
+                        for w in sent_words:
+                            buf_words.append(w)
+                            if len(buf_words) >= 7 and w.endswith((',', ';')):
+                                raw_parts.append(" ".join(buf_words))
+                                buf_words = []
+                        if buf_words:
+                            if raw_parts and len(buf_words) < 4:
+                                raw_parts[-1] += " " + " ".join(buf_words)
                             else:
-                                raw_parts.append(buf.strip())
+                                raw_parts.append(" ".join(buf_words))
                 else:
                     raw_parts.append(sent)
 

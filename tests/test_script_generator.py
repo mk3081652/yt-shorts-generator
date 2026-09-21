@@ -55,3 +55,78 @@ class TestScriptGenerator(unittest.TestCase):
         """POST /api/generate_script returns 400 when topic is empty."""
         res = self.client.post("/api/generate_script", json={"topic": "   "})
         self.assertEqual(res.status_code, 400)
+
+    def test_05_beat_splitting_mh370_regression(self):
+        """create_story_beats splits cleanly on clause/sentence boundaries without naive 10-word fallback."""
+        from engine.beats import create_story_beats
+        script = (
+            "At 12:41 a.m., Malaysia Airlines Flight MH370 took off from Kuala Lumpur with 239 people on board. "
+            "Everything seemed normal… until less than an hour later, the aircraft vanished from civilian radar."
+        )
+        beats = create_story_beats(script, total_duration=20.0)
+        self.assertEqual(len(beats), 3)
+        self.assertEqual(
+            beats[0][0],
+            "At 12:41 a.m., Malaysia Airlines Flight MH370 took off from Kuala Lumpur with 239 people on board."
+        )
+        self.assertEqual(
+            beats[1][0],
+            "Everything seemed normal… until less than an hour later,"
+        )
+        self.assertEqual(
+            beats[2][0],
+            "the aircraft vanished from civilian radar."
+        )
+        # Ensure 100% verbatim word preservation
+        orig_words = script.split()
+        beat_words = " ".join(b for b, _ in beats).split()
+        self.assertEqual(orig_words, beat_words)
+
+    @patch("engine.llm.generate_content")
+    def test_06_metadata_generation_ai(self, mock_llm):
+        """POST /api/generate_metadata generates script-tailored metadata with AI."""
+        import json
+        mock_llm.return_value = (
+            json.dumps({
+                "title": "The Vanishing of Flight MH370 ✈️ #shorts",
+                "description": "Malaysia Airlines Flight MH370 vanished without a trace with 239 souls onboard. What really happened? #MH370 #Shorts",
+                "tags": ["MH370", "Malaysia Airlines", "Flight 370", "aviation mystery", "shorts"],
+                "hashtags": "#MH370 #Shorts #AviationMystery"
+            }),
+            "gemini-flash-lite-latest"
+        )
+        res = self.client.post("/api/generate_metadata", json={
+            "script": "At 12:41 a.m., Malaysia Airlines Flight MH370 took off from Kuala Lumpur with 239 people on board."
+        })
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertIn("MH370", data["title"])
+        self.assertIn("#shorts", data["title"].lower())
+        self.assertIn("Malaysia Airlines", data["description"])
+        self.assertIn("MH370", data["tags"])
+
+    @patch("engine.llm.generate_content")
+    def test_07_metadata_generation_nlp_fallback(self, mock_llm):
+        """POST /api/generate_metadata falls back to NLP entity extraction when AI is unavailable."""
+        mock_llm.side_effect = Exception("Network offline")
+        res = self.client.post("/api/generate_metadata", json={
+            "script": "At 12:41 a.m., Malaysia Airlines Flight MH370 took off from Kuala Lumpur with 239 people on board. Everything seemed normal… until less than an hour later, the aircraft vanished from civilian radar."
+        })
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        # Verify it never returns the old generic placeholders
+        self.assertNotIn("The Truth About This Will Shock You", data["title"])
+        self.assertIn("MH370", data["title"])
+        self.assertIn("#shorts", data["title"].lower())
+        self.assertIn("Malaysia Airlines Flight MH370", data["tags"])
+        self.assertIn("Kuala Lumpur", data["tags"])
+
+    def test_08_metadata_generation_empty(self):
+        """POST /api/generate_metadata handles empty or blank script gracefully."""
+        res = self.client.post("/api/generate_metadata", json={"script": ""})
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(len(data["title"]) > 0)
+        self.assertTrue(len(data["tags"]) > 0)
+
+

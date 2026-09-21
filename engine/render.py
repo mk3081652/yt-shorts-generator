@@ -150,7 +150,7 @@ def render_shorts_video(
     script_text: str = "",
     voice: str = "en-US-ChristopherNeural",
     voice_rate: str = "+10%",
-    subtitle_style: str = "mrbeast",
+    subtitle_style: str = "hyper_yellow",
     bgm_track: str = "mystery_suspense",
     bgm_volume: float = 0.18,
     progress_callback: Optional[Callable[[str, int], None]] = None,

@@ -110,10 +110,23 @@ document.addEventListener("DOMContentLoaded", async () => {
     const playerActions = document.getElementById("playerActions");
     const downloadVideoBtn = document.getElementById("downloadVideoBtn");
 
+    if (finalVideoPlayer) {
+        finalVideoPlayer.addEventListener("click", () => {
+            if (finalVideoPlayer.src) {
+                if (finalVideoPlayer.paused) {
+                    finalVideoPlayer.play().catch(() => {});
+                } else {
+                    finalVideoPlayer.pause();
+                }
+            }
+        });
+    }
+
     const seoKitCard = document.getElementById("seoKitCard");
     const seoTitle = document.getElementById("seoTitle");
     const seoDesc = document.getElementById("seoDesc");
     const seoTags = document.getElementById("seoTags");
+    const refreshSeoBtn = document.getElementById("refreshSeoBtn");
 
     // Step Navigation buttons
     const toStep2Btn = document.getElementById("toStep2Btn");
@@ -197,8 +210,21 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         if (sumSubtitles) {
             const checkedStyle = document.querySelector('input[name="subtitleStyle"]:checked');
-            const styleVal = checkedStyle ? checkedStyle.value : "mrbeast";
-            const names = { mrbeast: "MrBeast Yellow", hormozi: "Hormozi Neon Green", cyberpunk: "Cyberpunk Glow", clean: "Clean Modern" };
+            const styleVal = checkedStyle ? checkedStyle.value : "hyper_yellow";
+            const names = {
+                hyper_yellow: "Hyper Yellow",
+                glacier_cyan: "Glacier Cyan",
+                neon_lime: "Neon Lime",
+                sunset_coral: "Sunset Coral",
+                clean: "Cinematic Clean White",
+                viral_pop: "Hyper Yellow",
+                mrbeast: "Hyper Yellow",
+                neon_pulse: "Glacier Cyan",
+                cyberpunk: "Glacier Cyan",
+                hormozi: "Neon Lime",
+                tok_hype: "Sunset Coral",
+                editorial_box: "Cinematic Clean White"
+            };
             sumSubtitles.textContent = names[styleVal] || styleVal;
         }
     }
@@ -255,10 +281,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     // AI Script Generator
     if (generateScriptBtn) {
         generateScriptBtn.addEventListener("click", async () => {
-            const topic = topicInput.value.trim();
+            const topic = topicInput ? topicInput.value.trim() : "";
             if (!topic) {
                 showToast("Please enter a topic first!", "warning");
-                topicInput.focus();
+                if (topicInput) topicInput.focus();
                 return;
             }
             generateScriptBtn.disabled = true;
@@ -542,7 +568,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             const voice = voiceSelect.value;
             const voiceRate = speedSelect.value;
-            const subtitleStyle = document.querySelector('input[name="subtitleStyle"]:checked')?.value || "mrbeast";
+            const subtitleStyle = document.querySelector('input[name="subtitleStyle"]:checked')?.value || "hyper_yellow";
             const bgmTrack = bgmSelect.value;
             const bgmVol = parseFloat(bgmVolume.value) || 0.18;
 
@@ -552,6 +578,17 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (playerPlaceholder) playerPlaceholder.classList.remove("hidden");
             if (playerActions) playerActions.classList.add("hidden");
             if (seoKitCard) seoKitCard.classList.add("hidden");
+
+            // Reset video player state
+            if (finalVideoPlayer) {
+                try {
+                    finalVideoPlayer.pause();
+                } catch (e) {}
+                finalVideoPlayer.removeAttribute("src");
+                finalVideoPlayer.classList.remove("visible", "active");
+                finalVideoPlayer.style.display = "none";
+                finalVideoPlayer.load();
+            }
 
             const payload = {
                 script,
@@ -603,11 +640,19 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                     showToast("Viral YouTube Short generated successfully!", "success");
 
-                    // Load video in player
+                    // Load video in player and activate visibility
                     if (finalVideoPlayer && job.video_url) {
                         finalVideoPlayer.src = job.video_url;
+                        finalVideoPlayer.classList.add("visible", "active");
+                        finalVideoPlayer.style.display = "block";
                         if (playerPlaceholder) playerPlaceholder.classList.add("hidden");
-                        finalVideoPlayer.play();
+                        finalVideoPlayer.load();
+                        const playPromise = finalVideoPlayer.play();
+                        if (playPromise !== undefined) {
+                            playPromise.catch((err) => {
+                                console.warn("Autoplay waiting for user interaction:", err);
+                            });
+                        }
                     }
 
                     if (playerActions) playerActions.classList.remove("hidden");
@@ -646,6 +691,38 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         });
     });
+
+    // Refresh SEO Kit Button
+    if (refreshSeoBtn) {
+        refreshSeoBtn.addEventListener("click", async () => {
+            let script = scriptInput ? scriptInput.value.trim() : "";
+            if (!script && state.project && state.project.script) {
+                script = state.project.script.trim();
+            }
+            if (!script) {
+                showToast("Please enter a script first!", "warning");
+                return;
+            }
+            refreshSeoBtn.disabled = true;
+            refreshSeoBtn.textContent = "⏳ Generating...";
+            showToast("Generating SEO metadata tailored to your script...", "info");
+            try {
+                const meta = await api.generateMetadata(script);
+                if (meta) {
+                    if (seoKitCard) seoKitCard.classList.remove("hidden");
+                    if (seoTitle) seoTitle.value = meta.title || "";
+                    if (seoDesc) seoDesc.value = meta.description || "";
+                    if (seoTags) seoTags.value = Array.isArray(meta.tags) ? meta.tags.join(", ") : (meta.tags || "");
+                    showToast("SEO kit updated with script-tailored title and tags!", "success");
+                }
+            } catch (err) {
+                showToast(`Failed to update SEO kit: ${err.message}`, "error");
+            } finally {
+                refreshSeoBtn.disabled = false;
+                refreshSeoBtn.textContent = "🔄 Regenerate";
+            }
+        });
+    }
 
     // ==========================================
     // INITIAL CONFIG LOAD

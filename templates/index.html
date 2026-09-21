@@ -4,10 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Viral YouTube Shorts Creator - 100% Free Monetization Studio</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="alternate icon" href="/static/favicon.ico">
+    <link rel="apple-touch-icon" href="/static/favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Montserrat:wght@800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/style.css?v=20260920_v4">
+    <link rel="stylesheet" href="/static/css/style.css?v=20260921_v4">
 </head>
 <body>
     <div class="app-container">
@@ -21,9 +24,7 @@
                 </div>
             </div>
             <div class="navbar-tags">
-                <span class="tag-pill">🔥 100% Free Edge Neural TTS</span>
-                <span class="tag-pill">⚡ MrBeast / Hormozi Subtitles</span>
-                <span class="tag-pill">💰 YouTube Monetization Ready</span>
+                <span class="tag-pill tag-pill-crafted">A Tool Made With ❤️, Just for You</span>
             </div>
         </header>
 
@@ -86,16 +87,8 @@
                             </div>
                         </div>
 
-                        <!-- AI Script Generator Row -->
-                        <div class="ai-script-gen-row">
-                            <input type="text" id="topicInput" placeholder="✨ Enter topic (e.g. MH370 Mystery, Why Rome Fell, Quantum Secrets)..." class="topic-input">
-                            <button type="button" id="generateScriptBtn" class="btn-primary btn-sm" title="Generate viral spoken voiceover script with Gemini">
-                                ✨ Generate Script
-                            </button>
-                        </div>
-
                         <div class="textarea-wrapper">
-                            <textarea id="scriptInput" placeholder="Paste your spoken script here, select a viral template, or enter a topic above...&#10;&#10;Tip: The best YouTube Shorts are 20-45 seconds long with a powerful 3-second hook!"></textarea>
+                            <textarea id="scriptInput" placeholder="Paste your spoken script here or select a viral template / hook above...&#10;&#10;Tip: The best YouTube Shorts are 20-45 seconds long with a powerful 3-second hook!"></textarea>
                         </div>
 
                         <div class="script-stats">
@@ -278,27 +271,35 @@
                         </div>
 
                         <div class="subtitle-presets">
-                            <label class="preset-option active" data-style="mrbeast">
-                                <input type="radio" name="subtitleStyle" value="mrbeast" checked>
-                                <div class="preset-card mrbeast-card">
-                                    <span class="sample-text mrbeast-text">MRBEAST</span>
-                                    <span class="preset-label">Yellow & Punchy</span>
+                            <label class="preset-option active" data-style="hyper_yellow">
+                                <input type="radio" name="subtitleStyle" value="hyper_yellow" checked>
+                                <div class="preset-card hyper-yellow-card">
+                                    <span class="sample-text hyper-yellow-text">HYPER YELLOW</span>
+                                    <span class="preset-label">Viral Neon Gold</span>
                                 </div>
                             </label>
 
-                            <label class="preset-option" data-style="hormozi">
-                                <input type="radio" name="subtitleStyle" value="hormozi">
-                                <div class="preset-card hormozi-card">
-                                    <span class="sample-text hormozi-text">HORMOZI</span>
-                                    <span class="preset-label">Neon Green 1-2 Words</span>
+                            <label class="preset-option" data-style="glacier_cyan">
+                                <input type="radio" name="subtitleStyle" value="glacier_cyan">
+                                <div class="preset-card glacier-cyan-card">
+                                    <span class="sample-text glacier-cyan-text">GLACIER CYAN</span>
+                                    <span class="preset-label">Ice Cyan Minimal</span>
                                 </div>
                             </label>
 
-                            <label class="preset-option" data-style="cyberpunk">
-                                <input type="radio" name="subtitleStyle" value="cyberpunk">
-                                <div class="preset-card cyberpunk-card">
-                                    <span class="sample-text cyberpunk-text">CYBERPUNK</span>
-                                    <span class="preset-label">Cyan & Magenta Glow</span>
+                            <label class="preset-option" data-style="neon_lime">
+                                <input type="radio" name="subtitleStyle" value="neon_lime">
+                                <div class="preset-card neon-lime-card">
+                                    <span class="sample-text neon-lime-text">NEON LIME</span>
+                                    <span class="preset-label">Electric Lime Energy</span>
+                                </div>
+                            </label>
+
+                            <label class="preset-option" data-style="sunset_coral">
+                                <input type="radio" name="subtitleStyle" value="sunset_coral">
+                                <div class="preset-card sunset-coral-card">
+                                    <span class="sample-text sunset-coral-text">SUNSET CORAL</span>
+                                    <span class="preset-label">Warm Modern Flame</span>
                                 </div>
                             </label>
 
@@ -306,7 +307,7 @@
                                 <input type="radio" name="subtitleStyle" value="clean">
                                 <div class="preset-card clean-card">
                                     <span class="sample-text clean-text">CLEAN</span>
-                                    <span class="preset-label">Modern Aesthetic</span>
+                                    <span class="preset-label">Cinematic White</span>
                                 </div>
                             </label>
                         </div>
@@ -419,7 +420,7 @@
                         <div class="phone-speaker"></div>
                         
                         <div class="video-display-area">
-                            <video id="finalVideoPlayer" class="video-player" controls playsinline></video>
+                            <video id="finalVideoPlayer" class="video-player" controls playsinline preload="auto"></video>
                             
                             <!-- Placeholder when no video yet -->
                             <div id="playerPlaceholder" class="player-placeholder">
@@ -433,13 +434,13 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
 
-                        <!-- Player Overlay Actions -->
-                        <div id="playerActions" class="player-actions hidden">
-                            <a id="downloadVideoBtn" class="btn-download" download="viral_short.mp4" href="#">
-                                ⬇️ Download 1080x1920 MP4
-                            </a>
-                        </div>
+                    <!-- Player Actions below phone frame -->
+                    <div id="playerActions" class="player-actions hidden">
+                        <a id="downloadVideoBtn" class="btn-download" download="viral_short.mp4" href="#">
+                            ⬇️ Download 1080x1920 MP4
+                        </a>
                     </div>
                 </div>
 
@@ -450,6 +451,9 @@
                             <span class="icon">🚀</span>
                             <h3>YouTube Monetization & SEO Kit</h3>
                         </div>
+                        <button type="button" id="refreshSeoBtn" class="btn-secondary btn-sm" title="Regenerate viral title, description & tags from current script">
+                            🔄 Regenerate
+                        </button>
                     </div>
 
                     <div class="seo-item">
@@ -481,7 +485,7 @@
         </main>
     </div>
 
-    <script type="module" src="/static/js/main.js"></script>
+    <script type="module" src="/static/js/main.js?v=20260921_v4"></script>
 
     <!-- Google Material Toast Notifications Container -->
     <div id="toastContainer" class="google-toast-container"></div>

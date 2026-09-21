@@ -21,7 +21,7 @@ if hasattr(sys.stderr, 'reconfigure'):
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict
 
@@ -147,7 +147,7 @@ class RenderRequest(BaseModel):
     script: str = ""
     voice: str = "en-US-ChristopherNeural"
     voice_rate: str = "+10%"
-    subtitle_style: str = "mrbeast"
+    subtitle_style: str = "hyper_yellow"
     bgm_track: str = "phonk_energetic"
     bgm_volume: float = 0.18
     scene_overrides: Optional[Dict[str, str]] = None
@@ -263,6 +263,11 @@ class PrepareVoiceRequest(BaseModel):
 def serve_home():
     with open("templates/index.html", "r", encoding="utf-8") as f:
         return HTMLResponse(content=f.read())
+
+
+@app.get("/favicon.ico")
+def serve_favicon():
+    return FileResponse("static/favicon.ico")
 
 
 @app.get("/healthz")
@@ -661,8 +666,17 @@ def run_render_task(job_id: str, req: RenderRequest):
             project_id=req.project_id,
             session_id=req.session_id
         )
-        metadata = generate_youtube_metadata(req.script)
+        script_for_meta = req.script or ""
+        if not script_for_meta.strip() and req.project_id:
+            try:
+                proj = load_project(req.project_id)
+                if proj and getattr(proj, "script", None):
+                    script_for_meta = proj.script
+            except Exception:
+                pass
+        metadata = generate_youtube_metadata(script_for_meta)
         cur = load_job(job_id) or {}
+
         cur.update({
             "status": "completed",
             "progress": 100,
