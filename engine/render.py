@@ -85,6 +85,36 @@ def render_scene_clip(
     return os.path.exists(out_path)
 
 
+def expand_scenes_to_rapid_cuts(scenes: List[Dict[str, Any]], max_cut_dur: float = 3.2) -> List[Dict[str, Any]]:
+    """
+    Subdivides scenes longer than max_cut_dur into dynamic sub-cuts using multi-focal camera
+    framing (zoom_in, pan_right, snap_zoom, pan_left, tilt_up, parallax_25d) so videos maintain
+    18-22 rapid cuts (~2.5s-3.2s per visual) to maximize viewer retention.
+    """
+    expanded = []
+    MOTION_CYCLE = ["zoom_in", "pan_right", "snap_zoom", "pan_left", "tilt_up", "parallax_25d"]
+    motion_idx = 0
+    for sc in scenes:
+        dur = float(sc.get("duration", 3.0))
+        if dur <= max_cut_dur:
+            sc_copy = dict(sc)
+            if not sc_copy.get("motion"):
+                sc_copy["motion"] = MOTION_CYCLE[motion_idx % len(MOTION_CYCLE)]
+                motion_idx += 1
+            expanded.append(sc_copy)
+        else:
+            num_subcuts = max(2, int(round(dur / 2.8)))
+            sub_dur = dur / num_subcuts
+            for i in range(num_subcuts):
+                sub = dict(sc)
+                sub["id"] = f"{sc.get('id', 's')}_cut{i}"
+                sub["duration"] = round(sub_dur, 2)
+                sub["motion"] = MOTION_CYCLE[motion_idx % len(MOTION_CYCLE)]
+                motion_idx += 1
+                expanded.append(sub)
+    return expanded
+
+
 def render_broll_clips(
     scenes: List[Dict[str, Any]],
     output_path: str,

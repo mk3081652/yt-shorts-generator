@@ -52,6 +52,8 @@ class Scene:
     hold_previous: bool = False
     entities: List[str] = field(default_factory=list)
     duration: float = 3.0
+    hook_text: Optional[str] = None
+    high_impact_words: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
@@ -103,7 +105,9 @@ class Scene:
             qa_note=data.get("qa_note"),
             hold_previous=bool(data.get("hold_previous", False)),
             entities=data.get("entities", []),
-            duration=float(data.get("duration", 3.0))
+            duration=float(data.get("duration", 3.0)),
+            hook_text=data.get("hook_text"),
+            high_impact_words=list(data.get("high_impact_words") or [])
         )
 
 
@@ -113,6 +117,7 @@ class Project:
     script: str = ""
     style_lock: str = ""
     start_mode: str = "auto"    # "auto" | "manual"
+    transition_style: str = "crossfade"  # "crossfade" | "zoom-punch" | "none"
     scenes: List[Scene] = field(default_factory=list)
     timeline: Optional[Dict[str, Any]] = None
     total_duration: float = 0.0
@@ -131,6 +136,7 @@ class Project:
             "style_lock": self.style_lock,
             "start_mode": self.start_mode,
             "mode": self.start_mode,  # Compatibility alias
+            "transition_style": self.transition_style,
             "scenes": [s.to_dict() for s in self.scenes],
             "segments": [s.to_dict() for s in self.scenes],  # Compatibility alias
             "timeline": self.timeline,
@@ -150,12 +156,14 @@ class Project:
         p_id = data.get("id") or data.get("project_id") or data.get("session_id") or uuid.uuid4().hex
         script = data.get("script") or data.get("script_text") or ""
         mode = data.get("start_mode") or data.get("mode") or "auto"
+        transition_style = data.get("transition_style", "crossfade")
 
         p = cls(
             id=p_id,
             script=script,
             style_lock=data.get("style_lock", ""),
             start_mode=mode,
+            transition_style=transition_style,
             scenes=scenes,
             timeline=data.get("timeline"),
             total_duration=float(data.get("total_duration", 0.0)),
@@ -209,8 +217,10 @@ def get_project_path(project_id: str) -> str:
 def save_project(project: Project) -> None:
     project.updated_at = time.time()
     path = get_project_path(project.id)
-    with open(path, "w", encoding="utf-8") as f:
+    tmp_path = f"{path}.{uuid.uuid4().hex}.tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(project.to_dict(), f, indent=2)
+    os.replace(tmp_path, path)
 
 
 def load_project(project_id: str) -> Optional[Project]:
@@ -223,9 +233,17 @@ def load_project(project_id: str) -> Optional[Project]:
                 path = legacy_path
             else:
                 return None
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            return Project.from_dict(data)
+
+        for attempt in range(2):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    return Project.from_dict(data)
+            except (json.JSONDecodeError, OSError):
+                if attempt == 0:
+                    time.sleep(0.05)
+                    continue
+                raise
     except Exception as e:
         print(f"[Project] Load error for {project_id}: {e}")
         return None
@@ -394,7 +412,8 @@ def edit_meta(
     scene_id: Optional[str] = None,
     motion: Optional[str] = None,
     hold_previous: Optional[bool] = None,
-    style_lock: Optional[str] = None
+    style_lock: Optional[str] = None,
+    transition_style: Optional[str] = None
 ) -> Tuple[Optional[Project], Optional[str], int]:
     project = load_project(project_id)
     if not project:
@@ -404,6 +423,9 @@ def edit_meta(
 
     if style_lock is not None:
         project.style_lock = style_lock.strip()
+
+    if transition_style is not None:
+        project.transition_style = transition_style.strip()
 
     if scene_id:
         target = next((s for s in project.scenes if s.id == scene_id), None)
@@ -626,13 +648,23 @@ def upload_media(project_id: str, scene_id: str, file_bytes: bytes, filename: st
     project.snapshot()
 
     safe_name = os.path.basename(filename)
-    ext = os.path.splitext(safe_name.lower())[1]
-    out_filename = f"{project_id}_{scene_id}_{uuid.uuid4().hex[:8]}{ext}"
-    out_path = os.path.join(CUSTOM_MEDIA_DIR, out_filename)
 
     if m_type == "image":
+        out_filename = f"{project_id}_{scene_id}_{uuid.uuid4().hex[:8]}.jpg"
+        out_path = os.path.join(CUSTOM_MEDIA_DIR, out_filename)
+
         # Downscale and crop to 9:16 if needed
         img = Image.open(BytesIO(file_bytes))
+
+        # Handle RGBA / transparency before saving as JPEG
+        if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+            img = img.convert("RGBA")
+            bg = Image.new("RGB", img.size, (0, 0, 0))
+            bg.paste(img, mask=img.split()[3])
+            img = bg
+        elif img.mode != "RGB":
+            img = img.convert("RGB")
+
         w, h = img.size
         target_ratio = 9.0 / 16.0
         current_ratio = w / float(h)
@@ -651,6 +683,9 @@ def upload_media(project_id: str, scene_id: str, file_bytes: bytes, filename: st
             img = img.resize((1080, 1920), Image.Resampling.LANCZOS)
         img.save(out_path, "JPEG", quality=92)
     else:
+        ext = os.path.splitext(safe_name.lower())[1] or ".mp4"
+        out_filename = f"{project_id}_{scene_id}_{uuid.uuid4().hex[:8]}{ext}"
+        out_path = os.path.join(CUSTOM_MEDIA_DIR, out_filename)
         # Video file saved directly
         with open(out_path, "wb") as f:
             f.write(file_bytes)
@@ -732,16 +767,40 @@ def upload_bulk(project_id: str, files_data: List[Tuple[str, bytes]]) -> Tuple[O
             results.append({"filename": fname, "status": "failed", "reason": err})
             continue
 
-        ext = os.path.splitext(fname.lower())[1]
-        out_fname = f"{project_id}_{assigned_scene.id}_{uuid.uuid4().hex[:6]}{ext}"
-        out_path = os.path.join(CUSTOM_MEDIA_DIR, out_fname)
-
         if m_type == "image":
+            out_fname = f"{project_id}_{assigned_scene.id}_{uuid.uuid4().hex[:6]}.jpg"
+            out_path = os.path.join(CUSTOM_MEDIA_DIR, out_fname)
             img = Image.open(BytesIO(fbytes))
+
+            if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+                img = img.convert("RGBA")
+                bg = Image.new("RGB", img.size, (0, 0, 0))
+                bg.paste(img, mask=img.split()[3])
+                img = bg
+            elif img.mode != "RGB":
+                img = img.convert("RGB")
+
+            # Crop to 9:16
+            w, h = img.size
+            target_ratio = 9.0 / 16.0
+            current_ratio = w / float(h)
+            if abs(current_ratio - target_ratio) > 0.01:
+                if current_ratio > target_ratio:
+                    new_w = int(h * target_ratio)
+                    offset = (w - new_w) // 2
+                    img = img.crop((offset, 0, offset + new_w, h))
+                else:
+                    new_h = int(w / target_ratio)
+                    offset = (h - new_h) // 2
+                    img = img.crop((0, offset, w, offset + new_h))
+
             if img.size != (1080, 1920):
                 img = img.resize((1080, 1920), Image.Resampling.LANCZOS)
             img.save(out_path, "JPEG", quality=92)
         else:
+            ext = os.path.splitext(fname.lower())[1] or ".mp4"
+            out_fname = f"{project_id}_{assigned_scene.id}_{uuid.uuid4().hex[:6]}{ext}"
+            out_path = os.path.join(CUSTOM_MEDIA_DIR, out_fname)
             with open(out_path, "wb") as f:
                 f.write(fbytes)
 

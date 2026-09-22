@@ -105,3 +105,60 @@ def get_allowed_origins() -> List[str]:
         "http://localhost:3000",
         "http://127.0.0.1:3000"
     ]
+
+
+def get_openai_api_key() -> str:
+    return os.environ.get("OPENAI_API_KEY", "").strip()
+
+
+def get_elevenlabs_api_key() -> str:
+    return os.environ.get("ELEVENLABS_API_KEY", "").strip()
+
+
+def get_elevenlabs_voice_id() -> str:
+    return os.environ.get("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM").strip()
+
+
+def get_tts_provider() -> str:
+    p = os.environ.get("TTS_PROVIDER", "edge").strip().lower()
+    if p in ("elevenlabs", "openai", "edge"):
+        return p
+    return "edge"
+
+
+def get_motion_texture() -> str:
+    t = os.environ.get("MOTION_TEXTURE", "film_grain").strip().lower()
+    return "film_grain" if t in ("film_grain", "grain", "1", "true") else "none"
+
+
+def get_storage_provider() -> str:
+    return os.environ.get("STORAGE_PROVIDER", "local").strip().lower()
+
+
+def get_s3_bucket() -> str:
+    return os.environ.get("AWS_S3_BUCKET", "").strip()
+
+
+def get_cloudinary_url() -> str:
+    return os.environ.get("CLOUDINARY_URL", "").strip()
+
+
+def get_youtube_client_secrets_path() -> str:
+    """Returns absolute path to YouTube client_secrets.json."""
+    custom = os.environ.get("YOUTUBE_CLIENT_SECRETS_FILE", "").strip()
+    if custom and os.path.exists(custom):
+        return os.path.abspath(custom)
+    curr = os.path.dirname(os.path.abspath(__file__))
+    root_dir = os.path.dirname(curr)
+    return os.path.join(root_dir, "client_secrets.json")
+
+
+def get_youtube_token_path() -> str:
+    """Returns absolute path to YouTube token.json (cached OAuth credentials)."""
+    custom = os.environ.get("YOUTUBE_TOKEN_FILE", "").strip()
+    if custom:
+        return os.path.abspath(custom)
+    curr = os.path.dirname(os.path.abspath(__file__))
+    root_dir = os.path.dirname(curr)
+    return os.path.join(root_dir, "token.json")
+

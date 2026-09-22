@@ -48,3 +48,8 @@ Thumbs.db
 .env.*
 !.env.example
 *.env
+
+# YouTube OAuth secrets (NEVER commit these)
+client_secrets.json
+token.json
+tokens/

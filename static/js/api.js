@@ -11,17 +11,115 @@ export class ApiError extends Error {
     }
 }
 
+function isNetworkUploadIssue(err) {
+    if (!err) return false;
+    const status = err.status;
+    if (status === 413 || status === 502 || status === 504 || status === 403 || status === 0) {
+        return true;
+    }
+    const msg = (err.message || "").toLowerCase();
+    return (
+        msg.includes("network error") ||
+        msg.includes("failed to fetch") ||
+        msg.includes("413") ||
+        msg.includes("payload") ||
+        msg.includes("proxy") ||
+        msg.includes("stream already read")
+    );
+}
+
+/**
+ * In-browser canvas image optimizer.
+ * Scales down large images to max 1080x1920 (YouTube Shorts native format)
+ * and compresses to lightweight high-quality JPEG.
+ */
+export async function optimizeImageFile(file, maxWidth = 1080, maxHeight = 1920, quality = 0.88) {
+    if (!file || !file.type || !file.type.startsWith("image/")) {
+        return file;
+    }
+    if (file.type === "image/gif" || file.type === "image/svg+xml") {
+        return file;
+    }
+
+    return new Promise((resolve) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            let { width, height } = img;
+            if (!width || !height) {
+                resolve(file);
+                return;
+            }
+
+            let targetWidth = width;
+            let targetHeight = height;
+            if (targetWidth > maxWidth || targetHeight > maxHeight) {
+                const ratio = Math.min(maxWidth / targetWidth, maxHeight / targetHeight);
+                targetWidth = Math.round(targetWidth * ratio);
+                targetHeight = Math.round(targetHeight * ratio);
+            }
+
+            const canvas = document.createElement("canvas");
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) {
+                resolve(file);
+                return;
+            }
+            ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+            canvas.toBlob(
+                (blob) => {
+                    if (blob && blob.size < file.size) {
+                        const baseName = file.name.replace(/\.[^/.]+$/, "");
+                        const optimized = new File([blob], `${baseName}_optimized.jpg`, {
+                            type: "image/jpeg",
+                            lastModified: Date.now()
+                        });
+                        resolve(optimized);
+                    } else {
+                        resolve(file);
+                    }
+                },
+                "image/jpeg",
+                quality
+            );
+        };
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            resolve(file);
+        };
+        img.src = url;
+    });
+}
+
 async function request(url, options = {}) {
     try {
         const res = await fetch(url, options);
         if (!res.ok) {
             let errorMsg = `Request failed (${res.status})`;
             try {
-                const errData = await res.json();
-                errorMsg = errData.detail || errData.message || errorMsg;
-            } catch (_) {
+                // Read text ONCE to prevent "Failed to execute 'text' on 'Response': body stream already read"
                 const text = await res.text();
-                if (text) errorMsg = text;
+                try {
+                    const errData = JSON.parse(text);
+                    errorMsg = errData.detail || errData.message || errorMsg;
+                } catch (_) {
+                    // Non-JSON response (e.g. corporate proxy HTML block page or 413)
+                    if (res.status === 413) {
+                        errorMsg = "File payload is too large for your network/proxy connection (HTTP 413).";
+                    } else if (res.status === 502 || res.status === 504) {
+                        errorMsg = `Network gateway timeout or proxy error (HTTP ${res.status}).`;
+                    } else if (res.status === 403) {
+                        errorMsg = "Upload blocked by corporate network policy or proxy filter (HTTP 403).";
+                    } else if (text && text.trim().length > 0 && !text.includes("<html") && text.length < 250) {
+                        errorMsg = text.trim();
+                    }
+                }
+            } catch (_) {
+                // Keep default errorMsg if reading body fails
             }
             throw new ApiError(errorMsg, res.status);
         }
@@ -157,24 +255,73 @@ export const api = {
     },
 
     async uploadMedia(projectId, sceneId, file) {
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("segment_id", sceneId);
-        return await request(`/api/projects/${projectId}/upload_media`, {
-            method: "POST",
-            body: formData
-        });
+        const doUpload = async (uploadFile) => {
+            const formData = new FormData();
+            formData.append("file", uploadFile);
+            formData.append("segment_id", sceneId);
+            return await request(`/api/projects/${projectId}/upload_media`, {
+                method: "POST",
+                body: formData
+            });
+        };
+
+        try {
+            // Normal flow: always upload original file untouched first!
+            return await doUpload(file);
+        } catch (err) {
+            // Only trigger optimization if there was a network / proxy / payload limit issue:
+            if (isNetworkUploadIssue(err) && file && file.type && file.type.startsWith("image/")) {
+                console.warn("[Upload Resilience] Network rejected raw image upload, auto-optimizing:", err);
+                if (typeof window !== "undefined" && window.showToast) {
+                    window.showToast("⚠️ Network rejected raw upload. Auto-optimizing image for your connection...", "warning", 5000);
+                }
+                const optimizedFile = await optimizeImageFile(file);
+                if (optimizedFile) {
+                    const res = await doUpload(optimizedFile);
+                    if (typeof window !== "undefined" && window.showToast) {
+                        window.showToast("✅ Uploaded successfully after optimizing for connection!", "success", 5000);
+                    }
+                    return res;
+                }
+            }
+            throw err;
+        }
     },
 
     async uploadBulk(projectId, files) {
-        const formData = new FormData();
-        for (const file of files) {
-            formData.append("files", file);
+        const doUpload = async (uploadFiles) => {
+            const formData = new FormData();
+            for (const file of uploadFiles) {
+                formData.append("files", file);
+            }
+            return await request(`/api/projects/${projectId}/upload_bulk`, {
+                method: "POST",
+                body: formData
+            });
+        };
+
+        try {
+            // Normal flow: always upload original files untouched first!
+            return await doUpload(files);
+        } catch (err) {
+            // Only trigger optimization if there was a network / proxy / payload limit issue:
+            const hasImages = Array.isArray(files) && files.some(f => f.type && f.type.startsWith("image/"));
+            if (isNetworkUploadIssue(err) && hasImages) {
+                console.warn("[Upload Resilience] Network rejected bulk upload, auto-optimizing images:", err);
+                if (typeof window !== "undefined" && window.showToast) {
+                    window.showToast("⚠️ Network rejected raw upload. Auto-optimizing images for your connection...", "warning", 5000);
+                }
+                const optimizedFiles = await Promise.all(
+                    files.map(f => (f.type && f.type.startsWith("image/") ? optimizeImageFile(f) : f))
+                );
+                const res = await doUpload(optimizedFiles);
+                if (typeof window !== "undefined" && window.showToast) {
+                    window.showToast("✅ Media uploaded successfully after optimizing for connection!", "success", 5000);
+                }
+                return res;
+            }
+            throw err;
         }
-        return await request(`/api/projects/${projectId}/upload_bulk`, {
-            method: "POST",
-            body: formData
-        });
     },
 
     async clearMedia(projectId, sceneId) {
@@ -252,5 +399,23 @@ export const api = {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ script })
         });
+    },
+
+    // YouTube Data API v3 methods
+    async getYouTubeAuthStatus() {
+        return await request("/api/youtube/auth_status");
+    },
+
+    async authorizeYouTube() {
+        return await request("/api/youtube/authorize", { method: "POST" });
+    },
+
+    async publishToYouTube(payload) {
+        return await request("/api/youtube/publish", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
     }
 };
+

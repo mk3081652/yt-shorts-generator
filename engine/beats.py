@@ -30,19 +30,20 @@ def create_story_beats(
     script_text: str,
     total_duration: float,
     min_dur: float = 2.0,
-    max_dur: float = 5.5
+    max_dur: float = 5.5,
+    rapid_mode: bool = False
 ) -> List[Tuple[str, float]]:
     """
     Intelligent narrative story-beat segmentation:
-    - ONE SEGMENT = ONE CLEAR VISUAL IDEA (~3.0s to 5.5s).
+    - ONE SEGMENT = ONE CLEAR VISUAL IDEA (~3.0s to 5.5s, or ~2.0s to 3.2s in rapid_mode).
     - Splits on:
       1. Explicit delimiters '|||'
-      2. Line breaks (\n+)
+      2. Line breaks (\\n+)
       3. Sentence boundaries (. ! ?)
       4. Colons followed by space or newline
-      5. Clause boundaries for long sentences (> 14 words)
+      5. Clause boundaries for long sentences (> 14 words, or > 7 words in rapid_mode)
     - 100% Verbatim script preservation: Concatenation of all beats equals the exact original words.
-    - Durations proportional to word count, clamped to min 1.5s.
+    - Durations proportional to word count, clamped to min_dur.
     """
     clean_script = script_text.strip()
     if not clean_script:
@@ -52,6 +53,10 @@ def create_story_beats(
     total_words = len(words)
     if total_words == 0:
         return []
+
+    word_threshold = 7 if rapid_mode else 14
+    max_merged_len = 8 if rapid_mode else 14
+    effective_min_dur = 1.8 if rapid_mode else min_dur
 
     # 1. If explicit '|||' delimiters exist, split on them directly
     if '|||' in clean_script:
@@ -65,7 +70,6 @@ def create_story_beats(
                 continue
 
             # Split line on sentence terminators (. ! ?) or colon followed by space
-            # Pattern matches punctuation and captures it with trailing whitespace
             sent_chunks = re.split(r'([.!?]+(?:\s+|$)|:(?:\s+|$))', line_clean)
             line_sents = []
             i = 0
@@ -84,32 +88,49 @@ def create_story_beats(
             if not line_sents:
                 line_sents = [line_clean]
 
-            # Refine any long sentence (> 14 words) into visual clauses
+            # Refine any long sentence into visual clauses
             for sent in line_sents:
                 s_words = sent.split()
-                if len(s_words) > 14:
-                    # Split at major conjunction clauses
-                    clause_parts = re.split(
-                        r'(?<=[,;])\s+(?=(?:and|but|while|as|where|yet|before|after|with|when|so|because)\b)',
-                        sent,
-                        flags=re.IGNORECASE
-                    )
-                    if len(clause_parts) > 1 and all(len(cp.split()) >= 4 for cp in clause_parts):
-                        raw_parts.extend(cp.strip() for cp in clause_parts if cp.strip())
+                if len(s_words) > word_threshold:
+                    if rapid_mode:
+                        # Rapid mode: split on conjunctions/prepositions or chunk by ~6-8 words
+                        clause_parts = re.split(
+                            r'(?:(?<=[,;—\-])\s+|\s+(?=(?:and|but|while|as|where|yet|before|after|with|when|so|because|that|which|beneath|revealed|hidden|containing|towards)\b))',
+                            sent,
+                            flags=re.IGNORECASE
+                        )
+                        clause_parts = [cp.strip() for cp in clause_parts if cp.strip()]
+                        if len(clause_parts) > 1 and all(len(cp.split()) >= 3 for cp in clause_parts):
+                            raw_parts.extend(clause_parts)
+                        else:
+                            # Direct 6-8 word rhythm chunking for rapid cuts
+                            words_in_sent = sent.split()
+                            chunk_step = 6
+                            for c_idx in range(0, len(words_in_sent), chunk_step):
+                                raw_parts.append(" ".join(words_in_sent[c_idx:c_idx + chunk_step]))
                     else:
-                        # Split at comma / semicolon
-                        sent_words = sent.split()
-                        buf_words = []
-                        for w in sent_words:
-                            buf_words.append(w)
-                            if len(buf_words) >= 7 and w.endswith((',', ';')):
-                                raw_parts.append(" ".join(buf_words))
-                                buf_words = []
-                        if buf_words:
-                            if raw_parts and len(buf_words) < 4:
-                                raw_parts[-1] += " " + " ".join(buf_words)
-                            else:
-                                raw_parts.append(" ".join(buf_words))
+                        # Standard mode: split at major conjunction clauses with punctuation
+                        clause_parts = re.split(
+                            r'(?<=[,;—\-])\s+(?=(?:and|but|while|as|where|yet|before|after|with|when|so|because|that|which)\b)',
+                            sent,
+                            flags=re.IGNORECASE
+                        )
+                        if len(clause_parts) > 1 and all(len(cp.split()) >= 4 for cp in clause_parts):
+                            raw_parts.extend(cp.strip() for cp in clause_parts if cp.strip())
+                        else:
+                            # Split at comma / semicolon / dash
+                            sent_words = sent.split()
+                            buf_words = []
+                            for w in sent_words:
+                                buf_words.append(w)
+                                if len(buf_words) >= 7 and (w.endswith((',', ';', ':', '—')) or w.endswith('-')):
+                                    raw_parts.append(" ".join(buf_words))
+                                    buf_words = []
+                            if buf_words:
+                                if raw_parts and len(buf_words) < 4:
+                                    raw_parts[-1] += " " + " ".join(buf_words)
+                                else:
+                                    raw_parts.append(" ".join(buf_words))
                 else:
                     raw_parts.append(sent)
 
@@ -117,7 +138,7 @@ def create_story_beats(
     if not combined_beats:
         combined_beats = [clean_script]
 
-    # Combine adjacent tiny beats (< 4 words) if combined <= 14 words
+    # Combine adjacent tiny beats (< 3 words) if combined <= max_merged_len
     merged_beats: List[str] = []
     curr_beat = ""
     for b in combined_beats:
@@ -129,9 +150,9 @@ def create_story_beats(
         else:
             curr_len = len(curr_beat.split())
             b_len = len(b_clean.split())
-            if curr_len < 4 and (curr_len + b_len) <= 14:
+            if curr_len < 3 and (curr_len + b_len) <= max_merged_len:
                 curr_beat = f"{curr_beat} {b_clean}"
-            elif b_len < 3 and (curr_len + b_len) <= 14:
+            elif b_len < 2 and (curr_len + b_len) <= max_merged_len:
                 curr_beat = f"{curr_beat} {b_clean}"
             else:
                 merged_beats.append(curr_beat)
@@ -145,9 +166,9 @@ def create_story_beats(
     # 4. Strict Verbatim Check
     joined_words = " ".join(merged_beats).split()
     if joined_words != words:
-        # Guaranteed verbatim fallback: chunk words into 8-12 word segments
+        # Guaranteed verbatim fallback: chunk words into segments
         merged_beats = []
-        step = 10
+        step = 6 if rapid_mode else 10
         for idx in range(0, total_words, step):
             merged_beats.append(" ".join(words[idx:idx + step]))
 
@@ -156,11 +177,25 @@ def create_story_beats(
     for b in merged_beats:
         b_cnt = len(b.split())
         ratio = b_cnt / max(1, total_words)
-        dur = max(min_dur, round(ratio * total_duration, 2))
+        dur = max(effective_min_dur, round(ratio * total_duration, 2))
         beats.append((b, dur))
 
     sum_dur = sum(d for _, d in beats)
     if sum_dur > 0:
-        beats = [(t, max(1.5, round((d / sum_dur) * total_duration, 2))) for t, d in beats]
+        beats = [(t, max(effective_min_dur, round((d / sum_dur) * total_duration, 2))) for t, d in beats]
 
     return beats
+
+
+def create_rapid_story_beats(
+    script_text: str,
+    total_duration: float = 60.0
+) -> List[Tuple[str, float]]:
+    """Generates rapid story beats targetting ~2.5s-3.2s per visual cut (18-22 cuts for 60s)."""
+    return create_story_beats(
+        script_text=script_text,
+        total_duration=total_duration,
+        min_dur=1.8,
+        max_dur=3.2,
+        rapid_mode=True
+    )

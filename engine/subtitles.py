@@ -1,6 +1,6 @@
 import os
 import re
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 def format_ass_time(seconds: float) -> str:
     """Format seconds into ASS timestamp: H:MM:SS.cs (centiseconds)"""
@@ -27,7 +27,7 @@ STYLE_PRESETS = {
         "outline": 3.2,
         "shadow": 2.0,
         "alignment": 2, # bottom-center
-        "margin_v": 490, # Golden Shorts reading zone
+        "margin_v": 620, # Shorts safe zone: 20%+ clearance from bottom UI
         "uppercase": True,
         "border_style": 1
     },
@@ -43,7 +43,7 @@ STYLE_PRESETS = {
         "outline": 3.2,
         "shadow": 2.0,
         "alignment": 2,
-        "margin_v": 490,
+        "margin_v": 620,
         "uppercase": True,
         "border_style": 1
     },
@@ -59,7 +59,7 @@ STYLE_PRESETS = {
         "outline": 3.2,
         "shadow": 2.0,
         "alignment": 2,
-        "margin_v": 490,
+        "margin_v": 620,
         "uppercase": True,
         "border_style": 1
     },
@@ -75,7 +75,7 @@ STYLE_PRESETS = {
         "outline": 3.2,
         "shadow": 2.0,
         "alignment": 2,
-        "margin_v": 490,
+        "margin_v": 620,
         "uppercase": True,
         "border_style": 1
     },
@@ -91,7 +91,7 @@ STYLE_PRESETS = {
         "outline": 2.2,
         "shadow": 1.5,
         "alignment": 2,
-        "margin_v": 490,
+        "margin_v": 620,
         "uppercase": False,
         "border_style": 1
     }
@@ -108,30 +108,71 @@ STYLE_ALIASES = {
     "editorial_box": "clean"
 }
 
+STYLE_ACCENTS = {
+    "hyper_yellow": "&H00FFFFFF",  # Pure White pop on Yellow
+    "glacier_cyan": "&H0033FF00",  # Electric Lime pop on Cyan
+    "neon_lime": "&H0000E6FF",     # Electric Yellow pop on Lime
+    "sunset_coral": "&H0000E6FF",  # Bright Yellow pop on Coral
+    "clean": "&H0000E6FF"          # High-contrast Gold pop on Clean White
+}
+
 def clean_word_text(w: str) -> str:
     """Strip markdown asterisks, brackets, quotes, etc."""
     cleaned = re.sub(r'[*_#`~\[\]\(\)\{\}\<\>"]', '', w).strip()
     return cleaned
+
+def is_high_impact_word(word: str, scene_keywords: Optional[List[str]] = None) -> bool:
+    r"""
+    Identifies words warranting kinetic emphasis:
+    - Numbers, percentages, money, quantities (\d+)
+    - ALL-CAPS words of 2+ chars (MH370, NEVER, DONT, SHOCKED, TRUTH)
+    - Explicit keywords flagged in scene prompt metadata / high_impact_words
+    """
+    clean = re.sub(r'^[^\w]+|[^\w]+$', '', word)
+    if not clean:
+        return False
+
+    # 1. Numbers / metrics / stats
+    if re.search(r'\d', clean):
+        return True
+
+    # 2. ALL-CAPS words
+    if len(clean) >= 2 and clean.isupper() and clean.isalpha():
+        if clean not in {"A", "AN", "IN", "ON", "AT", "TO", "OF", "IF", "IS", "IT", "AND", "THE"}:
+            return True
+
+    # 3. Explicit keywords hook (from scene high_impact_words / prompt metadata)
+    if scene_keywords:
+        low_clean = clean.lower()
+        for kw in scene_keywords:
+            if kw and (kw.lower() == low_clean or kw.lower() in low_clean):
+                return True
+
+    return False
 
 def generate_ass_subtitles(
     word_boundaries: List[Dict[str, Any]],
     output_ass_path: str,
     style_name: str = "hyper_yellow",
     max_words_per_segment: int = 2,
-    margin_v: int = None
+    margin_v: int = None,
+    high_impact_words: Optional[List[str]] = None,
+    hook_banner: Optional[Dict[str, Any]] = None
 ) -> str:
     """
     Builds an Advanced SubStation Alpha (.ass) subtitle file.
-    Groups words into punchy 1-2 word segments with eye-catching, modern, simple kinetic styling.
+    Groups words into punchy 1-2 word segments with eye-catching, modern kinetic styling,
+    per-word emphasis (larger font scale + accent color for numbers/caps/keywords),
+    and an optional bold on-screen hook banner overlay for Scene 1.
     """
     resolved_style_name = STYLE_ALIASES.get(style_name, style_name)
     style = dict(STYLE_PRESETS.get(resolved_style_name, STYLE_PRESETS["hyper_yellow"]))
     if margin_v is not None:
         style["margin_v"] = margin_v
-    
+
     play_res_x = 1080
     play_res_y = 1920
-    font_size = style["font_size"] * 4 # ~64-68px on 1080x1920
+    font_size = style["font_size"] * 4  # ~64-68px on 1080x1920
     border_style = style.get("border_style", 1)
 
     ass_header = f"""[Script Info]
@@ -146,6 +187,7 @@ PlayResY: {play_res_y}
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: ViralDefault,{style['font_name']},{font_size},{style['primary_color']},{style['secondary_color']},{style['outline_color']},{style['back_color']},{style['bold']},0,0,0,100,100,2,0,{border_style},{style['outline'] * 2},{style['shadow'] * 2},{style['alignment']},40,40,{style['margin_v']},1
+Style: HookBanner,Arial Black,56,&H00FFFFFF,&H0000E6FF,&H00000000,&HA0000000,1,0,0,0,100,100,2,0,3,4.0,2.0,8,60,60,310,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -184,16 +226,24 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     if current_chunk:
         chunks.append(current_chunk)
 
+    accent_c = STYLE_ACCENTS.get(resolved_style_name, "&H00FFFFFF")
+    primary_c = style['primary_color']
+
     for chunk in chunks:
         start_time = format_ass_time(chunk[0]["start"])
         end_time = format_ass_time(chunk[-1]["end"] + 0.08)
         
-        words_text = [w["word"] for w in chunk]
-        if style.get("uppercase", True):
-            words_text = [w.upper() for w in words_text]
+        words_formatted = []
+        for w in chunk:
+            raw_w = w["word"]
+            disp_w = raw_w.upper() if style.get("uppercase", True) else raw_w
+            if is_high_impact_word(raw_w, high_impact_words):
+                # Accent pop + 120% kinetic scale, then revert back to primary color and 100% scale
+                words_formatted.append(f"{{\\c{accent_c}&\\fscx120\\fscy120}}{disp_w}{{\\c{primary_c}&\\fscx100\\fscy100}}")
+            else:
+                words_formatted.append(disp_w)
 
-        primary_c = style['primary_color']
-        text_content = ' '.join(words_text)
+        text_content = ' '.join(words_formatted)
 
         # Eye-catching, modern, simple micro-pop bounce (snappy 65ms scale pop)
         if resolved_style_name == "clean":
@@ -203,6 +253,16 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         dialogue_line = f"Dialogue: 0,{start_time},{end_time},ViralDefault,,0,0,0,,{formatted_text}"
         events.append(dialogue_line)
+
+    # Bold on-screen hook banner overlay for Scene 1 (Layer 1, non-interfering top pill box)
+    if hook_banner and hook_banner.get("text"):
+        hb_text = str(hook_banner["text"]).strip()
+        if hb_text:
+            hb_start = format_ass_time(float(hook_banner.get("start", 0.0)))
+            hb_end = format_ass_time(float(hook_banner.get("end", 2.6)))
+            hb_clean = hb_text.upper()
+            hook_line = f"Dialogue: 1,{hb_start},{hb_end},HookBanner,,0,0,0,,{{\\fad(150,200)}}{hb_clean}"
+            events.insert(0, hook_line)
 
     full_ass_content = ass_header + "\n".join(events) + "\n"
 

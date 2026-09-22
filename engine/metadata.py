@@ -186,6 +186,8 @@ def _generate_metadata_nlp_fallback(script: str) -> Dict[str, Any]:
     hashtags_str = " ".join(unique_hashtags)
 
     desc_lines.append("")
+    desc_lines.append("Created with AI assistance for visual storytelling. Contains synthetic/altered media.")
+    desc_lines.append("")
     desc_lines.append(hashtags_str)
     description = "\n".join(desc_lines)
 
@@ -193,7 +195,12 @@ def _generate_metadata_nlp_fallback(script: str) -> Dict[str, Any]:
         "title": title,
         "description": description,
         "tags": tags,
-        "hashtags": hashtags_str
+        "hashtags": hashtags_str,
+        "altered_or_synthetic_content": True,
+        "compliance_notes": (
+            "YouTube Partner Program (YPP) Disclosure: This video contains altered or synthetic visuals/audio "
+            "generated with AI tools. In YouTube Studio, check 'Altered or synthetic content: Yes'."
+        )
     }
 
 
@@ -242,11 +249,19 @@ def generate_youtube_metadata(script: str) -> Dict[str, Any]:
                 if not isinstance(tags, list) or len(tags) < 3:
                     tags = [t.strip() for t in str(tags).split(",") if t.strip()]
 
+                if "Created with AI assistance" not in description:
+                    description = f"{description}\n\nCreated with AI assistance for visual storytelling. Contains synthetic/altered media."
+
                 return {
                     "title": title,
                     "description": description,
                     "tags": tags,
-                    "hashtags": hashtags or "#shorts #viral #trending"
+                    "hashtags": hashtags or "#shorts #viral #trending",
+                    "altered_or_synthetic_content": True,
+                    "compliance_notes": (
+                        "YouTube Partner Program (YPP) Disclosure: This video contains altered or synthetic visuals/audio "
+                        "generated with AI tools. In YouTube Studio, check 'Altered or synthetic content: Yes'."
+                    )
                 }
     except Exception as e:
         logger.warning(f"[Metadata] Gemini metadata generation error, using NLP fallback: {e}")

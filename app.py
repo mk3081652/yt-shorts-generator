@@ -57,6 +57,7 @@ from engine.project import (
     Scene
 )
 from engine.timeline import prepare_voice_timeline as prepare_project_voice_timeline
+from engine.youtube_uploader import check_auth_status, upload_video_to_youtube, get_authenticated_service
 
 
 app = FastAPI(title="Viral YouTube Shorts Creator Tool")
@@ -150,10 +151,14 @@ class RenderRequest(BaseModel):
     subtitle_style: str = "hyper_yellow"
     bgm_track: str = "phonk_energetic"
     bgm_volume: float = 0.18
+    transition_style: Optional[str] = "crossfade"
     scene_overrides: Optional[Dict[str, str]] = None
     preview_scenes: Optional[List[Dict[str, Any]]] = None
     session_id: Optional[str] = None
     project_id: Optional[str] = None
+    custom_audio_path: Optional[str] = None
+    tts_provider: Optional[str] = None
+    motion_texture: Optional[str] = None
 
     model_config = ConfigDict(extra="allow")
 
@@ -176,6 +181,7 @@ class MetadataRequest(BaseModel):
 
 class GenerateScriptRequest(BaseModel):
     topic: str
+    angle: Optional[str] = "investigative_mystery"  # "investigative_mystery" | "contrarian_myth" | "forensic_details"
 
 
 def sanitize_spoken_script(text: str) -> str:
@@ -244,6 +250,7 @@ class EditMetaRequest(BaseModel):
     segment_id: Optional[str] = None
     motion: Optional[str] = None
     style_lock: Optional[str] = None
+    transition_style: Optional[str] = None
 
 
 class SuggestPromptsRequest(BaseModel):
@@ -271,6 +278,7 @@ def serve_favicon():
 
 
 @app.get("/healthz")
+@app.get("/health")
 def healthz():
     """Health check endpoint for container orchestrators and monitoring."""
     return {"status": "ok"}
@@ -311,16 +319,25 @@ async def preview_voice(req: VoicePreviewRequest):
     }
 
 
-def synthesize_fallback_script(topic: str) -> str:
+def synthesize_fallback_script(topic: str, angle: str = "investigative_mystery") -> str:
     """Generates a high-retention 50-60 second viral YouTube Shorts script when AI is unavailable."""
     topic_clean = topic.strip().title()
-    templates = [
-        f"Think you know the real truth about {topic_clean}? What if I told you the official story is completely backward? Deep below the surface, researchers and investigative teams uncovered classified anomalies that historians have argued about for decades. When the final records were examined, the evidence was undeniable. Strange signals were recorded, key witnesses suddenly went silent, and official reports were heavily redacted. What they actually found defies every explanation we were taught in school. The closer you look at the timeline, the clearer it becomes that something massive occurred behind closed doors. The real question isn't whether it happened—the question is: why are they still keeping it quiet? Drop a comment with what you think, and subscribe for more mind-bending revelations.",
-        f"This secret about {topic_clean} will completely change how you see the world. Almost nobody knows what actually occurred behind closed doors during the final moments. When independent experts analyzed the recovered data, what they uncovered shocked everyone in the room. Unexplained readings appeared on the monitors, followed by an eerie silence that lasted for days. Decades of research have tried to sweep these facts under the rug, but modern forensic technology has finally cracked the puzzle. The deeper you look into the archives, the more mysterious the entire event becomes. Could this be the biggest cover-up in modern history? Share this with someone who needs to know the truth, and subscribe so you don't miss part two.",
-        f"You won't believe what they just uncovered about {topic_clean}. For years, everyone believed the exact same lie. But newly declassified evidence proves that everything we were told was just the surface. When investigators retraced the final steps, they discovered anomalies that completely contradict the official timeline. Critical pieces of evidence had vanished without a trace, and the remaining clues point to something far darker than anyone dared to imagine. Even the most skeptical scientists are now questioning what really took place that day. The evidence is right in front of us, yet almost nobody is talking about it. What do you think really happened? Tell me in the comments, and follow for more untold stories."
-    ]
+    templates_by_angle = {
+        "investigative_mystery": [
+            f"Think you know the real truth about {topic_clean}? What if I told you the official story is completely backward? Deep below the surface, researchers and investigative teams uncovered classified anomalies that historians have argued about for decades. When the final records were examined, the evidence was undeniable. Strange signals were recorded, key witnesses suddenly went silent, and official reports were heavily redacted. What they actually found defies every explanation we were taught in school. The closer you look at the timeline, the clearer it becomes that something massive occurred behind closed doors. The real question isn't whether it happened—the question is: why are they still keeping it quiet? Drop a comment with what you think, and subscribe for more mind-bending revelations.",
+            f"This secret about {topic_clean} will completely change how you see the world. Almost nobody knows what actually occurred behind closed doors during the final moments. When independent experts analyzed the recovered data, what they uncovered shocked everyone in the room. Unexplained readings appeared on the monitors, followed by an eerie silence that lasted for days. Decades of research have tried to sweep these facts under the rug, but modern forensic technology has finally cracked the puzzle. The deeper you look into the archives, the more mysterious the entire event becomes. Could this be the biggest cover-up in modern history? Share this with someone who needs to know the truth, and subscribe so you don't miss part two."
+        ],
+        "contrarian_myth": [
+            f"Everything you were told about {topic_clean} is a complete lie. The mainstream consensus says one thing, but primary source archives expose the shocking opposite. When researchers cross-referenced the original field notes, the popular myth collapsed instantly. The people behind the initial narrative had a massive financial incentive to keep the real facts hidden from the public. Look at the data from the initial experiment: the numbers don't match the history books at all. Once you see the deception, you can never unsee it. Did you believe the myth too? Tell me what surprised you most in the comments, and follow for more truth-bombs.",
+            f"Stop believing this dangerous myth about {topic_clean}! For generations, textbook history repeated the exact same story without checking the facts. But when investigators tracked down the unedited journals, the whole narrative fell apart. What everyone considers common knowledge is actually based on a mistranslation from over a century ago. The actual discovery was far more dangerous, and officials scrambled to suppress it immediately. The real evidence is right in front of us, yet ninety-nine percent of people still believe the fairy tale. What do you think really happened? Share your thoughts below and subscribe."
+        ],
+        "forensic_details": [
+            f"You won't believe what forensic investigators just uncovered about {topic_clean}. When detectives re-examined the physical evidence with modern spectral analysis, microscopic traces revealed a chilling detail. The timeline documented by officials was off by exactly three hours. Critical communication logs had been wiped clean, but backup telemetry caught the exact sequence of events. Every forensic marker points to an outside intervention that was intentionally covered up. The evidence isn't speculation—it's written right in the digital metadata. What do you think this proof actually means? Let me know in the comments, and follow for more forensic breakdowns."
+        ]
+    }
     import random
-    return random.choice(templates)
+    pool = templates_by_angle.get(angle, templates_by_angle["investigative_mystery"])
+    return random.choice(pool)
 
 
 @app.post("/api/generate_script")
@@ -330,24 +347,35 @@ def api_generate_script(req: GenerateScriptRequest):
     if not topic:
         raise HTTPException(status_code=400, detail="Topic cannot be empty.")
 
+    angle = (req.angle or "investigative_mystery").lower()
+    angle_instructions = {
+        "investigative_mystery": "Editorial Angle: Investigative Mystery. Unearth classified anomalies, unexpected disappearances, or unexplained records. Question official timelines and highlight strange clues.",
+        "contrarian_myth": "Editorial Angle: Contrarian Myth-Busting. Challenge conventional wisdom, shatter widely accepted myths, and expose what mainstream consensus gets completely wrong.",
+        "forensic_details": "Editorial Angle: Forensic Telemetry & Evidence. Focus on micro-clues, recovered technical telemetry, timeline inconsistencies, and forensic records."
+    }
+    angle_instruction = angle_instructions.get(angle, angle_instructions["investigative_mystery"])
+
     api_key = os.environ.get("GEMINI_API_KEY", "").strip()
     clean_text = None
     model_used = None
 
     if api_key:
-        prompt = f"""You are a master viral YouTube Shorts scriptwriter.
+        prompt = f"""You are an elite, viral YouTube Shorts narrative specialist.
 Write a full-length, high-retention 50-60 second spoken voiceover script about: "{topic}".
 
-STRICT RULES:
+{angle_instruction}
+
+STRICT MONETIZATION & RETENTION RULES (Anti-Repetitive Storytelling):
 1. The first sentence MUST be an irresistible 3-second hook that immediately stops viewers from scrolling.
-2. Fast-paced, intriguing storytelling with surprising facts, mystery, drama, or twists.
-3. Total word count MUST be between 130 and 150 words (aiming for exactly 50 to 58 seconds of speech, staying safely under the 60-second YouTube Shorts limit).
-4. Pacing: Break the story into 4 distinct beats:
+2. Fast-paced, intriguing storytelling with genuine surprises, drama, or twists.
+3. Cadence variation: Keep sentence lengths varied between 1.8s and 3.2s per beat (roughly 5 to 10 words per phrase) for rapid visual transitions without monotone pacing.
+4. Total word count MUST be between 130 and 150 words (aiming for exactly 50 to 58 seconds of speech, staying safely under the 60-second YouTube Shorts limit).
+5. Pacing: Break the story into 4 distinct beats:
    - Beat 1 (0-10s): The shocking hook and the setup.
    - Beat 2 (10-30s): The rising intrigue and strange clues or discoveries.
    - Beat 3 (30-50s): The climactic revelation or unexpected twist.
    - Beat 4 (50-58s): A thought-provoking final question and call-to-action ("Subscribe for more").
-5. OUTPUT SPOKEN NARRATION WORDS ONLY!
+6. OUTPUT SPOKEN NARRATION WORDS ONLY!
    - DO NOT include scene directions or camera angles.
    - DO NOT include bracketed sound effects or notes like [Dramatic pause], [Cut to plane].
    - DO NOT include prompt instructions or image descriptions.
@@ -375,10 +403,10 @@ STRICT RULES:
             logger.warning(f"Gemini script generation failed, falling back to local synthesizer: {e}")
 
     if not clean_text:
-        clean_text = synthesize_fallback_script(topic)
+        clean_text = synthesize_fallback_script(topic, angle=angle)
         model_used = "viral_synthesizer"
 
-    return {"topic": topic, "script": clean_text, "model": model_used}
+    return {"topic": topic, "script": clean_text, "model": model_used, "angle": angle}
 
 
 @app.post("/api/projects")
@@ -430,7 +458,13 @@ def api_project_edit_prompt(id: str, req: EditPromptRequest):
 @app.post("/api/projects/{id}/edit_meta")
 def api_project_edit_meta(id: str, req: EditMetaRequest):
     validate_session_id(id)
-    proj, err, code = edit_project_meta(id, scene_id=req.segment_id, motion=req.motion, style_lock=req.style_lock)
+    proj, err, code = edit_project_meta(
+        id,
+        scene_id=req.segment_id,
+        motion=req.motion,
+        style_lock=req.style_lock,
+        transition_style=req.transition_style
+    )
     if err:
         raise HTTPException(status_code=code, detail=err)
     return proj.to_dict()
@@ -664,7 +698,11 @@ def run_render_task(job_id: str, req: RenderRequest):
             scene_overrides=req.scene_overrides,
             preview_scenes=req.preview_scenes,
             project_id=req.project_id,
-            session_id=req.session_id
+            session_id=req.session_id,
+            transition_style=getattr(req, "transition_style", "crossfade"),
+            custom_audio_path=getattr(req, "custom_audio_path", None),
+            tts_provider=getattr(req, "tts_provider", None),
+            motion_texture=getattr(req, "motion_texture", None)
         )
         script_for_meta = req.script or ""
         if not script_for_meta.strip() and req.project_id:
@@ -734,7 +772,226 @@ async def get_status(job_id: str):
     return job
 
 
+class YouTubePublishRequest(BaseModel):
+    script: str = ""
+    title: Optional[str] = None
+    topic: Optional[str] = None
+    privacy_status: str = "unlisted"  # "public", "unlisted", "private"
+    voice: str = "en-US-ChristopherNeural"
+    voice_rate: str = "+10%"
+    subtitle_style: str = "hyper_yellow"
+    bgm_track: str = "mystery_suspense"
+    bgm_volume: float = 0.18
+    project_id: Optional[str] = None
+    rapid_pacing: bool = True
+    category_id: str = "27"
+
+
+def run_youtube_publish_task(job_id: str, req: YouTubePublishRequest):
+    def update_progress(msg: str, pct: int):
+        cur = load_job(job_id) or {}
+        cur.update({"status": "processing", "message": msg, "progress": pct})
+        save_job(job_id, cur)
+
+    try:
+        logger.info(f"[YouTube Publish] Starting job {job_id} with requested privacy_status='{req.privacy_status}'")
+        update_progress("Analyzing script and generating viral metadata...", 5)
+        raw_script = (req.script or "").strip()
+        if not raw_script and req.project_id:
+            try:
+                p = load_project(req.project_id)
+                if p and p.script:
+                    raw_script = p.script
+            except Exception:
+                pass
+
+        if not raw_script and req.topic:
+            raw_script = req.topic.strip()
+
+        # Sanitize pasted text
+        clean_script = sanitize_spoken_script(raw_script)
+
+        # If user only passed a short topic/headline (< 20 words), generate a full 50-60s script with AI
+        if clean_script and len(clean_script.split()) < 20:
+            update_progress("Expanding topic into a 60-second high-retention script...", 10)
+            try:
+                from engine.gemini_client import generate_content as gemini_gen
+                prompt = (
+                    f"Write a full 50-60 second spoken voiceover script (130-150 words) about: {clean_script}. "
+                    "Hook in first sentence. Fast-paced, intriguing, no markdown, no stage directions, verbatim spoken words only."
+                )
+                ai_text, _ = gemini_gen(prompt, thinking_level="low", timeout=12)
+                if ai_text and len(ai_text.split()) >= 20:
+                    clean_script = sanitize_spoken_script(ai_text)
+            except Exception as e:
+                logger.warning(f"AI script expansion skipped: {e}")
+
+        if not clean_script:
+            raise ValueError("Script or topic cannot be empty.")
+
+        # Generate high-CTR Title, Description, and Tags
+        update_progress("Crafting SEO Title, Description, and YPP Tags...", 15)
+        metadata = generate_youtube_metadata(clean_script)
+        if req.title and req.title.strip():
+            metadata["title"] = req.title.strip()
+
+        # Storyboard / Scene Planning
+        update_progress("Planning dynamic multi-focal storyboard...", 25)
+        proj = None
+        if req.project_id:
+            proj = load_project(req.project_id)
+        if not proj:
+            proj = create_project(
+                script=clean_script,
+                start="auto",
+                api_key=os.environ.get("GEMINI_API_KEY", None)
+            )
+
+        # Wait for scene media generation if auto mode queued scenes (up to 40s)
+        update_progress("Synthesizing scene visuals...", 35)
+        start_wait = time.time()
+        while time.time() - start_wait < 40:
+            p_check = load_project(proj.id)
+            if not p_check:
+                break
+            pending = [s for s in p_check.scenes if s.status in ("queued", "generating")]
+            if not pending:
+                proj = p_check
+                break
+            time.sleep(1.5)
+
+        # Render 60s vertical video
+        update_progress("Rendering 1080x1920 Short with 18-22 cuts, subtitles, & audio ducking...", 50)
+        res = render_shorts_video(
+            script_text=clean_script,
+            voice=req.voice,
+            voice_rate=req.voice_rate,
+            subtitle_style=req.subtitle_style,
+            bgm_track=req.bgm_track,
+            bgm_volume=req.bgm_volume,
+            progress_callback=update_progress,
+            project_id=proj.id,
+            rapid_pacing=req.rapid_pacing,
+            transition_style="crossfade"
+        )
+
+        final_video_file = os.path.abspath(f"outputs/{os.path.basename(res['video_url'])}")
+
+        # Check YouTube Auth and Publish
+        update_progress("Checking YouTube API connection...", 75)
+        auth = check_auth_status()
+
+        if auth.get("authenticated"):
+            update_progress("Uploading video directly to YouTube Data API...", 80)
+            upload_result = upload_video_to_youtube(
+                video_path=final_video_file,
+                title=metadata.get("title", "Mystery Short #Shorts"),
+                description=metadata.get("description", ""),
+                tags=metadata.get("tags", []),
+                privacy_status=req.privacy_status,
+                category_id=req.category_id,
+                progress_callback=update_progress
+            )
+
+            if upload_result.get("success"):
+                cur = load_job(job_id) or {}
+                cur.update({
+                    "status": "completed",
+                    "progress": 100,
+                    "message": "Published directly to YouTube! 🎉",
+                    "video_url": res["video_url"],
+                    "duration": res["duration"],
+                    "metadata": metadata,
+                    "youtube_published": True,
+                    "video_id": upload_result.get("video_id"),
+                    "youtube_url": upload_result.get("youtube_url"),
+                    "watch_url": upload_result.get("watch_url"),
+                    "privacy_status": req.privacy_status,
+                    "actual_privacy_status": upload_result.get("actual_privacy_status", req.privacy_status),
+                    "channel_title": auth.get("channel_title")
+                })
+                save_job(job_id, cur)
+                return
+            else:
+                cur = load_job(job_id) or {}
+                cur.update({
+                    "status": "completed",
+                    "progress": 100,
+                    "message": f"Video rendered! YouTube upload note: {upload_result.get('error')}",
+                    "video_url": res["video_url"],
+                    "duration": res["duration"],
+                    "metadata": metadata,
+                    "youtube_published": False,
+                    "youtube_error": upload_result.get("error")
+                })
+                save_job(job_id, cur)
+                return
+        else:
+            # Video rendered successfully! Provide instructions for YouTube OAuth
+            cur = load_job(job_id) or {}
+            cur.update({
+                "status": "completed",
+                "progress": 100,
+                "message": "Video generated! Connect your YouTube account with client_secrets.json to auto-publish.",
+                "video_url": res["video_url"],
+                "duration": res["duration"],
+                "metadata": metadata,
+                "youtube_published": False,
+                "youtube_auth_needed": True,
+                "youtube_auth_message": auth.get("message", "Place client_secrets.json in project root and authorize.")
+            })
+            save_job(job_id, cur)
+
+    except Exception as e:
+        logger.error(f"YouTube publish task failed for job {job_id}: {e}", exc_info=True)
+        cur = load_job(job_id) or {}
+        cur.update({
+            "status": "error",
+            "progress": 0,
+            "message": str(e)
+        })
+        save_job(job_id, cur)
+
+
+@app.get("/api/youtube/auth_status")
+def api_youtube_auth_status():
+    """Checks whether YouTube OAuth credentials are valid and ready."""
+    return check_auth_status()
+
+
+@app.post("/api/youtube/authorize")
+def api_youtube_authorize():
+    """Initiates local OAuth consent flow if client_secrets.json is present."""
+    try:
+        get_authenticated_service()
+        return check_auth_status()
+    except Exception as e:
+        return {"authenticated": False, "error": str(e)}
+
+
+@app.post("/api/youtube/publish")
+async def api_youtube_publish(req: YouTubePublishRequest, background_tasks: BackgroundTasks):
+    """1-Click Paste & Publish to YouTube."""
+    raw_script = (req.script or "").strip()
+    if not raw_script and not req.topic and not req.project_id:
+        raise HTTPException(status_code=400, detail="Please provide a script or topic to publish.")
+
+    job_id = str(uuid.uuid4())[:8]
+    save_job(job_id, {
+        "status": "queued",
+        "progress": 5,
+        "message": "Starting 1-Click YouTube publishing workflow...",
+        "video_url": None,
+        "youtube_url": None,
+        "metadata": None
+    })
+
+    background_tasks.add_task(run_youtube_publish_task, job_id, req)
+    return {"job_id": job_id, "status": "queued"}
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run("app:app", host="0.0.0.0", port=port, reload=False)
+

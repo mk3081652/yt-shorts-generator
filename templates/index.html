@@ -70,28 +70,30 @@
                 
                 <!-- STEP 1: Script & AI Voiceover -->
                 <div class="step-panel" id="stepPanel1">
-                    <!-- Script Editor Box -->
-                    <div class="card script-card">
-                        <div class="card-header">
+                    
+                    <!-- 🚀 1-Click Paste & Publish to YouTube Card (Master Hero Card) -->
+                    <div class="card youtube-publish-card" id="oneClickPublishCard" style="border: 2px solid #ff334b; background: linear-gradient(135deg, rgba(255, 51, 75, 0.12) 0%, rgba(20, 20, 35, 0.98) 100%); margin-bottom: 24px; box-shadow: 0 8px 32px rgba(255, 0, 51, 0.25);">
+                        <div class="card-header" style="align-items: center; margin-bottom: 8px;">
                             <div class="card-title">
-                                <span class="icon">✍️</span>
-                                <h3>Step 1: Write or Paste Your Script</h3>
+                                <span class="icon">🚀</span>
+                                <h3 style="color: #ffffff; font-weight: 700; font-size: 18px;">1-Click Paste & Publish to YouTube</h3>
                             </div>
-                            <div class="script-tools">
-                                <select id="templateSelect" class="compact-select">
-                                    <option value="">✨ Load Viral Template...</option>
-                                </select>
-                                <select id="hookSelect" class="compact-select">
-                                    <option value="">🪝 Add Viral Hook...</option>
-                                </select>
+                            <div id="ytAuthBadge" class="badge-pill" style="background: rgba(0, 230, 118, 0.15); color: #00e676; border: 1px solid rgba(0, 230, 118, 0.5); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; padding: 5px 12px; border-radius: 20px; display: inline-flex; align-items: center; gap: 6px;" title="Connected to YouTube Channel: ShortVerse1502 (Click to refresh)">
+                                🟢 ShortVerse1502
                             </div>
                         </div>
 
-                        <div class="textarea-wrapper">
-                            <textarea id="scriptInput" placeholder="Paste your spoken script here or select a viral template / hook above...&#10;&#10;Tip: The best YouTube Shorts are 20-45 seconds long with a powerful 3-second hook!"></textarea>
+                        <p style="font-size: 13px; color: #b4b9cc; margin: 0 0 14px 0; line-height: 1.45;">
+                            Paste your spoken script below. The engine auto-directs <strong>18–22 rapid visual cuts</strong> (~2.8s/cut), burns kinetic animated captions, adds sidechain audio ducking, and uploads directly to <strong>ShortVerse1502</strong> with YPP monetization compliance!
+                        </p>
+
+                        <!-- Main Script Textarea -->
+                        <div class="textarea-wrapper" style="margin-bottom: 8px;">
+                            <textarea id="scriptInput" rows="7" style="width: 100%; min-height: 160px; font-size: 14px; line-height: 1.55; padding: 14px; border-radius: 8px; background: rgba(10, 12, 22, 0.85); border: 1px solid rgba(255, 51, 75, 0.35); color: #ffffff; resize: vertical; box-sizing: border-box;" placeholder="Paste your spoken script here...&#10;&#10;Example: For centuries, historians claimed the Great Sphinx of Giza was carved for Khafre. But in 1989, a seismic radar survey revealed something that shocked the archaeological world: a massive artificial subterranean chamber hidden 40 feet below the paws!&#10;&#10;Tip: The sweet spot is 120-150 words (50-60s). 100% of your exact words are preserved verbatim!"></textarea>
                         </div>
 
-                        <div class="script-stats">
+                        <!-- Script Word Count & Duration Stats -->
+                        <div class="script-stats" style="margin-bottom: 14px;">
                             <div class="stat-badge">
                                 <span>Words:</span>
                                 <strong id="wordCount">0</strong>
@@ -105,6 +107,31 @@
                                 <strong id="pacingText">Short & Punchy</strong>
                             </div>
                         </div>
+
+                        <!-- Publishing Options Row -->
+                        <div class="form-row" style="margin-bottom: 16px; gap: 12px;">
+                            <div class="form-group flex-1">
+                                <label for="ytPrivacySelect" style="font-size: 12px; font-weight: 600; color: #e0e4f0;">Upload Privacy</label>
+                                <select id="ytPrivacySelect" class="form-select compact-select" style="padding: 8px 12px; width: 100%;">
+                                    <option value="public" selected>Public (Immediate Live)</option>
+                                    <option value="unlisted">Unlisted (Review First)</option>
+                                    <option value="private">Private</option>
+                                </select>
+                            </div>
+                            <div class="form-group flex-1">
+                                <label for="ytPacingMode" style="font-size: 12px; font-weight: 600; color: #e0e4f0;">Visual Cuts Pacing</label>
+                                <select id="ytPacingMode" class="form-select compact-select" style="padding: 8px 12px; width: 100%;">
+                                    <option value="rapid" selected>⚡ Ultra Fast (18-22 cuts, ~2.8s each)</option>
+                                    <option value="standard">Standard Pacing</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Glowing Master Publish Button -->
+                        <button type="button" id="oneClickPublishBtn" class="btn-master" style="background: linear-gradient(135deg, #ff0033 0%, #ff4b2b 100%); box-shadow: 0 4px 22px rgba(255, 0, 51, 0.5); width: 100%; font-size: 16px; font-weight: 700; padding: 15px 20px; letter-spacing: 0.6px; border-radius: 8px; border: none; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;">
+                            <span class="btn-icon" style="font-size: 18px;">🚀</span>
+                            <span class="btn-text">PUBLISH YT SHORT ON YOUTUBE</span>
+                        </button>
                     </div>
 
                     <!-- Voice Selection Card -->
@@ -383,6 +410,20 @@
                             <span class="btn-icon">⚡</span>
                             <span class="btn-text">GENERATE VIRAL SHORT (1080x1920)</span>
                         </button>
+
+                        <div class="form-group" style="margin-top: 16px; margin-bottom: 6px;">
+                            <label for="ytPrivacySelectStep4" style="font-size: 12px; font-weight: 600; color: #b4b9cc;">YouTube Upload Privacy</label>
+                            <select id="ytPrivacySelectStep4" class="form-select compact-select" style="padding: 8px 12px; width: 100%;">
+                                <option value="public" selected>Public (Immediate Live)</option>
+                                <option value="unlisted">Unlisted (Review First)</option>
+                                <option value="private">Private</option>
+                            </select>
+                        </div>
+
+                        <button type="button" id="publishProjectToYoutubeBtn" class="btn-master" style="margin-top: 8px; background: linear-gradient(135deg, #ff0033 0%, #cc0029 100%); box-shadow: 0 4px 16px rgba(255, 0, 51, 0.35);">
+                            <span class="btn-icon">▶️</span>
+                            <span class="btn-text">PUBLISH THIS SHORT TO YOUTUBE</span>
+                        </button>
                     </div>
 
                     <!-- Step 4 Navigation Footer -->
@@ -437,10 +478,33 @@
                     </div>
 
                     <!-- Player Actions below phone frame -->
-                    <div id="playerActions" class="player-actions hidden">
-                        <a id="downloadVideoBtn" class="btn-download" download="viral_short.mp4" href="#">
+                    <div id="playerActions" class="player-actions hidden" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <a id="downloadVideoBtn" class="btn-download" download="viral_short.mp4" href="#" style="flex: 1;">
                             ⬇️ Download 1080x1920 MP4
                         </a>
+                        <a id="viewYouTubeBtn" class="btn-download hidden" target="_blank" href="#" style="background: linear-gradient(135deg, #ff0033 0%, #cc0029 100%); flex: 1; text-align: center;">
+                            ▶️ Watch on YouTube
+                        </a>
+                    </div>
+
+                    <!-- YouTube Published Short Callout Banner -->
+                    <div id="ytPublishedBanner" class="card hidden" style="border: 2px solid #00e676; background: rgba(0, 230, 118, 0.09); margin-top: 16px; padding: 16px;">
+                        <div class="card-header" style="margin-bottom: 6px;">
+                            <div class="card-title">
+                                <span class="icon">🎉</span>
+                                <h3 style="color: #00e676; font-size: 16px;">Published to YouTube!</h3>
+                            </div>
+                        </div>
+                        <p id="ytPublishedSubtext" style="font-size: 13px; color: #e0e0e0; margin-bottom: 12px;">
+                            Your 60-second vertical Short is live on YouTube.
+                        </p>
+                        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                            <input type="text" id="ytVideoUrlInput" class="seo-input" readonly style="flex: 1; min-width: 180px; font-size: 13px; background: rgba(0,0,0,0.4); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15);">
+                            <button type="button" class="btn-copy" id="copyYtLinkBtn" data-target="ytVideoUrlInput" style="padding: 8px 12px;">📋 Copy</button>
+                            <a id="openYtLinkBtn" class="btn-secondary btn-sm" target="_blank" href="#" style="background: #ff0033; color: #fff; text-decoration: none; padding: 8px 14px; border-radius: 6px; font-weight: 600;">▶️ Open</a>
+                            <a id="editInStudioBtn" class="btn-secondary btn-sm" target="_blank" href="#" style="background: #2563eb; color: #fff; text-decoration: none; padding: 8px 14px; border-radius: 6px; font-weight: 600;">⚙️ Edit in Studio</a>
+                        </div>
+                        <p id="ytPrivacyNotice" style="font-size: 12px; color: #94a3b8; margin-top: 10px; margin-bottom: 0; line-height: 1.4; display: none;"></p>
                     </div>
                 </div>
 
@@ -485,7 +549,7 @@
         </main>
     </div>
 
-    <script type="module" src="/static/js/main.js?v=20260921_v4"></script>
+    <script type="module" src="/static/js/main.js?v=20260922_v16"></script>
 
     <!-- Google Material Toast Notifications Container -->
     <div id="toastContainer" class="google-toast-container"></div>

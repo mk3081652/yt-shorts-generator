@@ -2,12 +2,61 @@ import asyncio
 import os
 import re
 import socket
+import json
+import urllib.request
+import urllib.error
 import aiohttp
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 import edge_tts
 
-# Curated list of high-retention viral voices
+from engine.config import (
+    get_openai_api_key,
+    get_elevenlabs_api_key,
+    get_elevenlabs_voice_id,
+    get_tts_provider
+)
+from engine.whisper_client import align_words_for_audio
+
+# Curated list of high-retention viral voices (Edge-TTS, ElevenLabs & OpenAI TTS-HD)
 VOICES = {
+    # Premium Neural Voices (OpenAI & ElevenLabs)
+    "openai:onyx": {
+        "name": "OpenAI Onyx (Deep Authoritative Baritone - HD)",
+        "gender": "Male",
+        "lang": "en-US",
+        "vibe": "Documentary, Conspiracies, Stoic"
+    },
+    "openai:alloy": {
+        "name": "OpenAI Alloy (Versatile Dynamic Neutral - HD)",
+        "gender": "Neutral",
+        "lang": "en-US",
+        "vibe": "Trending Facts, Tech, Life Hacks"
+    },
+    "openai:echo": {
+        "name": "OpenAI Echo (Warm Cinematic Storyteller - HD)",
+        "gender": "Male",
+        "lang": "en-US",
+        "vibe": "Cinematic Storytelling, History"
+    },
+    "openai:shimmer": {
+        "name": "OpenAI Shimmer (Clear Engaging Female - HD)",
+        "gender": "Female",
+        "lang": "en-US",
+        "vibe": "Psychology, Mysteries, Education"
+    },
+    "elevenlabs:adam": {
+        "name": "ElevenLabs Adam (Ultra-Realistic Deep Narration)",
+        "gender": "Male",
+        "lang": "en-US",
+        "vibe": "High Retention, Investigative, Viral"
+    },
+    "elevenlabs:rachel": {
+        "name": "ElevenLabs Rachel (Calm Narrative Professional)",
+        "gender": "Female",
+        "lang": "en-US",
+        "vibe": "True Crime, Insights, Storytelling"
+    },
+    # Edge-TTS Fast Neural Voices (Free & Built-in)
     "en-US-ChristopherNeural": {
         "name": "Christopher (US - Deep & Authoritative / MrBeast style)",
         "gender": "Male",
@@ -124,36 +173,171 @@ def generate_offline_fallback_speech(
     return wav_path, word_boundaries, total_duration
 
 
+def generate_elevenlabs_speech(
+    clean_text: str,
+    voice_id: str,
+    output_audio_path: str,
+    api_key: Optional[str] = None
+) -> bool:
+    """
+    Synthesizes expressive neural speech via ElevenLabs API.
+    Voice settings tailored for high-retention storytelling (stability 0.40).
+    """
+    key = api_key or get_elevenlabs_api_key()
+    if not key:
+        return False
+
+    v_id = voice_id or get_elevenlabs_voice_id()
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{v_id}"
+    payload = {
+        "text": clean_text,
+        "model_id": "eleven_multilingual_v2",
+        "voice_settings": {
+            "stability": 0.40,
+            "similarity_boost": 0.80,
+            "style": 0.35,
+            "use_speaker_boost": True
+        }
+    }
+
+    try:
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={
+                "xi-api-key": key,
+                "Content-Type": "application/json",
+                "Accept": "audio/mpeg"
+            },
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            content = resp.read()
+            if len(content) > 1000:
+                os.makedirs(os.path.dirname(os.path.abspath(output_audio_path)), exist_ok=True)
+                with open(output_audio_path, "wb") as f:
+                    f.write(content)
+                return True
+    except Exception as e:
+        print(f"[TTS] ElevenLabs synthesis failed: {e}")
+
+    return False
+
+
+def generate_openai_speech(
+    clean_text: str,
+    voice_name: str,
+    output_audio_path: str,
+    api_key: Optional[str] = None,
+    model: str = "tts-1-hd"
+) -> bool:
+    """
+    Synthesizes expressive neural speech via OpenAI TTS-HD.
+    """
+    key = api_key or get_openai_api_key()
+    if not key:
+        return False
+
+    url = "https://api.openai.com/v1/audio/speech"
+    valid_voices = {"alloy", "echo", "fable", "onyx", "nova", "shimmer"}
+    safe_voice = voice_name.lower().replace("openai:", "")
+    if safe_voice not in valid_voices:
+        safe_voice = "onyx"
+
+    payload = {
+        "model": model,
+        "input": clean_text,
+        "voice": safe_voice,
+        "response_format": "mp3",
+        "speed": 1.04
+    }
+
+    try:
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json"
+            },
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            content = resp.read()
+            if len(content) > 1000:
+                os.makedirs(os.path.dirname(os.path.abspath(output_audio_path)), exist_ok=True)
+                with open(output_audio_path, "wb") as f:
+                    f.write(content)
+                return True
+    except Exception as e:
+        print(f"[TTS] OpenAI TTS-HD synthesis failed: {e}")
+
+    return False
+
+
 async def generate_speech_with_words(
     text: str,
     voice: str = "en-US-ChristopherNeural",
     rate: str = "+10%",
     pitch: str = "+0Hz",
-    output_audio_path: str = "output_voice.mp3"
+    output_audio_path: str = "output_voice.mp3",
+    provider: Optional[str] = None
 ) -> Tuple[str, List[Dict[str, Any]], float]:
     """
-    Generates TTS audio file with:
-    - IPv4 DNS enforcement (prevents Windows getaddrinfo IPv6 failure)
-    - 3-attempt retry with exponential backoff
-    - Offline local pyttsx3 fallback if internet is completely down
+    Generates TTS audio file with multi-tier provider routing:
+    1. ElevenLabs API (if configured or requested)
+    2. OpenAI TTS-HD (if configured or requested)
+    3. Edge-TTS (Free, fast neural with WordBoundaries)
+    4. Offline pyttsx3 fallback
     """
     clean_text = clean_text_for_tts(text)
     if not clean_text:
         raise ValueError("Script text cannot be empty.")
 
-    if voice not in VOICES:
-        voice = "en-US-ChristopherNeural"
+    req_provider = (provider or get_tts_provider()).lower()
+
+    # 1. ElevenLabs Premium Route
+    if req_provider == "elevenlabs" or voice.startswith("elevenlabs:"):
+        el_key = get_elevenlabs_api_key()
+        if el_key:
+            v_id = voice.replace("elevenlabs:", "") if voice.startswith("elevenlabs:") else get_elevenlabs_voice_id()
+            if v_id in ("adam", ""):
+                v_id = "pNInz6obpgDQGcFmaJgB"
+            elif v_id == "rachel":
+                v_id = "21m00Tcm4TlvDq8ikWAM"
+            ok = generate_elevenlabs_speech(clean_text, v_id, output_audio_path, api_key=el_key)
+            if ok and os.path.exists(output_audio_path):
+                words, dur = align_words_for_audio(output_audio_path, clean_text)
+                return output_audio_path, words, dur
+            print("[TTS] ElevenLabs synthesis failed, falling back to next provider...")
+
+    # 2. OpenAI TTS-HD Route
+    if req_provider in ("openai", "elevenlabs") or voice.startswith("openai:"):
+        oa_key = get_openai_api_key()
+        if oa_key:
+            oa_voice = voice.replace("openai:", "") if voice.startswith("openai:") else "onyx"
+            ok = generate_openai_speech(clean_text, oa_voice, output_audio_path, api_key=oa_key)
+            if ok and os.path.exists(output_audio_path):
+                words, dur = align_words_for_audio(output_audio_path, clean_text, api_key=oa_key)
+                return output_audio_path, words, dur
+            print("[TTS] OpenAI TTS synthesis failed, falling back to Edge-TTS...")
+
+    # 3. Edge-TTS Route (Fast, zero-cost, native WordBoundaries)
+    edge_voice = voice
+    if edge_voice.startswith("openai:") or edge_voice.startswith("elevenlabs:") or edge_voice not in VOICES:
+        edge_voice = "en-US-ChristopherNeural"
 
     last_error = None
     
     # Try Edge-TTS with IPv4 connector and retries
     for attempt in range(1, 4):
         try:
-            # Force IPv4 socket family to bypass buggy Windows IPv6 DNS resolution
             connector = aiohttp.TCPConnector(family=socket.AF_INET)
             comm = edge_tts.Communicate(
                 text=clean_text,
-                voice=voice,
+                voice=edge_voice,
                 rate=rate,
                 pitch=pitch,
                 boundary="WordBoundary",
@@ -198,7 +382,7 @@ async def generate_speech_with_words(
             print(f"[TTS Retry] Attempt {attempt} failed ({e}). Retrying in {attempt * 1.5}s...")
             await asyncio.sleep(attempt * 1.5)
 
-    # If Edge-TTS failed after 3 retries (due to internet / firewall / Microsoft server hiccup):
+    # 4. Local offline pyttsx3 fallback
     print(f"[TTS Fallback] Edge-TTS unreachable ({last_error}). Switching to offline local Windows engine...")
     return generate_offline_fallback_speech(clean_text, output_audio_path)
 

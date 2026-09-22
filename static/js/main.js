@@ -56,6 +56,8 @@ export function showToast(message, type = "info", duration = 3500) {
     }
 }
 
+window.showToast = showToast;
+
 document.addEventListener("DOMContentLoaded", async () => {
     // DOM Elements - Step 1
     const topicInput = document.getElementById("topicInput");
@@ -807,8 +809,274 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             });
         }
+
     } catch (err) {
         console.error("[Init Config Error]:", err);
         showToast("Failed to load initial configuration.", "error");
     }
+
+    // ==========================================
+    // YOUTUBE 1-CLICK PUBLISH LOGIC
+    // ==========================================
+    const ytAuthBadge = document.getElementById("ytAuthBadge");
+    const ytPrivacySelect = document.getElementById("ytPrivacySelect");
+    const ytPrivacySelectStep4 = document.getElementById("ytPrivacySelectStep4");
+    const ytPacingMode = document.getElementById("ytPacingMode");
+    const oneClickPublishBtn = document.getElementById("oneClickPublishBtn");
+    const publishProjectToYoutubeBtn = document.getElementById("publishProjectToYoutubeBtn");
+    const ytPublishedBanner = document.getElementById("ytPublishedBanner");
+    const ytVideoUrlInput = document.getElementById("ytVideoUrlInput");
+    const openYtLinkBtn = document.getElementById("openYtLinkBtn");
+    const viewYouTubeBtn = document.getElementById("viewYouTubeBtn");
+
+    // Sync Privacy status between Step 1 and Step 4 & remember in localStorage
+    const savedPrivacy = localStorage.getItem("yt_privacy") || "public";
+    if (ytPrivacySelect) ytPrivacySelect.value = savedPrivacy;
+    if (ytPrivacySelectStep4) ytPrivacySelectStep4.value = savedPrivacy;
+
+    if (ytPrivacySelect) {
+        ytPrivacySelect.addEventListener("change", (e) => {
+            const val = e.target.value;
+            localStorage.setItem("yt_privacy", val);
+            if (ytPrivacySelectStep4) ytPrivacySelectStep4.value = val;
+        });
+    }
+    if (ytPrivacySelectStep4) {
+        ytPrivacySelectStep4.addEventListener("change", (e) => {
+            const val = e.target.value;
+            localStorage.setItem("yt_privacy", val);
+            if (ytPrivacySelect) ytPrivacySelect.value = val;
+        });
+    }
+
+    async function checkYouTubeAuth() {
+        const badge = document.getElementById("ytAuthBadge") || ytAuthBadge;
+        if (!badge) return;
+        try {
+            const auth = await api.getYouTubeAuthStatus();
+            if (auth.authenticated) {
+                badge.innerHTML = `🟢 ${auth.channel_title || "ShortVerse1502"}`;
+                badge.style.color = "#00e676";
+                badge.style.border = "1px solid rgba(0, 230, 118, 0.5)";
+                badge.title = `Connected to channel: ${auth.channel_title || "ShortVerse1502"}`;
+            } else if (auth.client_secrets_found) {
+                badge.innerHTML = "🟡 Secrets Found (Click to Link)";
+                badge.style.color = "#ffb300";
+                badge.style.border = "1px solid rgba(255, 179, 0, 0.5)";
+                badge.title = "Click to run OAuth consent flow";
+            } else {
+                badge.innerHTML = "⚪ YouTube: Not Linked";
+                badge.style.color = "#a0a5b8";
+                badge.style.border = "1px solid rgba(255, 255, 255, 0.15)";
+                badge.title = "Place client_secrets.json in project root to connect";
+            }
+        } catch (err) {
+            console.warn("[YouTube Auth Check Error]:", err);
+            if (badge) badge.innerHTML = "⚪ YouTube: Standby";
+        }
+    }
+
+    if (ytAuthBadge) {
+        ytAuthBadge.addEventListener("click", async () => {
+            showToast("Checking YouTube API credentials...", "info");
+            try {
+                const res = await api.authorizeYouTube();
+                if (res.authenticated) {
+                    showToast(`Connected to YouTube: ${res.channel_title}!`, "success");
+                } else if (res.message) {
+                    showToast(res.message, "warning", 5000);
+                } else if (res.error) {
+                    showToast(`Auth status: ${res.error}`, "warning", 5000);
+                }
+            } catch (err) {
+                showToast(`YouTube auth: ${err.message}`, "error");
+            }
+            checkYouTubeAuth();
+        });
+    }
+
+    // Check YouTube Auth status immediately after initialization
+    checkYouTubeAuth();
+
+    async function triggerYouTubePublish(isFromProject = false) {
+        const script = scriptInput ? scriptInput.value.trim() : "";
+        if (!script && !isFromProject) {
+            showToast("Please paste or write a script before publishing!", "warning");
+            if (scriptInput) scriptInput.focus();
+            return;
+        }
+
+        const voice = voiceSelect ? voiceSelect.value : "en-US-ChristopherNeural";
+        const voiceRate = speedSelect ? speedSelect.value : "+10%";
+        const subtitleStyle = document.querySelector('input[name="subtitleStyle"]:checked')?.value || "hyper_yellow";
+        const bgmTrack = bgmSelect ? bgmSelect.value : "mystery_suspense";
+        const bgmVol = bgmVolume ? (parseFloat(bgmVolume.value) || 0.18) : 0.18;
+        
+        // Pick privacy from active step or localStorage, defaulting to public
+        const privacy = (isFromProject && ytPrivacySelectStep4 ? ytPrivacySelectStep4.value : null)
+            || (ytPrivacySelect ? ytPrivacySelect.value : null)
+            || localStorage.getItem("yt_privacy")
+            || "public";
+
+        const rapid = ytPacingMode ? (ytPacingMode.value === "rapid") : true;
+
+        if (oneClickPublishBtn) {
+            oneClickPublishBtn.disabled = true;
+            oneClickPublishBtn.classList.add("btn-loading");
+        }
+        if (publishProjectToYoutubeBtn) {
+            publishProjectToYoutubeBtn.disabled = true;
+            publishProjectToYoutubeBtn.classList.add("btn-loading");
+        }
+
+        if (progressCard) progressCard.classList.remove("hidden");
+        if (playerPlaceholder) playerPlaceholder.classList.remove("hidden");
+        if (playerActions) playerActions.classList.add("hidden");
+        if (ytPublishedBanner) ytPublishedBanner.classList.add("hidden");
+
+        const payload = {
+            script: script,
+            privacy_status: privacy,
+            voice: voice,
+            voice_rate: voiceRate,
+            subtitle_style: subtitleStyle,
+            bgm_track: bgmTrack,
+            bgm_volume: bgmVol,
+            rapid_pacing: rapid,
+            project_id: isFromProject && state.project ? state.project.id : null
+        };
+
+        showToast("Starting 1-Click YouTube Publishing pipeline...", "info");
+
+        try {
+            const res = await api.publishToYouTube(payload);
+            if (res && res.job_id) {
+                pollPublishJob(res.job_id);
+            }
+        } catch (err) {
+            showToast(`Failed to start publish: ${err.message}`, "error");
+            if (oneClickPublishBtn) {
+                oneClickPublishBtn.disabled = false;
+                oneClickPublishBtn.classList.remove("btn-loading");
+            }
+            if (publishProjectToYoutubeBtn) {
+                publishProjectToYoutubeBtn.disabled = false;
+                publishProjectToYoutubeBtn.classList.remove("btn-loading");
+            }
+            if (progressCard) progressCard.classList.add("hidden");
+        }
+    }
+
+    if (oneClickPublishBtn) {
+        oneClickPublishBtn.addEventListener("click", () => triggerYouTubePublish(false));
+    }
+
+    if (publishProjectToYoutubeBtn) {
+        publishProjectToYoutubeBtn.addEventListener("click", () => triggerYouTubePublish(true));
+    }
+
+    function pollPublishJob(jobId) {
+        const interval = setInterval(async () => {
+            try {
+                const job = await api.pollJob(jobId);
+                if (!job) return;
+
+                const pct = job.progress || 0;
+                if (progressPct) progressPct.textContent = `${pct}%`;
+                if (progressBar) progressBar.style.width = `${pct}%`;
+                if (progressStatus) progressStatus.textContent = job.status === "processing" ? "Publishing to YouTube..." : job.status;
+                if (progressStep) progressStep.textContent = job.message || "Working...";
+
+                if (job.status === "completed") {
+                    clearInterval(interval);
+                    if (oneClickPublishBtn) {
+                        oneClickPublishBtn.disabled = false;
+                        oneClickPublishBtn.classList.remove("btn-loading");
+                    }
+                    if (publishProjectToYoutubeBtn) {
+                        publishProjectToYoutubeBtn.disabled = false;
+                        publishProjectToYoutubeBtn.classList.remove("btn-loading");
+                    }
+                    if (progressCard) progressCard.classList.add("hidden");
+
+                    // Load video player
+                    if (finalVideoPlayer && job.video_url) {
+                        finalVideoPlayer.src = job.video_url;
+                        finalVideoPlayer.classList.add("visible", "active");
+                        finalVideoPlayer.style.display = "block";
+                        if (playerPlaceholder) playerPlaceholder.classList.add("hidden");
+                        finalVideoPlayer.load();
+                        try { finalVideoPlayer.play(); } catch(e) {}
+                    }
+
+                    if (playerActions) playerActions.classList.remove("hidden");
+                    if (downloadVideoBtn && job.video_url) {
+                        downloadVideoBtn.href = job.video_url;
+                    }
+
+                    // Populate SEO kit
+                    if (job.metadata && seoKitCard) {
+                        seoKitCard.classList.remove("hidden");
+                        if (seoTitle) seoTitle.value = job.metadata.title || "";
+                        if (seoDesc) seoDesc.value = job.metadata.description || "";
+                        if (seoTags) seoTags.value = Array.isArray(job.metadata.tags) ? job.metadata.tags.join(", ") : (job.metadata.tags || "");
+                    }
+
+                    // Handle YouTube published state
+                    if (job.youtube_published && job.youtube_url) {
+                        const actualPriv = (job.actual_privacy_status || job.privacy_status || "unlisted").toLowerCase();
+                        const reqPriv = (job.privacy_status || "public").toLowerCase();
+                        const editInStudioBtn = document.getElementById("editInStudioBtn");
+                        const ytPrivacyNotice = document.getElementById("ytPrivacyNotice");
+                        const ytPublishedSubtext = document.getElementById("ytPublishedSubtext");
+
+                        showToast(`🎉 Short Published to YouTube as ${actualPriv.toUpperCase()}!`, "success", 5000);
+                        if (ytPublishedBanner) {
+                            ytPublishedBanner.classList.remove("hidden");
+                            if (ytVideoUrlInput) ytVideoUrlInput.value = job.youtube_url;
+                            if (openYtLinkBtn) openYtLinkBtn.href = job.youtube_url;
+                            if (editInStudioBtn && job.video_id) {
+                                editInStudioBtn.href = `https://studio.youtube.com/video/${job.video_id}/edit`;
+                            }
+                            if (ytPublishedSubtext) {
+                                ytPublishedSubtext.innerHTML = `Your Short is live on YouTube! Privacy: <strong style="color: #00e676;">${actualPriv.toUpperCase()}</strong>`;
+                            }
+                            if (ytPrivacyNotice) {
+                                if (reqPriv === "public" && actualPriv !== "public") {
+                                    ytPrivacyNotice.style.display = "block";
+                                    ytPrivacyNotice.innerHTML = `⚠️ <strong>Note from YouTube:</strong> Because this video was uploaded from a private developer project, YouTube initially set it to <strong>${actualPriv}</strong>. Click <a href="https://studio.youtube.com/video/${job.video_id}/edit" target="_blank" style="color: #60a5fa; text-decoration: underline; font-weight: 600;">Edit in Studio</a> to switch it to Public with 1-click!`;
+                                } else {
+                                    ytPrivacyNotice.style.display = "none";
+                                }
+                            }
+                        }
+                        if (viewYouTubeBtn) {
+                            viewYouTubeBtn.classList.remove("hidden");
+                            viewYouTubeBtn.href = job.youtube_url;
+                        }
+                    } else if (job.youtube_auth_needed) {
+                        showToast("Video rendered! Connect YouTube to auto-upload next time.", "warning", 6000);
+                    } else if (job.youtube_error) {
+                        showToast(`Video rendered! YouTube upload note: ${job.youtube_error}`, "warning", 6000);
+                    } else {
+                        showToast("Video generated successfully!", "success");
+                    }
+                } else if (job.status === "error") {
+                    clearInterval(interval);
+                    if (oneClickPublishBtn) {
+                        oneClickPublishBtn.disabled = false;
+                        oneClickPublishBtn.classList.remove("btn-loading");
+                    }
+                    if (publishProjectToYoutubeBtn) {
+                        publishProjectToYoutubeBtn.disabled = false;
+                        publishProjectToYoutubeBtn.classList.remove("btn-loading");
+                    }
+                    showToast(`Error: ${job.message || "Operation failed"}`, "error");
+                }
+            } catch (err) {
+                console.error("[Poll Publish Error]:", err);
+            }
+        }, 1500);
+    }
 });
+
