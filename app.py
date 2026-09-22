@@ -61,12 +61,14 @@ from engine.youtube_uploader import (
     check_auth_status,
     upload_video_to_youtube,
     get_authenticated_service,
+    authorize_new_channel,
     list_channels,
     set_active_channel,
     save_channel_credentials,
     remove_channel,
     export_channel_credentials,
-    get_active_channel_id
+    get_active_channel_id,
+    ensure_tokens_dir
 )
 
 
@@ -1030,6 +1032,20 @@ def api_youtube_export_channel(channel_id: str):
     return JSONResponse(content=creds)
 
 
+@app.get("/api/youtube/channels/{channel_id}/download")
+def api_youtube_download_channel_token(channel_id: str):
+    """Downloads token credentials as a JSON file."""
+    t_dir = ensure_tokens_dir()
+    path = os.path.join(t_dir, f"{channel_id}.json")
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Channel credentials file not found.")
+    return FileResponse(
+        path=path,
+        media_type="application/json",
+        filename=f"token_{channel_id}.json"
+    )
+
+
 @app.delete("/api/youtube/channels/{channel_id}")
 def api_youtube_remove_channel(channel_id: str):
     """Removes a connected channel."""
@@ -1045,18 +1061,24 @@ def api_youtube_auth_status(channel_id: Optional[str] = None):
 
 @app.post("/api/youtube/authorize")
 def api_youtube_authorize():
-    """Initiates OAuth consent flow or provides guidance if headless."""
+    """Forces OAuth consent flow with Google Account picker to link a new channel."""
     try:
-        get_authenticated_service()
-        return check_auth_status()
+        info = authorize_new_channel()
+        return {
+            "authenticated": True,
+            "channel_title": info.get("channel_title"),
+            "channel_id": info.get("channel_id"),
+            "channel": info
+        }
     except Exception as e:
         err_str = str(e)
         return {
             "authenticated": False,
             "error": err_str,
             "is_headless": ("headless" in err_str.lower() or "browser" in err_str.lower()),
-            "guidance": "If running on Render or remote server, use 'Import Token' in the UI to paste credentials from your computer."
+            "guidance": "If running on Render or remote server, use 'Upload token.json' or 'Paste JSON' in the UI."
         }
+
 
 
 @app.post("/api/youtube/publish")

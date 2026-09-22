@@ -465,9 +465,36 @@ def get_authenticated_service(channel_id: Optional[str] = None):
 
             # Save the new channel credentials
             saved_info = save_channel_credentials(json.loads(creds.to_json()))
-            cid = saved_info.get("channel_id")
-
     return build("youtube", "v3", credentials=creds)
+
+
+def authorize_new_channel() -> Dict[str, Any]:
+    """
+    Forces a fresh OAuth flow with Google Account picker ('select_account consent')
+    so the user can connect a different YouTube channel or account.
+    """
+    client_secrets_path = get_youtube_client_secrets_path()
+    if not os.path.exists(client_secrets_path):
+        raise FileNotFoundError(
+            f"YouTube client secrets file not found at: {client_secrets_path}. "
+            "Please place client_secrets.json in project root or Render Secret Files."
+        )
+
+    flow = InstalledAppFlow.from_client_secrets_file(client_secrets_path, SCOPES)
+    try:
+        # prompt='select_account consent' forces Google to show the account picker so user can pick ANY account/channel!
+        creds = flow.run_local_server(port=0, prompt="select_account consent")
+    except Exception as err:
+        err_msg = str(err)
+        if "runnable browser" in err_msg.lower() or "headless" in err_msg.lower():
+            raise RuntimeError(
+                "Headless environment detected (no desktop browser on host). "
+                "Please use 'Upload token.json' or 'Paste JSON' in the app to link credentials."
+            )
+        raise err
+
+    return save_channel_credentials(json.loads(creds.to_json()))
+
 
 
 def upload_video_to_youtube(

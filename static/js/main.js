@@ -977,7 +977,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                 </div>
                 <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
                     ${!ch.is_active ? `<button class="btn-secondary btn-sm set-active-btn" data-cid="${ch.channel_id}" style="padding: 4px 8px; font-size: 11px;">Set Active</button>` : ""}
-                    <button class="btn-secondary btn-sm export-btn" data-cid="${ch.channel_id}" title="Copy token JSON for Render" style="padding: 4px 8px; font-size: 11px;">📋 Export</button>
+                    <a href="/api/youtube/channels/${encodeURIComponent(ch.channel_id)}/download" class="btn-secondary btn-sm" title="Download token.json file to upload directly to Render" style="padding: 4px 8px; font-size: 11px; text-decoration: none; color: #60a5fa;" download="token.json">⬇️ File</a>
+                    <button class="btn-secondary btn-sm export-btn" data-cid="${ch.channel_id}" title="Copy token JSON" style="padding: 4px 8px; font-size: 11px;">📋 Copy</button>
                     <button class="btn-secondary btn-sm remove-btn" data-cid="${ch.channel_id}" title="Disconnect Channel" style="padding: 4px 8px; font-size: 11px; color: #ff5268; border-color: rgba(255, 82, 104, 0.3);">🗑️</button>
                 </div>
             `;
@@ -996,8 +997,15 @@ document.addEventListener("DOMContentLoaded", async () => {
                 exportBtn.addEventListener("click", async () => {
                     try {
                         const creds = await api.exportYouTubeToken(ch.channel_id);
-                        await navigator.clipboard.writeText(JSON.stringify(creds, null, 2));
-                        showToast(`Token for '${ch.channel_title}' copied to clipboard!`, "success", 4000);
+                        const jsonStr = JSON.stringify(creds, null, 2);
+                        try {
+                            await navigator.clipboard.writeText(jsonStr);
+                        } catch (clipErr) {
+                            console.warn("Clipboard copy failed, using fallback:", clipErr);
+                        }
+                        if (tokenJsonInput) tokenJsonInput.value = jsonStr;
+                        if (pasteTokenArea) pasteTokenArea.style.display = "block";
+                        showToast(`Token for '${ch.channel_title}' copied! (Also placed in paste box below)`, "success", 4000);
                     } catch (e) {
                         showToast(`Export failed: ${e.message}`, "error");
                     }
