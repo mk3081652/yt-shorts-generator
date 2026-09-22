@@ -57,7 +57,17 @@ from engine.project import (
     Scene
 )
 from engine.timeline import prepare_voice_timeline as prepare_project_voice_timeline
-from engine.youtube_uploader import check_auth_status, upload_video_to_youtube, get_authenticated_service
+from engine.youtube_uploader import (
+    check_auth_status,
+    upload_video_to_youtube,
+    get_authenticated_service,
+    list_channels,
+    set_active_channel,
+    save_channel_credentials,
+    remove_channel,
+    export_channel_credentials,
+    get_active_channel_id
+)
 
 
 app = FastAPI(title="Viral YouTube Shorts Creator Tool")
@@ -777,6 +787,7 @@ class YouTubePublishRequest(BaseModel):
     title: Optional[str] = None
     topic: Optional[str] = None
     privacy_status: str = "unlisted"  # "public", "unlisted", "private"
+    channel_id: Optional[str] = None
     voice: str = "en-US-ChristopherNeural"
     voice_rate: str = "+10%"
     subtitle_style: str = "hyper_yellow"
@@ -794,7 +805,7 @@ def run_youtube_publish_task(job_id: str, req: YouTubePublishRequest):
         save_job(job_id, cur)
 
     try:
-        logger.info(f"[YouTube Publish] Starting job {job_id} with requested privacy_status='{req.privacy_status}'")
+        logger.info(f"[YouTube Publish] Starting job {job_id} with requested privacy_status='{req.privacy_status}' and channel_id='{req.channel_id}'")
         update_progress("Analyzing script and generating viral metadata...", 5)
         raw_script = (req.script or "").strip()
         if not raw_script and req.project_id:
@@ -879,7 +890,7 @@ def run_youtube_publish_task(job_id: str, req: YouTubePublishRequest):
 
         # Check YouTube Auth and Publish
         update_progress("Checking YouTube API connection...", 75)
-        auth = check_auth_status()
+        auth = check_auth_status(channel_id=req.channel_id)
 
         if auth.get("authenticated"):
             update_progress("Uploading video directly to YouTube Data API...", 80)
@@ -890,6 +901,7 @@ def run_youtube_publish_task(job_id: str, req: YouTubePublishRequest):
                 tags=metadata.get("tags", []),
                 privacy_status=req.privacy_status,
                 category_id=req.category_id,
+                channel_id=req.channel_id,
                 progress_callback=update_progress
             )
 
@@ -908,7 +920,8 @@ def run_youtube_publish_task(job_id: str, req: YouTubePublishRequest):
                     "watch_url": upload_result.get("watch_url"),
                     "privacy_status": req.privacy_status,
                     "actual_privacy_status": upload_result.get("actual_privacy_status", req.privacy_status),
-                    "channel_title": auth.get("channel_title")
+                    "channel_id": upload_result.get("channel_id"),
+                    "channel_title": upload_result.get("channel_title") or auth.get("channel_title")
                 })
                 save_job(job_id, cur)
                 return
@@ -953,20 +966,97 @@ def run_youtube_publish_task(job_id: str, req: YouTubePublishRequest):
         save_job(job_id, cur)
 
 
+class ChannelSelectRequest(BaseModel):
+    channel_id: str
+
+
+class ChannelImportRequest(BaseModel):
+    token_json: Any
+
+
+@app.get("/api/youtube/channels")
+def api_youtube_get_channels():
+    """Lists all connected YouTube channels and the active channel."""
+    channels = list_channels()
+    active_id = get_active_channel_id()
+    return {
+        "channels": channels,
+        "active_channel_id": active_id,
+        "total": len(channels)
+    }
+
+
+@app.post("/api/youtube/channels/select")
+def api_youtube_select_channel(req: ChannelSelectRequest):
+    """Sets the designated channel as active."""
+    success = set_active_channel(req.channel_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Channel not found.")
+    return {"success": True, "active_channel_id": req.channel_id}
+
+
+@app.post("/api/youtube/channels/import")
+def api_youtube_import_token(req: ChannelImportRequest):
+    """Imports credentials JSON to connect a new channel."""
+    try:
+        token_data = req.token_json
+        if isinstance(token_data, str):
+            token_data = json.loads(token_data)
+        saved = save_channel_credentials(token_data)
+        return {"success": True, "channel": saved}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to import credentials: {str(e)}")
+
+
+@app.post("/api/youtube/channels/upload_token")
+async def api_youtube_upload_token_file(file: UploadFile = File(...)):
+    """Uploads a token.json file to connect a channel."""
+    try:
+        content = await file.read()
+        text = content.decode("utf-8")
+        data = json.loads(text)
+        saved = save_channel_credentials(data)
+        return {"success": True, "channel": saved}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to process token file: {str(e)}")
+
+
+@app.get("/api/youtube/channels/{channel_id}/export")
+def api_youtube_export_channel(channel_id: str):
+    """Exports credentials JSON for a specific channel."""
+    creds = export_channel_credentials(channel_id)
+    if not creds:
+        raise HTTPException(status_code=404, detail="Credentials not found for channel.")
+    return JSONResponse(content=creds)
+
+
+@app.delete("/api/youtube/channels/{channel_id}")
+def api_youtube_remove_channel(channel_id: str):
+    """Removes a connected channel."""
+    removed = remove_channel(channel_id)
+    return {"success": removed, "channels": list_channels(), "active_channel_id": get_active_channel_id()}
+
+
 @app.get("/api/youtube/auth_status")
-def api_youtube_auth_status():
+def api_youtube_auth_status(channel_id: Optional[str] = None):
     """Checks whether YouTube OAuth credentials are valid and ready."""
-    return check_auth_status()
+    return check_auth_status(channel_id=channel_id)
 
 
 @app.post("/api/youtube/authorize")
 def api_youtube_authorize():
-    """Initiates local OAuth consent flow if client_secrets.json is present."""
+    """Initiates OAuth consent flow or provides guidance if headless."""
     try:
         get_authenticated_service()
         return check_auth_status()
     except Exception as e:
-        return {"authenticated": False, "error": str(e)}
+        err_str = str(e)
+        return {
+            "authenticated": False,
+            "error": err_str,
+            "is_headless": ("headless" in err_str.lower() or "browser" in err_str.lower()),
+            "guidance": "If running on Render or remote server, use 'Import Token' in the UI to paste credentials from your computer."
+        }
 
 
 @app.post("/api/youtube/publish")
@@ -988,6 +1078,7 @@ async def api_youtube_publish(req: YouTubePublishRequest, background_tasks: Back
 
     background_tasks.add_task(run_youtube_publish_task, job_id, req)
     return {"job_id": job_id, "status": "queued"}
+
 
 
 if __name__ == "__main__":

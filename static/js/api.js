@@ -402,12 +402,52 @@ export const api = {
     },
 
     // YouTube Data API v3 methods
-    async getYouTubeAuthStatus() {
-        return await request("/api/youtube/auth_status");
+    async getYouTubeAuthStatus(channelId = null) {
+        const query = channelId ? `?channel_id=${encodeURIComponent(channelId)}` : "";
+        return await request(`/api/youtube/auth_status${query}`);
     },
 
     async authorizeYouTube() {
         return await request("/api/youtube/authorize", { method: "POST" });
+    },
+
+    async getYouTubeChannels() {
+        return await request("/api/youtube/channels");
+    },
+
+    async selectYouTubeChannel(channelId) {
+        return await request("/api/youtube/channels/select", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ channel_id: channelId })
+        });
+    },
+
+    async importYouTubeToken(tokenJson) {
+        return await request("/api/youtube/channels/import", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token_json: tokenJson })
+        });
+    },
+
+    async uploadYouTubeTokenFile(file) {
+        const formData = new FormData();
+        formData.append("file", file);
+        return await request("/api/youtube/channels/upload_token", {
+            method: "POST",
+            body: formData
+        });
+    },
+
+    async exportYouTubeToken(channelId) {
+        return await request(`/api/youtube/channels/${encodeURIComponent(channelId)}/export`);
+    },
+
+    async removeYouTubeChannel(channelId) {
+        return await request(`/api/youtube/channels/${encodeURIComponent(channelId)}`, {
+            method: "DELETE"
+        });
     },
 
     async publishToYouTube(payload) {

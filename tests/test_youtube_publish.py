@@ -133,6 +133,33 @@ class TestYouTubePublishWorkflow(unittest.TestCase):
                 except Exception:
                     pass
 
+    def test_07_channels_list_endpoint(self):
+        """GET /api/youtube/channels returns channels list and active channel."""
+        res = self.client.get("/api/youtube/channels")
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertIn("channels", data)
+        self.assertIn("active_channel_id", data)
+        self.assertIsInstance(data["channels"], list)
+
+    def test_08_channel_select_endpoint(self):
+        """POST /api/youtube/channels/select switches active channel or returns 404 for invalid."""
+        # Non-existent channel
+        res = self.client.post("/api/youtube/channels/select", json={"channel_id": "non_existent_ch_xyz"})
+        self.assertEqual(res.status_code, 404)
+
+    def test_09_publish_with_target_channel_id(self):
+        """POST /api/youtube/publish accepts optional target channel_id."""
+        with patch("app.run_youtube_publish_task"):
+            res = self.client.post("/api/youtube/publish", json={
+                "script": self.sample_60s_script,
+                "privacy_status": "public",
+                "channel_id": "UCrtcwSWMX8oiBe-upc5KMvQ"
+            })
+            self.assertEqual(res.status_code, 200)
+            data = res.json()
+            self.assertIn("job_id", data)
+
 
 if __name__ == "__main__":
     unittest.main()

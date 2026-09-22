@@ -78,13 +78,18 @@
                                 <span class="icon">🚀</span>
                                 <h3 style="color: #ffffff; font-weight: 700; font-size: 18px;">1-Click Paste & Publish to YouTube</h3>
                             </div>
-                            <div id="ytAuthBadge" class="badge-pill" style="background: rgba(0, 230, 118, 0.15); color: #00e676; border: 1px solid rgba(0, 230, 118, 0.5); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; padding: 5px 12px; border-radius: 20px; display: inline-flex; align-items: center; gap: 6px;" title="Connected to YouTube Channel: ShortVerse1502 (Click to refresh)">
-                                🟢 ShortVerse1502
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <select id="ytChannelSelect" class="form-select compact-select" style="max-width: 190px; padding: 5px 10px; font-size: 12px; font-weight: 600; background: rgba(10, 15, 30, 0.95); border: 1px solid rgba(0, 230, 118, 0.4); color: #00e676; border-radius: 16px; cursor: pointer;">
+                                    <option value="">Loading Channels...</option>
+                                </select>
+                                <button type="button" id="manageChannelsBtn" class="btn-secondary btn-sm" style="padding: 5px 10px; font-size: 11px; border-radius: 16px; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.2); color: #e0e4f0; cursor: pointer; white-space: nowrap;" title="Manage YouTube Channels (Add, Switch, Import)">
+                                    ⚙️ Channels
+                                </button>
                             </div>
                         </div>
 
                         <p style="font-size: 13px; color: #b4b9cc; margin: 0 0 14px 0; line-height: 1.45;">
-                            Paste your spoken script below. The engine auto-directs <strong>18–22 rapid visual cuts</strong> (~2.8s/cut), burns kinetic animated captions, adds sidechain audio ducking, and uploads directly to <strong>ShortVerse1502</strong> with YPP monetization compliance!
+                            Paste your spoken script below. The engine auto-directs <strong>18–22 rapid visual cuts</strong> (~2.8s/cut), burns kinetic animated captions, adds sidechain audio ducking, and uploads directly to your selected YouTube channel with YPP monetization compliance!
                         </p>
 
                         <!-- Main Script Textarea -->
@@ -411,7 +416,14 @@
                             <span class="btn-text">GENERATE VIRAL SHORT (1080x1920)</span>
                         </button>
 
-                        <div class="form-group" style="margin-top: 16px; margin-bottom: 6px;">
+                        <div class="form-group" style="margin-top: 16px; margin-bottom: 8px;">
+                            <label for="ytChannelSelectStep4" style="font-size: 12px; font-weight: 600; color: #b4b9cc;">Target YouTube Channel</label>
+                            <select id="ytChannelSelectStep4" class="form-select compact-select" style="padding: 8px 12px; width: 100%;">
+                                <option value="">Loading Channels...</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 6px;">
                             <label for="ytPrivacySelectStep4" style="font-size: 12px; font-weight: 600; color: #b4b9cc;">YouTube Upload Privacy</label>
                             <select id="ytPrivacySelectStep4" class="form-select compact-select" style="padding: 8px 12px; width: 100%;">
                                 <option value="public" selected>Public (Immediate Live)</option>
@@ -549,9 +561,74 @@
         </main>
     </div>
 
-    <script type="module" src="/static/js/main.js?v=20260922_v16"></script>
+    <script type="module" src="/static/js/main.js?v=20260923_v17"></script>
 
     <!-- Google Material Toast Notifications Container -->
     <div id="toastContainer" class="google-toast-container"></div>
+
+    <!-- YouTube Channel Manager Modal -->
+    <div id="channelModalOverlay" style="display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.78); backdrop-filter: blur(6px); z-index: 9999; align-items: center; justify-content: center; padding: 16px;">
+        <div class="card" style="width: 100%; max-width: 580px; max-height: 90vh; overflow-y: auto; background: #131726; border: 1px solid rgba(255, 51, 75, 0.4); box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6); border-radius: 14px; padding: 24px; box-sizing: border-box;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 12px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 24px;">📺</span>
+                    <div>
+                        <h3 style="margin: 0; font-size: 18px; color: #fff; font-weight: 700;">YouTube Channel Manager</h3>
+                        <p style="margin: 2px 0 0 0; font-size: 12px; color: #a0a5b8;">Connect multiple channels, switch accounts, or import/export tokens</p>
+                    </div>
+                </div>
+                <button type="button" id="closeChannelModalBtn" style="background: none; border: none; color: #8f95b2; font-size: 22px; cursor: pointer; padding: 4px 8px; border-radius: 6px;">✕</button>
+            </div>
+
+            <!-- Connected Channels List -->
+            <div style="margin-bottom: 20px;">
+                <h4 style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; color: #b4b9cc; margin-bottom: 10px;">Connected Channels</h4>
+                <div id="channelsListContainer" style="display: flex; flex-direction: column; gap: 8px;">
+                    <div style="text-align: center; padding: 16px; color: #737996; font-size: 13px;">Loading channels...</div>
+                </div>
+            </div>
+
+            <!-- Add Channel Actions -->
+            <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 16px; margin-bottom: 16px;">
+                <h4 style="font-size: 13px; color: #fff; margin: 0 0 10px 0; font-weight: 600;">➕ Connect Another Channel</h4>
+                
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <!-- Option 1: Browser OAuth (Desktop) -->
+                    <button type="button" id="addNewChannelOAuthBtn" class="btn-secondary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; font-size: 13px; font-weight: 600; background: rgba(255, 51, 75, 0.15); border: 1px solid rgba(255, 51, 75, 0.4); color: #ff5268; cursor: pointer; border-radius: 8px;">
+                        <span>🌐</span> Authorize with Google Account (Localhost)
+                    </button>
+
+                    <!-- Option 2: Import Token (Render / Headless) -->
+                    <div style="border-top: 1px solid rgba(255, 255, 255, 0.06); padding-top: 10px;">
+                        <span style="font-size: 12px; color: #b4b9cc; display: block; margin-bottom: 8px;">
+                            <strong>Render / Cloud Deploy:</strong> Import token credentials JSON from your local PC or upload <code style="color: #60a5fa;">token.json</code>
+                        </span>
+                        
+                        <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                            <input type="file" id="uploadTokenFileInput" accept=".json" style="display: none;">
+                            <button type="button" id="triggerTokenFileUploadBtn" class="btn-secondary btn-sm" style="flex: 1; padding: 8px; font-size: 12px; cursor: pointer; border-radius: 6px;">
+                                📁 Upload token.json File
+                            </button>
+                            <button type="button" id="togglePasteTokenBtn" class="btn-secondary btn-sm" style="flex: 1; padding: 8px; font-size: 12px; cursor: pointer; border-radius: 6px;">
+                                📝 Paste JSON String
+                            </button>
+                        </div>
+
+                        <div id="pasteTokenArea" style="display: none; margin-top: 8px;">
+                            <textarea id="tokenJsonInput" rows="3" style="width: 100%; font-size: 12px; font-family: monospace; padding: 8px; background: rgba(10, 12, 22, 0.85); border: 1px solid rgba(255, 255, 255, 0.15); color: #fff; border-radius: 6px; box-sizing: border-box; resize: vertical;" placeholder='{"token": "ya29...", "refresh_token": "..."}'></textarea>
+                            <button type="button" id="submitImportTokenBtn" class="btn-master" style="width: 100%; margin-top: 6px; padding: 8px; font-size: 13px; cursor: pointer; border-radius: 6px;">
+                                Import & Link Channel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Render Deploy Guide Note -->
+            <div style="background: rgba(96, 165, 250, 0.08); border: 1px solid rgba(96, 165, 250, 0.25); border-radius: 8px; padding: 12px; font-size: 12px; color: #cbd5e1; line-height: 1.45;">
+                💡 <strong>Render Deploy Tip:</strong> You can link any channel on your local PC, click <strong>"Export"</strong> to copy the credentials, and import them here on Render! You can also paste <code style="color: #93c5fd;">token.json</code> directly in Render's <strong>Secret Files</strong>.
+            </div>
+        </div>
+    </div>
 </body>
 </html>

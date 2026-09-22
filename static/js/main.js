@@ -816,9 +816,22 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // ==========================================
-    // YOUTUBE 1-CLICK PUBLISH LOGIC
+    // YOUTUBE MULTI-CHANNEL & PUBLISH LOGIC
     // ==========================================
-    const ytAuthBadge = document.getElementById("ytAuthBadge");
+    const ytChannelSelect = document.getElementById("ytChannelSelect");
+    const ytChannelSelectStep4 = document.getElementById("ytChannelSelectStep4");
+    const manageChannelsBtn = document.getElementById("manageChannelsBtn");
+    const channelModalOverlay = document.getElementById("channelModalOverlay");
+    const closeChannelModalBtn = document.getElementById("closeChannelModalBtn");
+    const channelsListContainer = document.getElementById("channelsListContainer");
+    const addNewChannelOAuthBtn = document.getElementById("addNewChannelOAuthBtn");
+    const uploadTokenFileInput = document.getElementById("uploadTokenFileInput");
+    const triggerTokenFileUploadBtn = document.getElementById("triggerTokenFileUploadBtn");
+    const togglePasteTokenBtn = document.getElementById("togglePasteTokenBtn");
+    const pasteTokenArea = document.getElementById("pasteTokenArea");
+    const tokenJsonInput = document.getElementById("tokenJsonInput");
+    const submitImportTokenBtn = document.getElementById("submitImportTokenBtn");
+
     const ytPrivacySelect = document.getElementById("ytPrivacySelect");
     const ytPrivacySelectStep4 = document.getElementById("ytPrivacySelectStep4");
     const ytPacingMode = document.getElementById("ytPacingMode");
@@ -849,54 +862,270 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    async function checkYouTubeAuth() {
-        const badge = document.getElementById("ytAuthBadge") || ytAuthBadge;
-        if (!badge) return;
+    let connectedChannels = [];
+    let currentActiveChannelId = null;
+
+    async function loadYouTubeChannels() {
         try {
-            const auth = await api.getYouTubeAuthStatus();
-            if (auth.authenticated) {
-                badge.innerHTML = `🟢 ${auth.channel_title || "ShortVerse1502"}`;
-                badge.style.color = "#00e676";
-                badge.style.border = "1px solid rgba(0, 230, 118, 0.5)";
-                badge.title = `Connected to channel: ${auth.channel_title || "ShortVerse1502"}`;
-            } else if (auth.client_secrets_found) {
-                badge.innerHTML = "🟡 Secrets Found (Click to Link)";
-                badge.style.color = "#ffb300";
-                badge.style.border = "1px solid rgba(255, 179, 0, 0.5)";
-                badge.title = "Click to run OAuth consent flow";
-            } else {
-                badge.innerHTML = "⚪ YouTube: Not Linked";
-                badge.style.color = "#a0a5b8";
-                badge.style.border = "1px solid rgba(255, 255, 255, 0.15)";
-                badge.title = "Place client_secrets.json in project root to connect";
-            }
+            const res = await api.getYouTubeChannels();
+            connectedChannels = res.channels || [];
+            currentActiveChannelId = res.active_channel_id;
+
+            populateChannelSelect(ytChannelSelect, connectedChannels, currentActiveChannelId);
+            populateChannelSelect(ytChannelSelectStep4, connectedChannels, currentActiveChannelId);
+            return res;
         } catch (err) {
-            console.warn("[YouTube Auth Check Error]:", err);
-            if (badge) badge.innerHTML = "⚪ YouTube: Standby";
+            console.warn("[Load YouTube Channels Error]:", err);
+            return null;
         }
     }
 
-    if (ytAuthBadge) {
-        ytAuthBadge.addEventListener("click", async () => {
-            showToast("Checking YouTube API credentials...", "info");
-            try {
-                const res = await api.authorizeYouTube();
-                if (res.authenticated) {
-                    showToast(`Connected to YouTube: ${res.channel_title}!`, "success");
-                } else if (res.message) {
-                    showToast(res.message, "warning", 5000);
-                } else if (res.error) {
-                    showToast(`Auth status: ${res.error}`, "warning", 5000);
-                }
-            } catch (err) {
-                showToast(`YouTube auth: ${err.message}`, "error");
+    function populateChannelSelect(selectElem, channels, activeId) {
+        if (!selectElem) return;
+        selectElem.innerHTML = "";
+
+        if (!channels || channels.length === 0) {
+            const opt = document.createElement("option");
+            opt.value = "";
+            opt.textContent = "⚪ No Channels Linked (+ Add)";
+            selectElem.appendChild(opt);
+            selectElem.style.color = "#a0a5b8";
+            selectElem.style.borderColor = "rgba(255, 255, 255, 0.2)";
+            return;
+        }
+
+        channels.forEach(ch => {
+            const opt = document.createElement("option");
+            opt.value = ch.channel_id;
+            const handle = ch.custom_url ? ` (${ch.custom_url})` : "";
+            opt.textContent = `${ch.is_active ? "🟢" : "⚪"} ${ch.channel_title || ch.channel_id}${handle}`;
+            if (ch.channel_id === activeId || ch.is_active) {
+                opt.selected = true;
             }
-            checkYouTubeAuth();
+            selectElem.appendChild(opt);
+        });
+
+        selectElem.style.color = "#00e676";
+        selectElem.style.borderColor = "rgba(0, 230, 118, 0.5)";
+    }
+
+    async function handleChannelDropdownChange(channelId) {
+        if (!channelId) {
+            openChannelModal();
+            return;
+        }
+        try {
+            await api.selectYouTubeChannel(channelId);
+            currentActiveChannelId = channelId;
+            const targetCh = connectedChannels.find(c => c.channel_id === channelId);
+            const title = targetCh ? targetCh.channel_title : channelId;
+            showToast(`Switched active channel to: ${title}`, "info");
+            await loadYouTubeChannels();
+        } catch (err) {
+            showToast(`Failed to switch channel: ${err.message}`, "error");
+        }
+    }
+
+    if (ytChannelSelect) {
+        ytChannelSelect.addEventListener("change", (e) => {
+            handleChannelDropdownChange(e.target.value);
+            if (ytChannelSelectStep4) ytChannelSelectStep4.value = e.target.value;
+        });
+    }
+    if (ytChannelSelectStep4) {
+        ytChannelSelectStep4.addEventListener("change", (e) => {
+            handleChannelDropdownChange(e.target.value);
+            if (ytChannelSelect) ytChannelSelect.value = e.target.value;
         });
     }
 
-    // Check YouTube Auth status immediately after initialization
-    checkYouTubeAuth();
+    function renderChannelsModalList() {
+        if (!channelsListContainer) return;
+        channelsListContainer.innerHTML = "";
+
+        if (!connectedChannels || connectedChannels.length === 0) {
+            channelsListContainer.innerHTML = `
+                <div style="text-align: center; padding: 24px; color: #8f95b2; font-size: 13px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+                    No YouTube channels connected yet.<br>Click below to link your channel or import token credentials.
+                </div>
+            `;
+            return;
+        }
+
+        connectedChannels.forEach(ch => {
+            const card = document.createElement("div");
+            card.style.cssText = "display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; gap: 12px;";
+            
+            const thumb = ch.thumbnail_url 
+                ? `<img src="${ch.thumbnail_url}" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 2px solid ${ch.is_active ? '#00e676' : 'rgba(255,255,255,0.2)'};">` 
+                : `<div style="width: 38px; height: 38px; border-radius: 50%; background: #ff0033; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #fff;">▶️</div>`;
+
+            const activeBadge = ch.is_active 
+                ? `<span style="background: rgba(0, 230, 118, 0.15); color: #00e676; border: 1px solid rgba(0, 230, 118, 0.4); font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 10px;">ACTIVE</span>`
+                : "";
+
+            card.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
+                    ${thumb}
+                    <div style="min-width: 0;">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <span style="font-weight: 600; font-size: 14px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${ch.channel_title || "Unknown Channel"}</span>
+                            ${activeBadge}
+                        </div>
+                        <div style="font-size: 11px; color: #8f95b2;">${ch.custom_url || ch.channel_id}</div>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+                    ${!ch.is_active ? `<button class="btn-secondary btn-sm set-active-btn" data-cid="${ch.channel_id}" style="padding: 4px 8px; font-size: 11px;">Set Active</button>` : ""}
+                    <button class="btn-secondary btn-sm export-btn" data-cid="${ch.channel_id}" title="Copy token JSON for Render" style="padding: 4px 8px; font-size: 11px;">📋 Export</button>
+                    <button class="btn-secondary btn-sm remove-btn" data-cid="${ch.channel_id}" title="Disconnect Channel" style="padding: 4px 8px; font-size: 11px; color: #ff5268; border-color: rgba(255, 82, 104, 0.3);">🗑️</button>
+                </div>
+            `;
+
+            // Button listeners
+            const setActiveBtn = card.querySelector(".set-active-btn");
+            if (setActiveBtn) {
+                setActiveBtn.addEventListener("click", async () => {
+                    await handleChannelDropdownChange(ch.channel_id);
+                    renderChannelsModalList();
+                });
+            }
+
+            const exportBtn = card.querySelector(".export-btn");
+            if (exportBtn) {
+                exportBtn.addEventListener("click", async () => {
+                    try {
+                        const creds = await api.exportYouTubeToken(ch.channel_id);
+                        await navigator.clipboard.writeText(JSON.stringify(creds, null, 2));
+                        showToast(`Token for '${ch.channel_title}' copied to clipboard!`, "success", 4000);
+                    } catch (e) {
+                        showToast(`Export failed: ${e.message}`, "error");
+                    }
+                });
+            }
+
+            const removeBtn = card.querySelector(".remove-btn");
+            if (removeBtn) {
+                removeBtn.addEventListener("click", async () => {
+                    if (confirm(`Disconnect YouTube channel '${ch.channel_title}'?`)) {
+                        try {
+                            await api.removeYouTubeChannel(ch.channel_id);
+                            showToast(`Disconnected '${ch.channel_title}'`, "info");
+                            await loadYouTubeChannels();
+                            renderChannelsModalList();
+                        } catch (e) {
+                            showToast(`Failed to remove channel: ${e.message}`, "error");
+                        }
+                    }
+                });
+            }
+
+            channelsListContainer.appendChild(card);
+        });
+    }
+
+    function openChannelModal() {
+        if (!channelModalOverlay) return;
+        renderChannelsModalList();
+        channelModalOverlay.style.display = "flex";
+    }
+
+    function closeChannelModal() {
+        if (!channelModalOverlay) return;
+        channelModalOverlay.style.display = "none";
+    }
+
+    if (manageChannelsBtn) {
+        manageChannelsBtn.addEventListener("click", openChannelModal);
+    }
+    if (closeChannelModalBtn) {
+        closeChannelModalBtn.addEventListener("click", closeChannelModal);
+    }
+    if (channelModalOverlay) {
+        channelModalOverlay.addEventListener("click", (e) => {
+            if (e.target === channelModalOverlay) closeChannelModal();
+        });
+    }
+
+    // Modal Action: Add via Browser OAuth (Desktop)
+    if (addNewChannelOAuthBtn) {
+        addNewChannelOAuthBtn.addEventListener("click", async () => {
+            showToast("Opening Google OAuth consent flow...", "info");
+            try {
+                const res = await api.authorizeYouTube();
+                if (res.authenticated) {
+                    showToast(`Successfully linked channel: ${res.channel_title}!`, "success", 4000);
+                    await loadYouTubeChannels();
+                    renderChannelsModalList();
+                } else if (res.is_headless) {
+                    showToast("Headless host detected (no browser on server). Use 'Upload token.json' or 'Paste JSON' below!", "warning", 6000);
+                } else if (res.error) {
+                    showToast(`Auth error: ${res.error}`, "warning", 5000);
+                }
+            } catch (err) {
+                showToast(`OAuth error: ${err.message}`, "error");
+            }
+        });
+    }
+
+    // Modal Action: File Upload
+    if (triggerTokenFileUploadBtn && uploadTokenFileInput) {
+        triggerTokenFileUploadBtn.addEventListener("click", () => {
+            uploadTokenFileInput.click();
+        });
+
+        uploadTokenFileInput.addEventListener("change", async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            showToast(`Uploading ${file.name}...`, "info");
+            try {
+                const res = await api.uploadYouTubeTokenFile(file);
+                if (res.success && res.channel) {
+                    showToast(`Connected channel: ${res.channel.channel_title}! 🎉`, "success", 4000);
+                    await loadYouTubeChannels();
+                    renderChannelsModalList();
+                }
+            } catch (err) {
+                showToast(`Failed to import file: ${err.message}`, "error");
+            } finally {
+                uploadTokenFileInput.value = "";
+            }
+        });
+    }
+
+    // Modal Action: Paste JSON toggle & submit
+    if (togglePasteTokenBtn && pasteTokenArea) {
+        togglePasteTokenBtn.addEventListener("click", () => {
+            const isHidden = pasteTokenArea.style.display === "none";
+            pasteTokenArea.style.display = isHidden ? "block" : "none";
+        });
+    }
+
+    if (submitImportTokenBtn && tokenJsonInput) {
+        submitImportTokenBtn.addEventListener("click", async () => {
+            const raw = tokenJsonInput.value.trim();
+            if (!raw) {
+                showToast("Please paste token JSON before submitting.", "warning");
+                return;
+            }
+            showToast("Validating credentials with YouTube...", "info");
+            try {
+                const res = await api.importYouTubeToken(raw);
+                if (res.success && res.channel) {
+                    showToast(`Connected channel: ${res.channel.channel_title}! 🎉`, "success", 4000);
+                    tokenJsonInput.value = "";
+                    if (pasteTokenArea) pasteTokenArea.style.display = "none";
+                    await loadYouTubeChannels();
+                    renderChannelsModalList();
+                }
+            } catch (err) {
+                showToast(`Import error: ${err.message}`, "error");
+            }
+        });
+    }
+
+    // Initialize channels on page load
+    loadYouTubeChannels();
 
     async function triggerYouTubePublish(isFromProject = false) {
         const script = scriptInput ? scriptInput.value.trim() : "";
@@ -918,6 +1147,11 @@ document.addEventListener("DOMContentLoaded", async () => {
             || localStorage.getItem("yt_privacy")
             || "public";
 
+        // Pick channel from active step or active channel state
+        const targetChannelId = (isFromProject && ytChannelSelectStep4 ? ytChannelSelectStep4.value : null)
+            || (ytChannelSelect ? ytChannelSelect.value : null)
+            || currentActiveChannelId;
+
         const rapid = ytPacingMode ? (ytPacingMode.value === "rapid") : true;
 
         if (oneClickPublishBtn) {
@@ -937,6 +1171,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const payload = {
             script: script,
             privacy_status: privacy,
+            channel_id: targetChannelId || null,
             voice: voice,
             voice_rate: voiceRate,
             subtitle_style: subtitleStyle,
@@ -1039,7 +1274,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                                 editInStudioBtn.href = `https://studio.youtube.com/video/${job.video_id}/edit`;
                             }
                             if (ytPublishedSubtext) {
-                                ytPublishedSubtext.innerHTML = `Your Short is live on YouTube! Privacy: <strong style="color: #00e676;">${actualPriv.toUpperCase()}</strong>`;
+                                const targetChName = job.channel_title ? ` on <strong>${job.channel_title}</strong>` : "";
+                                ytPublishedSubtext.innerHTML = `Your Short is live on YouTube${targetChName}! Privacy: <strong style="color: #00e676;">${actualPriv.toUpperCase()}</strong>`;
                             }
                             if (ytPrivacyNotice) {
                                 if (reqPriv === "public" && actualPriv !== "public") {

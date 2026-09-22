@@ -148,17 +148,32 @@ def get_youtube_client_secrets_path() -> str:
     custom = os.environ.get("YOUTUBE_CLIENT_SECRETS_FILE", "").strip()
     if custom and os.path.exists(custom):
         return os.path.abspath(custom)
+    if os.path.exists("/etc/secrets/client_secrets.json"):
+        return "/etc/secrets/client_secrets.json"
     curr = os.path.dirname(os.path.abspath(__file__))
     root_dir = os.path.dirname(curr)
     return os.path.join(root_dir, "client_secrets.json")
 
 
-def get_youtube_token_path() -> str:
-    """Returns absolute path to YouTube token.json (cached OAuth credentials)."""
-    custom = os.environ.get("YOUTUBE_TOKEN_FILE", "").strip()
+def get_youtube_tokens_dir() -> str:
+    """Returns absolute path to YouTube tokens directory for multi-channel support."""
+    custom = os.environ.get("YOUTUBE_TOKENS_DIR", "").strip()
     if custom:
         return os.path.abspath(custom)
     curr = os.path.dirname(os.path.abspath(__file__))
     root_dir = os.path.dirname(curr)
+    return os.path.join(root_dir, "tokens")
+
+
+def get_youtube_token_path() -> str:
+    """Returns absolute path to YouTube token.json (cached OAuth credentials fallback)."""
+    custom = os.environ.get("YOUTUBE_TOKEN_FILE", "").strip()
+    if custom and os.path.exists(custom):
+        return os.path.abspath(custom)
+    if os.path.exists("/etc/secrets/token.json"):
+        return "/etc/secrets/token.json"
+    curr = os.path.dirname(os.path.abspath(__file__))
+    root_dir = os.path.dirname(curr)
     return os.path.join(root_dir, "token.json")
+
 
