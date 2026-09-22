@@ -411,6 +411,10 @@ export const api = {
         return await request("/api/youtube/authorize", { method: "POST" });
     },
 
+    async getYouTubeOAuthLoginUrl() {
+        return await request("/api/youtube/oauth/url");
+    },
+
     async getYouTubeChannels() {
         return await request("/api/youtube/channels");
     },

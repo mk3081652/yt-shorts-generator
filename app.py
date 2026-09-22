@@ -12,7 +12,8 @@ logger = logging.getLogger("yt_shorts_app")
 
 import engine.config
 
-from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks, HTTPException
+from urllib.parse import quote
+from fastapi import FastAPI, Request, UploadFile, File, Form, BackgroundTasks, HTTPException
 
 # Enforce UTF-8 console output on Windows to prevent UnicodeEncodeError
 if hasattr(sys.stdout, 'reconfigure'):
@@ -21,7 +22,7 @@ if hasattr(sys.stderr, 'reconfigure'):
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict
 
@@ -68,7 +69,8 @@ from engine.youtube_uploader import (
     remove_channel,
     export_channel_credentials,
     get_active_channel_id,
-    ensure_tokens_dir
+    ensure_tokens_dir,
+    create_web_flow
 )
 
 
@@ -1079,6 +1081,76 @@ def api_youtube_authorize():
             "guidance": "If running on Render or remote server, use 'Upload token.json' or 'Paste JSON' in the UI."
         }
 
+
+def _get_oauth_redirect_uri(request: Request) -> str:
+    """Builds redirect URI matching incoming protocol & host (supports reverse proxies)."""
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get("x-forwarded-host", request.headers.get("host", request.url.netloc))
+    return f"{proto}://{host}/api/youtube/oauth2callback"
+
+
+@app.get("/api/youtube/oauth/url")
+def api_youtube_oauth_url(request: Request):
+    """Returns Google OAuth authorization URL for web redirect."""
+    redirect_uri = _get_oauth_redirect_uri(request)
+    try:
+        flow = create_web_flow(redirect_uri=redirect_uri)
+        auth_url, _ = flow.authorization_url(
+            access_type="offline",
+            prompt="select_account consent",
+            include_granted_scopes="true"
+        )
+        return {"success": True, "auth_url": auth_url, "redirect_uri": redirect_uri}
+    except Exception as e:
+        logger.error(f"Failed to create OAuth URL: {e}")
+        return {"success": False, "error": str(e), "redirect_uri": redirect_uri}
+
+
+@app.get("/api/youtube/oauth/login")
+def api_youtube_oauth_login(request: Request):
+    """Directly redirects browser to Google Account selection & consent screen."""
+    redirect_uri = _get_oauth_redirect_uri(request)
+    try:
+        flow = create_web_flow(redirect_uri=redirect_uri)
+        auth_url, _ = flow.authorization_url(
+            access_type="offline",
+            prompt="select_account consent",
+            include_granted_scopes="true"
+        )
+        return RedirectResponse(url=auth_url)
+    except Exception as e:
+        logger.error(f"OAuth login redirect error: {e}")
+        return RedirectResponse(url=f"/?oauth_error={quote(str(e))}")
+
+
+@app.get("/api/youtube/oauth2callback")
+def api_youtube_oauth2callback(
+    request: Request,
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None
+):
+    """Receives authorization response from Google and completes channel connection."""
+    if error:
+        logger.warning(f"OAuth callback received error from Google: {error}")
+        return RedirectResponse(url=f"/?oauth_error={quote(error)}")
+
+    if not code:
+        return RedirectResponse(url="/?oauth_error=No+authorization+code+received+from+Google")
+
+    redirect_uri = _get_oauth_redirect_uri(request)
+    try:
+        os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+        flow = create_web_flow(redirect_uri=redirect_uri)
+        flow.fetch_token(code=code)
+        creds = flow.credentials
+        saved = save_channel_credentials(json.loads(creds.to_json()))
+        channel_name = saved.get("channel_title", "YouTube Channel")
+        logger.info(f"[OAuth Callback] Successfully connected channel '{channel_name}' via web redirect!")
+        return RedirectResponse(url=f"/?connected={quote(channel_name)}")
+    except Exception as e:
+        logger.error(f"Failed to process OAuth callback: {e}", exc_info=True)
+        return RedirectResponse(url=f"/?oauth_error={quote(str(e))}")
 
 
 @app.post("/api/youtube/publish")

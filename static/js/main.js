@@ -1055,24 +1055,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    // Modal Action: Add via Browser OAuth (Desktop)
+    // Modal Action: Add via Browser OAuth (1-Click Web Redirect)
     if (addNewChannelOAuthBtn) {
-        addNewChannelOAuthBtn.addEventListener("click", async () => {
-            showToast("Opening Google OAuth consent flow...", "info");
-            try {
-                const res = await api.authorizeYouTube();
-                if (res.authenticated) {
-                    showToast(`Successfully linked channel: ${res.channel_title}!`, "success", 4000);
-                    await loadYouTubeChannels();
-                    renderChannelsModalList();
-                } else if (res.is_headless) {
-                    showToast("Headless host detected (no browser on server). Use 'Upload token.json' or 'Paste JSON' below!", "warning", 6000);
-                } else if (res.error) {
-                    showToast(`Auth error: ${res.error}`, "warning", 5000);
-                }
-            } catch (err) {
-                showToast(`OAuth error: ${err.message}`, "error");
-            }
+        addNewChannelOAuthBtn.addEventListener("click", () => {
+            showToast("Redirecting to Google Account Sign-In...", "info");
+            window.location.href = "/api/youtube/oauth/login";
         });
     }
 
@@ -1132,8 +1119,25 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    // Initialize channels on page load
+    // Initialize channels on page load & check OAuth return params
     loadYouTubeChannels();
+
+    try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const connectedChannel = urlParams.get("connected");
+        const oauthErr = urlParams.get("oauth_error");
+
+        if (connectedChannel) {
+            showToast(`🎉 Connected to YouTube Channel: ${connectedChannel}!`, "success", 6000);
+            window.history.replaceState({}, document.title, window.location.pathname);
+            loadYouTubeChannels();
+        } else if (oauthErr) {
+            showToast(`YouTube OAuth Note: ${oauthErr}`, "warning", 8000);
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+    } catch (e) {
+        console.debug("[OAuth URL Params Check]:", e);
+    }
 
     async function triggerYouTubePublish(isFromProject = false) {
         const script = scriptInput ? scriptInput.value.trim() : "";

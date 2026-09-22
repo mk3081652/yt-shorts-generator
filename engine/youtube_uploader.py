@@ -12,7 +12,7 @@ from typing import Dict, Any, List, Optional, Callable
 
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google_auth_oauthlib.flow import InstalledAppFlow, Flow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
@@ -494,6 +494,23 @@ def authorize_new_channel() -> Dict[str, Any]:
         raise err
 
     return save_channel_credentials(json.loads(creds.to_json()))
+
+
+def create_web_flow(redirect_uri: str) -> Flow:
+    """Creates a standard OAuth2 Web Application Flow for browser redirect OAuth."""
+    client_secrets_path = get_youtube_client_secrets_path()
+    if not os.path.exists(client_secrets_path):
+        raise FileNotFoundError(
+            f"YouTube client secrets file not found at: {client_secrets_path}. "
+            "Please upload client_secrets.json in project root or Render Secret Files."
+        )
+
+    return Flow.from_client_secrets_file(
+        client_secrets_path,
+        scopes=SCOPES,
+        redirect_uri=redirect_uri
+    )
+
 
 
 
