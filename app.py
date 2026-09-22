@@ -1117,7 +1117,10 @@ def api_youtube_oauth_login(request: Request):
             prompt="select_account consent",
             include_granted_scopes="true"
         )
-        return RedirectResponse(url=auth_url)
+        resp = RedirectResponse(url=auth_url)
+        if flow.code_verifier:
+            resp.set_cookie("oauth_code_verifier", flow.code_verifier, max_age=600, httponly=True, samesite="lax")
+        return resp
     except Exception as e:
         logger.error(f"OAuth login redirect error: {e}")
         return RedirectResponse(url=f"/?oauth_error={quote(str(e))}")
@@ -1142,12 +1145,17 @@ def api_youtube_oauth2callback(
     try:
         os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
         flow = create_web_flow(redirect_uri=redirect_uri)
+        verifier = request.cookies.get("oauth_code_verifier")
+        if verifier:
+            flow.code_verifier = verifier
         flow.fetch_token(code=code)
         creds = flow.credentials
         saved = save_channel_credentials(json.loads(creds.to_json()))
         channel_name = saved.get("channel_title", "YouTube Channel")
         logger.info(f"[OAuth Callback] Successfully connected channel '{channel_name}' via web redirect!")
-        return RedirectResponse(url=f"/?connected={quote(channel_name)}")
+        resp = RedirectResponse(url=f"/?connected={quote(channel_name)}")
+        resp.delete_cookie("oauth_code_verifier")
+        return resp
     except Exception as e:
         logger.error(f"Failed to process OAuth callback: {e}", exc_info=True)
         return RedirectResponse(url=f"/?oauth_error={quote(str(e))}")

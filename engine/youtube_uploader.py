@@ -505,11 +505,15 @@ def create_web_flow(redirect_uri: str) -> Flow:
             "Please upload client_secrets.json in project root or Render Secret Files."
         )
 
-    return Flow.from_client_secrets_file(
+    flow = Flow.from_client_secrets_file(
         client_secrets_path,
         scopes=SCOPES,
         redirect_uri=redirect_uri
     )
+    # Web Application flow uses client_secret; disable PKCE autogeneration
+    # so authorization doesn't require stateful code_verifier across separate HTTP requests.
+    flow.autogenerate_code_verifier = False
+    return flow
 
 
 
