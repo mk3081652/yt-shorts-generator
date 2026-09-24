@@ -135,8 +135,8 @@
                         </div>
 
                         <!-- Publishing Options Row -->
-                        <div class="form-row" style="margin-bottom: 16px; gap: 12px;">
-                            <div class="form-group flex-1">
+                        <div class="form-row" style="margin-bottom: 16px; gap: 12px; flex-wrap: wrap;">
+                            <div class="form-group flex-1" style="min-width: 140px;">
                                 <label for="ytPrivacySelect" style="font-size: 12px; font-weight: 600; color: #e0e4f0;">Upload Privacy</label>
                                 <select id="ytPrivacySelect" class="form-select compact-select" style="padding: 8px 12px; width: 100%;">
                                     <option value="public" selected>Public (Immediate Live)</option>
@@ -144,7 +144,14 @@
                                     <option value="private">Private</option>
                                 </select>
                             </div>
-                            <div class="form-group flex-1">
+                            <div class="form-group flex-1" style="min-width: 160px;">
+                                <label for="ytResolutionSelect" style="font-size: 12px; font-weight: 600; color: #e0e4f0;">Render Speed & Res</label>
+                                <select id="ytResolutionSelect" class="form-select compact-select" style="padding: 8px 12px; width: 100%;">
+                                    <option value="720p" selected>⚡ Turbo 720p HD (3x Faster)</option>
+                                    <option value="1080p">1080p Full HD</option>
+                                </select>
+                            </div>
+                            <div class="form-group flex-1" style="min-width: 160px;">
                                 <label for="ytPacingMode" style="font-size: 12px; font-weight: 600; color: #e0e4f0;">Visual Cuts Pacing</label>
                                 <select id="ytPacingMode" class="form-select compact-select" style="padding: 8px 12px; width: 100%;">
                                     <option value="rapid" selected>⚡ Ultra Fast (18-22 cuts, ~2.8s each)</option>

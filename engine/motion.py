@@ -39,19 +39,26 @@ def download_image_file(img_url: str, save_path: str, max_retries: int = 3) -> b
 MOTION_MAP = {
     "push in": 0,
     "zoom in": 0,
+    "zoom_in": 0,
     "push": 0,
     "pull out": 1,
     "zoom out": 1,
+    "zoom_out": 1,
     "pull": 1,
     "pan right": 2,
+    "pan_right": 2,
     "right": 2,
     "pan left": 3,
+    "pan_left": 3,
     "left": 3,
     "tilt up": 4,
+    "tilt_up": 4,
     "tilt": 4,
     "up": 4,
     "static": 5,
     "none": 5,
+    "snap_zoom": 0,
+    "parallax_25d": 0,
 }
 
 
@@ -60,10 +67,14 @@ def create_ken_burns_motion_clip(
     duration: float,
     output_path: str,
     motion_index: int = 0,
-    motion: Any = None
+    motion: Any = None,
+    width: int = 1080,
+    height: int = 1920,
+    is_hook: bool = False,
+    **kwargs
 ) -> bool:
     """
-    Turns an image into a 1080x1920 9:16 vertical video with continuous cinematic motion:
+    Turns an image into a vertical video with continuous cinematic motion:
       0: Dynamic Center Push (Zoom-in from 1.0 to 1.25)
       1: Dramatic Reveal Pull-Out (Zoom-out from 1.25 to 1.0)
       2: Horizontal Pan-Right + Zoom (Glides from left to right)
@@ -89,13 +100,13 @@ def create_ken_burns_motion_clip(
 
     if m_type == 5:
         vf = (
-            "scale=1080:1920:force_original_aspect_ratio=increase,"
-            "crop=1080:1920,"
-            "format=yuv420p"
+            f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+            f"crop={width}:{height},"
+            f"format=yuv420p"
         )
     else:
         if m_type == 0:
-            zoom_expr = "min(zoom+0.0022,1.25)"
+            zoom_expr = "min(zoom+0.0032,1.30)" if is_hook else "min(zoom+0.0022,1.25)"
             x_expr = "iw/2-(iw/zoom/2)"
             y_expr = "ih/2-(ih/zoom/2)"
         elif m_type == 1:
@@ -116,9 +127,9 @@ def create_ken_burns_motion_clip(
             y_expr = f"(ih-ih/zoom)*(1-on/{d_str})"
 
         vf = (
-            f"scale=1080:1920:force_original_aspect_ratio=increase,"
-            f"crop=1080:1920,"
-            f"zoompan=z='{zoom_expr}':d={d_str}:x='{x_expr}':y='{y_expr}':s=1080x1920:fps=25,"
+            f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+            f"crop={width}:{height},"
+            f"zoompan=z='{zoom_expr}':d={d_str}:x='{x_expr}':y='{y_expr}':s={width}x{height}:fps=25,"
             f"format=yuv420p"
         )
 
@@ -142,13 +153,13 @@ def create_ken_burns_motion_clip(
     return res.returncode == 0 and os.path.exists(output_path)
 
 
-def make_blank_clip(duration: float, output_path: str) -> bool:
-    """Generates an aesthetic dark cinematic 1080x1920 video clip for empty/quota scenes via lavfi."""
+def make_blank_clip(duration: float, output_path: str, width: int = 1080, height: int = 1920, *args, **kwargs) -> bool:
+    """Generates an aesthetic dark cinematic video clip for empty/quota scenes via lavfi."""
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
     cmd = [
         FFMPEG_EXE, "-y",
         "-f", "lavfi",
-        "-i", "color=c=0x0b1120:s=1080x1920:r=25",
+        "-i", f"color=c=0x0b1120:s={width}x{height}:r=25",
         "-t", f"{duration:.2f}",
         "-c:v", "libx264",
         "-preset", "ultrafast",
@@ -163,10 +174,10 @@ def make_blank_clip(duration: float, output_path: str) -> bool:
     return res.returncode == 0 and os.path.exists(output_path)
 
 
-def make_video_scene_clip(src_video_path: str, duration: float, output_path: str) -> bool:
-    """Scales, crops to 1080x1920, and trims or loops video to exact duration."""
+def make_video_scene_clip(src_video_path: str, duration: float, output_path: str, width: int = 1080, height: int = 1920) -> bool:
+    """Scales, crops to target dimensions, and trims or loops video to exact duration."""
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-    vf = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=25,format=yuv420p"
+    vf = f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},fps=25,format=yuv420p"
     cmd = [
         FFMPEG_EXE, "-y",
         "-stream_loop", "-1",

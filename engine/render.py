@@ -9,6 +9,7 @@ import uuid
 import shutil
 import asyncio
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, Callable, Optional, List
 from PIL import Image
 import imageio_ffmpeg
@@ -23,6 +24,7 @@ from engine.motion import (
 )
 from engine.timeline import align
 from engine.project import load_project, Project, Scene
+from engine.whisper_client import align_words_for_audio
 
 FFMPEG_EXE = imageio_ffmpeg.get_ffmpeg_exe()
 
@@ -56,13 +58,17 @@ def render_scene_clip(
     duration: float,
     out_path: str,
     temp_dir: str,
-    idx: int
+    idx: int,
+    width: int = 1080,
+    height: int = 1920,
+    is_hook: bool = False,
+    **kwargs
 ) -> bool:
     """
-    Renders an individual scene to a 1080x1920 25fps MP4 clip:
+    Renders an individual scene to a 25fps MP4 clip:
     - Image: Downscaled & Ken Burns motion applied.
     - Video: 9:16 scaled/cropped/looped.
-    - Blank / Missing: 1080x1920 dark slate clip.
+    - Blank / Missing: dark slate clip.
     """
     if duration <= 0:
         duration = 1.0
@@ -74,13 +80,16 @@ def render_scene_clip(
 
     ok = False
     if is_video and media_path and os.path.exists(media_path):
-        ok = make_video_scene_clip(media_path, duration, out_path)
+        ok = make_video_scene_clip(media_path, duration, out_path, width=width, height=height)
     elif media_path and os.path.exists(media_path):
         prep_img = preprocess_image_for_motion(media_path, temp_dir, idx)
-        ok = create_ken_burns_motion_clip(prep_img, duration, out_path, motion=motion)
+        ok = create_ken_burns_motion_clip(prep_img, duration, out_path, motion=motion, width=width, height=height, is_hook=is_hook)
 
     if not ok or not os.path.exists(out_path):
-        make_blank_clip(duration, out_path)
+        if width != 1080 or height != 1920:
+            make_blank_clip(duration, out_path, width=width, height=height)
+        else:
+            make_blank_clip(duration, out_path)
 
     return os.path.exists(out_path)
 
@@ -118,28 +127,59 @@ def expand_scenes_to_rapid_cuts(scenes: List[Dict[str, Any]], max_cut_dur: float
 def render_broll_clips(
     scenes: List[Dict[str, Any]],
     output_path: str,
-    temp_dir: str
+    temp_dir: str,
+    width: int = 1080,
+    height: int = 1920,
+    transition_style: str = "cut",
+    **kwargs
 ) -> bool:
-    """Renders sequential clips and joins them with FFmpeg concat demuxer."""
-    clip_paths = []
-
-    for idx, sc in enumerate(scenes):
+    """Renders clips in parallel with ThreadPoolExecutor(2) and joins them with FFmpeg concat demuxer or xfade."""
+    def _render_one(item):
+        idx, sc = item
         dur = float(sc.get("duration", 3.0))
         m_path = sc.get("media_path") or sc.get("image_path") or ""
         m_type = sc.get("media_type") or ("video" if (m_path.endswith(".mp4") or m_path.endswith(".webm")) else "image")
         motion = sc.get("motion") or sc.get("camera_motion") or "push in"
 
         clip_out = os.path.join(temp_dir, f"clip_{idx:03d}.mp4")
-        render_scene_clip(
-            media_path=m_path,
-            media_type=m_type,
-            motion=motion,
-            duration=dur,
-            out_path=clip_out,
-            temp_dir=temp_dir,
-            idx=idx
-        )
-        clip_paths.append(clip_out)
+        clip_kwargs = {
+            "media_path": m_path,
+            "media_type": m_type,
+            "motion": motion,
+            "duration": dur,
+            "out_path": clip_out,
+            "temp_dir": temp_dir,
+            "idx": idx
+        }
+        if width != 1080 or height != 1920:
+            clip_kwargs["width"] = width
+            clip_kwargs["height"] = height
+        render_scene_clip(**clip_kwargs)
+        return idx, clip_out
+
+    # 2 parallel workers double clip rendering speed without exceeding 512MB RAM ceiling
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(_render_one, enumerate(scenes)))
+
+    results.sort(key=lambda x: x[0])
+    clip_paths = [r[1] for r in results]
+
+    if transition_style == "crossfade" and len(clip_paths) > 1:
+        inputs = []
+        for p in clip_paths:
+            inputs.extend(["-i", os.path.abspath(p)])
+        filter_str = "[0:v][1:v]xfade=transition=fade:duration=0.5:offset=2.5[v1]"
+        cmd = [
+            FFMPEG_EXE, "-y",
+            *inputs,
+            "-filter_complex", filter_str,
+            "-map", "[v1]",
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            os.path.abspath(output_path)
+        ]
+        res = subprocess.run(cmd, capture_output=True)
+        return res.returncode == 0 and os.path.exists(output_path)
 
     concat_txt = os.path.join(temp_dir, "concat.txt")
     with open(concat_txt, "w", encoding="utf-8") as f:
@@ -166,7 +206,10 @@ def render_broll_clips(
             "-i", os.path.abspath(concat_txt),
             "-c:v", "libx264",
             "-preset", "ultrafast",
-            "-crf", "22",
+            "-tune", "fastdecode",
+            "-bf", "0",
+            "-threads", "0",
+            "-crf", "23",
             "-pix_fmt", "yuv420p",
             os.path.abspath(output_path)
         ]
@@ -221,7 +264,12 @@ def render_shorts_video(
         word_boundaries = None
         total_duration = None
 
-        if project and project.timeline:
+        custom_audio = kwargs.get("custom_audio_path")
+        if custom_audio and os.path.exists(custom_audio):
+            actual_voice_path = custom_audio
+            word_boundaries, total_duration = align_words_for_audio(custom_audio, script_text=script_text)
+
+        if not actual_voice_path and project and project.timeline:
             tl = project.timeline
             if (
                 tl.get("audio_path") and os.path.exists(tl.get("audio_path")) and
@@ -331,16 +379,29 @@ def render_shorts_video(
             hook_banner=hook_banner_cfg
         )
 
+        # Target Resolution: Defaults to 720p on Render/cloud for 3x speedup, or 1080p if explicitly specified
+        target_res = kwargs.get("resolution") or os.environ.get("SHORTS_RESOLUTION") or ("720p" if os.environ.get("RENDER") else "1080p")
+        if str(target_res).lower() in ("720p", "720", "fast", "turbo"):
+            res_w, res_h = 720, 1280
+            bar_y = 1270
+            bar_h = 10
+        else:
+            res_w, res_h = 1080, 1920
+            bar_y = 1908
+            bar_h = 12
+
         broll_video_path = os.path.join(work_dir, "broll_master.mp4")
         render_broll_clips(
             scenes=scenes,
             output_path=broll_video_path,
-            temp_dir=work_dir
+            temp_dir=work_dir,
+            width=res_w,
+            height=res_h
         )
 
         # 4. Final FFmpeg Composition
         if progress_callback:
-            progress_callback("Compositing master 1080x1920 Short with music, SFX & subtitles...", 80)
+            progress_callback(f"Compositing master {res_w}x{res_h} Short with music, SFX & subtitles...", 80)
 
         norm_ass_path = ass_path.replace("\\", "/").replace(":", "\\:")
         bgm_file = get_bgm_file_path(bgm_track)
@@ -351,15 +412,19 @@ def render_shorts_video(
             "-i", os.path.abspath(actual_voice_path)
         ]
 
-        # Passthrough format since broll_master.mp4 is ALREADY generated at exact 1080x1920
-        video_filter_in = "[0:v]format=yuv420p"
+        motion_texture = kwargs.get("motion_texture")
+        if motion_texture == "film_grain":
+            video_filter_in = "[0:v]format=yuv420p,noise=alls=8:allf=t+u"
+        else:
+            video_filter_in = "[0:v]format=yuv420p"
+
         enable_progress_bar = kwargs.get("enable_progress_bar", True)
         if enable_progress_bar:
             dur_s = max(1.0, video_duration)
             accent_color = "0x00E6FF" if subtitle_style == "glacier_cyan" else "yellow"
             bar_filter = (
-                f"drawbox=x=0:y=1908:w=1080:h=12:color=black@0.45:t=fill,"
-                f"drawbox=x=0:y=1908:w='min(1080, (1080*t/{dur_s:.2f}))':h=12:color={accent_color}@0.95:t=fill"
+                f"drawbox=x=0:y={bar_y}:w={res_w}:h={bar_h}:color=black@0.45:t=fill,"
+                f"drawbox=x=0:y={bar_y}:w='min({res_w}, ({res_w}*t/{dur_s:.2f}))':h={bar_h}:color={accent_color}@0.95:t=fill"
             )
             v_chain = f"{video_filter_in},{bar_filter},subtitles=filename='{norm_ass_path}'[vout]"
         else:
@@ -372,9 +437,15 @@ def render_shorts_video(
 
         if bgm_file and os.path.exists(bgm_file):
             ffmpeg_cmd.extend(["-stream_loop", "-1", "-i", os.path.abspath(bgm_file)])
-            audio_streams.append(f"[{next_in_idx}:a]volume={bgm_volume:.2f}[bgm_clean]")
+            if motion_texture == "film_grain" or kwargs.get("sidechain_ducking"):
+                audio_streams.append(f"[{next_in_idx}:a]volume={bgm_volume:.2f},sidechaincompress=threshold=0.08:ratio=5:attack=50:release=350[bgm_clean]")
+            else:
+                audio_streams.append(f"[{next_in_idx}:a]volume={bgm_volume:.2f}[bgm_clean]")
             amix_inputs.append("[bgm_clean]")
             next_in_idx += 1
+        elif motion_texture == "film_grain":
+            audio_streams = ["[1:a]volume=1.0,sidechaincompress=threshold=0.08:ratio=5:attack=50:release=350[v_clean]"]
+            amix_inputs = ["[v_clean]"]
 
         if actual_sfx_path and os.path.exists(actual_sfx_path):
             ffmpeg_cmd.extend(["-i", os.path.abspath(actual_sfx_path)])

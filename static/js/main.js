@@ -592,6 +592,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 finalVideoPlayer.load();
             }
 
+            const resolution = document.getElementById("ytResolutionSelect")?.value || "720p";
             const payload = {
                 script,
                 voice,
@@ -599,6 +600,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 subtitle_style: subtitleStyle,
                 bgm_track: bgmTrack,
                 bgm_volume: bgmVol,
+                resolution: resolution,
                 project_id: state.project ? state.project.id : null
             };
 
@@ -1278,6 +1280,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (ytPublishedBanner) ytPublishedBanner.classList.add("hidden");
         const enableSfx = document.getElementById("ytEnableSfx") ? document.getElementById("ytEnableSfx").checked : true;
         const enableProgressBar = document.getElementById("ytProgressBar") ? document.getElementById("ytProgressBar").checked : true;
+        const resolution = document.getElementById("ytResolutionSelect")?.value || "720p";
 
         const payload = {
             script: script,
@@ -1291,6 +1294,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             rapid_pacing: rapid,
             enable_sfx: enableSfx,
             enable_progress_bar: enableProgressBar,
+            resolution: resolution,
             project_id: isFromProject && state.project ? state.project.id : null
         };
 

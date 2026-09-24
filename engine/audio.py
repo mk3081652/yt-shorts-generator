@@ -100,11 +100,14 @@ def build_sfx_track(
     if not sfx_files:
         return None
 
-    # Filter out rapid micro-cuts: only trigger on major transitions at least 7.5s apart
+    # Filter out rapid micro-cuts: space transitions at least 7s apart on full Shorts, or 2s on short previews/tests
+    min_interval = 2.0 if total_duration < 10.0 else 7.0
+    min_bound = 1.0 if total_duration < 10.0 else 2.5
+    max_bound = total_duration - min_bound
     spaced_cuts = []
     last_cp = 0.0
     for cp in (cut_points or []):
-        if cp >= last_cp + 7.5 and 2.5 < cp < total_duration - 2.5:
+        if (cp >= last_cp + min_interval or not spaced_cuts) and min_bound <= cp <= max_bound:
             spaced_cuts.append(cp)
             last_cp = cp
     valid_cuts = spaced_cuts[:4]

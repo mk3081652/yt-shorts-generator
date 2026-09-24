@@ -173,6 +173,7 @@ class RenderRequest(BaseModel):
     custom_audio_path: Optional[str] = None
     tts_provider: Optional[str] = None
     motion_texture: Optional[str] = None
+    resolution: Optional[str] = "720p"
 
     model_config = ConfigDict(extra="allow")
 
@@ -729,7 +730,8 @@ def run_render_task(job_id: str, req: RenderRequest):
             transition_style=getattr(req, "transition_style", "crossfade"),
             custom_audio_path=getattr(req, "custom_audio_path", None),
             tts_provider=getattr(req, "tts_provider", None),
-            motion_texture=getattr(req, "motion_texture", None)
+            motion_texture=getattr(req, "motion_texture", None),
+            resolution=getattr(req, "resolution", "720p") or "720p"
         )
         script_for_meta = req.script or ""
         if not script_for_meta.strip() and req.project_id:
@@ -887,6 +889,7 @@ class YouTubePublishRequest(BaseModel):
     category_id: str = "27"
     enable_sfx: bool = True
     enable_progress_bar: bool = True
+    resolution: Optional[str] = "720p"
 
 
 def run_youtube_publish_task(job_id: str, req: YouTubePublishRequest):
@@ -951,10 +954,13 @@ def run_youtube_publish_task(job_id: str, req: YouTubePublishRequest):
                 api_key=os.environ.get("GEMINI_API_KEY", None)
             )
 
-        # Wait for scene media generation if auto mode queued scenes (up to 40s)
+        # Wait for scene media generation if auto mode queued scenes (up to 20s, or skip if rate-limited)
         update_progress("Synthesizing scene visuals...", 35)
+        from engine.flux import is_rate_limited
         start_wait = time.time()
-        while time.time() - start_wait < 40:
+        while time.time() - start_wait < 20:
+            if is_rate_limited():
+                break
             p_check = load_project(proj.id)
             if not p_check:
                 break
@@ -962,10 +968,11 @@ def run_youtube_publish_task(job_id: str, req: YouTubePublishRequest):
             if not pending:
                 proj = p_check
                 break
-            time.sleep(1.5)
+            time.sleep(1.0)
 
-        # Render 60s vertical video
-        update_progress("Rendering 1080x1920 Short with 18-22 cuts, SFX, subtitles, & audio ducking...", 50)
+        # Render vertical video (720p Turbo default or 1080p)
+        target_res = getattr(req, "resolution", "720p") or "720p"
+        update_progress(f"Turbo rendering {target_res} Short with camera motion, SFX, & subtitles...", 50)
         res = render_shorts_video(
             script_text=clean_script,
             voice=req.voice,
@@ -979,6 +986,7 @@ def run_youtube_publish_task(job_id: str, req: YouTubePublishRequest):
             transition_style="crossfade",
             enable_sfx=getattr(req, "enable_sfx", True),
             enable_progress_bar=getattr(req, "enable_progress_bar", True),
+            resolution=target_res,
             hook_text=f"⚠️ {metadata.get('title', '').split('#')[0].strip().upper()[:40]}" if metadata.get('title') else None
         )
 
