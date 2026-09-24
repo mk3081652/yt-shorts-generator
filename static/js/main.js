@@ -910,10 +910,61 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     async function loadYouTubeChannels() {
         try {
-            const res = await api.getYouTubeChannels();
-            connectedChannels = res.channels || [];
-            currentActiveChannelId = res.active_channel_id;
+            let res = await api.getYouTubeChannels();
+            let channels = (res && res.channels) ? res.channels : [];
 
+            // Read browser-side localStorage channel vault
+            const rawVault = localStorage.getItem("yt_channel_vault");
+            let localVault = {};
+            try {
+                if (rawVault) localVault = JSON.parse(rawVault);
+            } catch (e) {}
+
+            const localVaultKeys = Object.keys(localVault);
+
+            // Auto-restore: If server wiped tokens (Render container restart/sleep), seamlessly restore from browser vault!
+            if (channels.length === 0 && localVaultKeys.length > 0) {
+                console.log(`[YouTube Vault] Restoring ${localVaultKeys.length} channels from browser vault...`);
+                try {
+                    const savedActiveId = localStorage.getItem("yt_active_channel_id") || localVaultKeys[0];
+                    const restoreRes = await fetch("/api/youtube/channels/restore_vault", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            vault: localVault,
+                            active_channel_id: savedActiveId
+                        })
+                    }).then(r => r.json());
+                    if (restoreRes && restoreRes.success) {
+                        res = restoreRes;
+                        channels = res.channels || [];
+                    }
+                } catch (restoreErr) {
+                    console.warn("[YouTube Vault] Auto-restore notice:", restoreErr);
+                }
+            }
+
+            // Sync fresh server vault credentials into browser localStorage
+            if (res && res.vault && Object.keys(res.vault).length > 0) {
+                const mergedVault = { ...localVault, ...res.vault };
+                localStorage.setItem("yt_channel_vault", JSON.stringify(mergedVault));
+            }
+
+            // Determine active channel: prioritize user's saved choice in localStorage
+            const savedActiveId = localStorage.getItem("yt_active_channel_id");
+            if (savedActiveId && channels.some(c => c.channel_id === savedActiveId)) {
+                currentActiveChannelId = savedActiveId;
+                if (res.active_channel_id !== savedActiveId) {
+                    api.selectYouTubeChannel(savedActiveId).catch(() => {});
+                }
+            } else {
+                currentActiveChannelId = res ? (res.active_channel_id || (channels[0] ? channels[0].channel_id : null)) : null;
+                if (currentActiveChannelId) {
+                    localStorage.setItem("yt_active_channel_id", currentActiveChannelId);
+                }
+            }
+
+            connectedChannels = channels;
             populateChannelSelect(ytChannelSelect, connectedChannels, currentActiveChannelId);
             populateChannelSelect(ytChannelSelectStep4, connectedChannels, currentActiveChannelId);
             return res;
@@ -960,6 +1011,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         try {
             await api.selectYouTubeChannel(channelId);
             currentActiveChannelId = channelId;
+            localStorage.setItem("yt_active_channel_id", channelId);
             const targetCh = connectedChannels.find(c => c.channel_id === channelId);
             const title = targetCh ? targetCh.channel_title : channelId;
             showToast(`Switched active channel to: ${title}`, "info");
@@ -1061,6 +1113,18 @@ document.addEventListener("DOMContentLoaded", async () => {
                     if (confirm(`Disconnect YouTube channel '${ch.channel_title}'?`)) {
                         try {
                             await api.removeYouTubeChannel(ch.channel_id);
+                            // Also purge from browser vault
+                            const rawVault = localStorage.getItem("yt_channel_vault");
+                            if (rawVault) {
+                                try {
+                                    const v = JSON.parse(rawVault);
+                                    delete v[ch.channel_id];
+                                    localStorage.setItem("yt_channel_vault", JSON.stringify(v));
+                                } catch (e) {}
+                            }
+                            if (localStorage.getItem("yt_active_channel_id") === ch.channel_id) {
+                                localStorage.removeItem("yt_active_channel_id");
+                            }
                             showToast(`Disconnected '${ch.channel_title}'`, "info");
                             await loadYouTubeChannels();
                             renderChannelsModalList();
@@ -1168,9 +1232,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     try {
         const urlParams = new URLSearchParams(window.location.search);
         const connectedChannel = urlParams.get("connected");
+        const connectedChannelId = urlParams.get("channel_id");
         const oauthErr = urlParams.get("oauth_error");
 
         if (connectedChannel) {
+            if (connectedChannelId) {
+                localStorage.setItem("yt_active_channel_id", connectedChannelId);
+            }
             showToast(`🎉 Connected to YouTube Channel: ${connectedChannel}!`, "success", 6000);
             window.history.replaceState({}, document.title, window.location.pathname);
             loadYouTubeChannels();

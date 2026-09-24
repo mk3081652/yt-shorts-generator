@@ -1105,15 +1105,57 @@ class ChannelImportRequest(BaseModel):
     token_json: Any
 
 
+class RestoreVaultRequest(BaseModel):
+    vault: Dict[str, Any]
+    active_channel_id: Optional[str] = None
+
+
 @app.get("/api/youtube/channels")
 def api_youtube_get_channels():
-    """Lists all connected YouTube channels and the active channel."""
+    """Lists all connected YouTube channels, active channel, and browser vault credentials."""
     channels = list_channels()
     active_id = get_active_channel_id()
+    vault = {}
+    for ch in channels:
+        cid = ch.get("channel_id")
+        if cid and ch.get("authenticated"):
+            creds_dict = export_channel_credentials(cid)
+            if creds_dict:
+                vault[cid] = {
+                    "info": ch,
+                    "credentials": creds_dict
+                }
     return {
         "channels": channels,
         "active_channel_id": active_id,
-        "total": len(channels)
+        "total": len(channels),
+        "vault": vault
+    }
+
+
+@app.post("/api/youtube/channels/restore_vault")
+def api_youtube_restore_vault(req: RestoreVaultRequest):
+    """Restores channel credentials from browser localStorage vault across container reboots."""
+    restored_count = 0
+    for cid, data in (req.vault or {}).items():
+        try:
+            creds_data = data.get("credentials") if isinstance(data, dict) else data
+            meta_info = data.get("info") if isinstance(data, dict) else None
+            if creds_data:
+                save_channel_credentials(creds_data, meta_info=meta_info)
+                restored_count += 1
+        except Exception as e:
+            logger.warning(f"Could not restore channel {cid} from vault: {e}")
+
+    if req.active_channel_id:
+        set_active_channel(req.active_channel_id)
+
+    channels = list_channels()
+    return {
+        "success": True,
+        "restored": restored_count,
+        "channels": channels,
+        "active_channel_id": get_active_channel_id()
     }
 
 
@@ -1280,7 +1322,7 @@ def api_youtube_oauth2callback(
         saved = save_channel_credentials(json.loads(creds.to_json()))
         channel_name = saved.get("channel_title", "YouTube Channel")
         logger.info(f"[OAuth Callback] Successfully connected channel '{channel_name}' via web redirect!")
-        resp = RedirectResponse(url=f"/?connected={quote(channel_name)}")
+        resp = RedirectResponse(url=f"/?connected={quote(channel_name)}&channel_id={quote(saved.get('channel_id', ''))}")
         resp.delete_cookie("oauth_code_verifier")
         return resp
     except Exception as e:

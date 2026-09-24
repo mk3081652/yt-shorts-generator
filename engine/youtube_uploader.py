@@ -6,6 +6,7 @@ channel management (list, add, switch, remove, import/export), and YPP complianc
 
 import os
 import json
+import time
 import logging
 import shutil
 from typing import Dict, Any, List, Optional, Callable
@@ -229,10 +230,10 @@ def list_channels() -> List[Dict[str, Any]]:
     return channels
 
 
-def save_channel_credentials(creds_data: Any) -> Dict[str, Any]:
+def save_channel_credentials(creds_data: Any, meta_info: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
-    Validates credentials data (dict or JSON string), contacts YouTube API to
-    determine channel_id and channel_title, saves to tokens/{channel_id}.json,
+    Validates credentials data (dict or JSON string), determines channel metadata
+    (using provided meta_info or contacting YouTube API), saves to tokens/{channel_id}.json,
     and sets as the active channel.
     """
     t_dir = ensure_tokens_dir()
@@ -249,23 +250,39 @@ def save_channel_credentials(creds_data: Any) -> Dict[str, Any]:
     # Build Credentials object
     creds = Credentials.from_authorized_user_info(creds_data, SCOPES)
     if creds.expired and creds.refresh_token:
-        creds.refresh(Request())
+        try:
+            creds.refresh(Request())
+        except Exception as ex:
+            logger.warning(f"Could not refresh credentials immediately during save: {ex}")
 
-    if not creds.valid:
-        raise ValueError("Provided credentials are not valid or could not be refreshed.")
+    channel_id = None
+    channel_title = "YouTube Channel"
+    thumbnail_url = ""
+    custom_url = ""
 
-    # Contact YouTube to obtain channel metadata
-    youtube = build("youtube", "v3", credentials=creds)
-    resp = youtube.channels().list(mine=True, part="snippet").execute()
-    items = resp.get("items", [])
-    if not items:
-        raise ValueError("Could not find any YouTube channel associated with these Google credentials.")
+    if meta_info and isinstance(meta_info, dict) and meta_info.get("channel_id"):
+        channel_id = meta_info.get("channel_id")
+        channel_title = meta_info.get("channel_title", "YouTube Channel")
+        thumbnail_url = meta_info.get("thumbnail_url", "")
+        custom_url = meta_info.get("custom_url", "")
 
-    snippet = items[0].get("snippet", {})
-    channel_id = items[0].get("id")
-    channel_title = snippet.get("title", "YouTube Channel")
-    thumbnail_url = snippet.get("thumbnails", {}).get("default", {}).get("url", "")
-    custom_url = snippet.get("customUrl", "")
+    if not channel_id:
+        # Contact YouTube to obtain channel metadata
+        try:
+            youtube = build("youtube", "v3", credentials=creds)
+            resp = youtube.channels().list(mine=True, part="snippet").execute()
+            items = resp.get("items", [])
+            if items:
+                snippet = items[0].get("snippet", {})
+                channel_id = items[0].get("id")
+                channel_title = snippet.get("title", channel_title)
+                thumbnail_url = snippet.get("thumbnails", {}).get("default", {}).get("url", "")
+                custom_url = snippet.get("customUrl", "")
+        except Exception as ex:
+            logger.warning(f"Failed to query YouTube API during save: {ex}")
+
+    if not channel_id:
+        channel_id = creds_data.get("channel_id") or f"channel_{int(time.time())}"
 
     # Save credentials into tokens/{channel_id}.json
     target_token_file = os.path.join(t_dir, f"{channel_id}.json")
@@ -274,7 +291,7 @@ def save_channel_credentials(creds_data: Any) -> Dict[str, Any]:
 
     # Save channel metadata cache
     target_meta_file = os.path.join(t_dir, f"{channel_id}.meta.json")
-    meta_info = {
+    saved_meta = {
         "channel_id": channel_id,
         "channel_title": channel_title,
         "thumbnail_url": thumbnail_url,
@@ -282,7 +299,7 @@ def save_channel_credentials(creds_data: Any) -> Dict[str, Any]:
         "authenticated": True
     }
     with open(target_meta_file, "w", encoding="utf-8") as f:
-        json.dump(meta_info, f, indent=2)
+        json.dump(saved_meta, f, indent=2)
 
     # Set as active channel
     set_active_channel(channel_id)

@@ -160,6 +160,36 @@ class TestYouTubePublishWorkflow(unittest.TestCase):
             data = res.json()
             self.assertIn("job_id", data)
 
+    def test_10_restore_vault_endpoint(self):
+        """POST /api/youtube/channels/restore_vault restores channels from vault payload."""
+        sample_vault = {
+            "UC_vault_test_channel_123": {
+                "info": {
+                    "channel_id": "UC_vault_test_channel_123",
+                    "channel_title": "Vault Test Channel",
+                    "thumbnail_url": "",
+                    "authenticated": True
+                },
+                "credentials": {
+                    "token": "fake_access_token",
+                    "refresh_token": "fake_refresh_token",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "client_id": "fake_client_id",
+                    "client_secret": "fake_client_secret",
+                    "scopes": ["https://www.googleapis.com/auth/youtube.upload"]
+                }
+            }
+        }
+        res = self.client.post("/api/youtube/channels/restore_vault", json={
+            "vault": sample_vault,
+            "active_channel_id": "UC_vault_test_channel_123"
+        })
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data.get("success"))
+        self.assertEqual(data.get("active_channel_id"), "UC_vault_test_channel_123")
+
 
 if __name__ == "__main__":
     unittest.main()
+
