@@ -379,16 +379,17 @@ Write a full-length, high-retention 50-60 second spoken voiceover script about: 
 
 {angle_instruction}
 
-STRICT MONETIZATION & RETENTION RULES (Anti-Repetitive Storytelling):
-1. The first sentence MUST be an irresistible 3-second hook that immediately stops viewers from scrolling.
-2. Fast-paced, intriguing storytelling with genuine surprises, drama, or twists.
-3. Cadence variation: Keep sentence lengths varied between 1.8s and 3.2s per beat (roughly 5 to 10 words per phrase) for rapid visual transitions without monotone pacing.
+STRICT HIGH-RETENTION & LOW-SWIPE RULES (Algorithmic Virality):
+1. PATTERN-INTERRUPT HOOK (First 1.5 seconds): The first sentence MUST be an irresistible, forbidden-secret or curiosity-gap statement that forces the viewer's thumb to halt immediately. No introductions, no greetings, no throat-clearing.
+2. Fast-paced, intriguing storytelling with genuine surprises, drama, or twists every 5-8 seconds.
+3. Cadence variation: Keep sentence lengths varied between 1.8s and 3.2s per phrase (roughly 5 to 10 words per phrase) for rapid visual transitions without monotone pacing.
 4. Total word count MUST be between 130 and 150 words (aiming for exactly 50 to 58 seconds of speech, staying safely under the 60-second YouTube Shorts limit).
 5. Pacing: Break the story into 4 distinct beats:
    - Beat 1 (0-10s): The shocking hook and the setup.
    - Beat 2 (10-30s): The rising intrigue and strange clues or discoveries.
-   - Beat 3 (30-50s): The climactic revelation or unexpected twist.
-   - Beat 4 (50-58s): A thought-provoking final question and call-to-action ("Subscribe for more").
+   - Beat 3 (30-48s): The climactic revelation or unexpected twist.
+   - Beat 4 (48-56s): SEAMLESS INFINITY LOOP! The final sentence MUST grammatically connect directly back into the opening hook sentence of Beat 1, creating an endless loop so viewers re-watch without realizing it ended (boosting retention above 100%).
+   - STRICT BAN: DO NOT SAY "Subscribe for more", "Follow for more", or "Leave a comment" anywhere in the script! It triggers viewers to swipe away instantly.
 6. OUTPUT SPOKEN NARRATION WORDS ONLY!
    - DO NOT include scene directions or camera angles.
    - DO NOT include bracketed sound effects or notes like [Dramatic pause], [Cut to plane].
@@ -727,13 +728,29 @@ def run_render_task(job_id: str, req: RenderRequest):
             except Exception:
                 pass
         metadata = generate_youtube_metadata(script_for_meta)
-        cur = load_job(job_id) or {}
 
+        # Generate high-CTR viral thumbnail for download/preview
+        thumb_path = os.path.abspath(f"outputs/thumb_{job_id}.jpg")
+        thumb_url = None
+        try:
+            from engine.thumbnail import generate_viral_thumbnail
+            generate_viral_thumbnail(
+                title=metadata.get("title", "Mystery Short"),
+                script=script_for_meta,
+                video_path=os.path.abspath(f"outputs/{os.path.basename(res['video_url'])}"),
+                output_path=thumb_path
+            )
+            thumb_url = f"/outputs/{os.path.basename(thumb_path)}"
+        except Exception as e:
+            logger.warning(f"Render task thumbnail error: {e}")
+
+        cur = load_job(job_id) or {}
         cur.update({
             "status": "completed",
             "progress": 100,
             "message": "Complete! Video generated.",
             "video_url": res["video_url"],
+            "thumbnail_url": thumb_url,
             "duration": res["duration"],
             "metadata": metadata
         })
@@ -786,6 +803,62 @@ async def get_status(job_id: str):
     return job
 
 
+class LoopScriptRequest(BaseModel):
+    script: str
+    api_key: Optional[str] = None
+
+
+@app.post("/api/script/loop")
+def api_loop_script(req: LoopScriptRequest):
+    """
+    Refines an existing script so the final sentence connects seamlessly back into the opening line,
+    creating an infinite replay loop that drives retention >100%.
+    """
+    raw = (req.script or "").strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Script cannot be empty.")
+
+    sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', raw) if s.strip()]
+    if not sentences:
+        return {"success": True, "script": raw}
+
+    first_sentence = sentences[0]
+    api_key = req.api_key or os.environ.get("GEMINI_API_KEY")
+
+    prompt = f"""You are an elite YouTube Shorts script editor specialized in 100%+ retention through Seamless Infinity Loops.
+Here is the creator's current script:
+\"\"\"{raw}\"\"\"
+
+The opening hook is:
+\"{first_sentence}\"
+
+TASK:
+1. Keep the story, facts, and voice intact.
+2. Remove any "Subscribe for more", "Follow for more", or generic sign-offs.
+3. Rewrite ONLY the final sentence/clause so that it syntactically and logically connects directly back into the opening hook: \"{first_sentence}\".
+4. When the video restarts, the listener should not notice the boundary because the last sentence bridges seamlessly into the first sentence.
+5. Total length must be 130 to 150 words.
+6. Return ONLY the spoken voiceover script text with no labels, no quotation marks, and no commentary.
+"""
+    try:
+        from engine.gemini_client import generate_content
+        looped_text, _ = generate_content(prompt, thinking_level="low", max_output_tokens=3000, json_mode=False, api_key=api_key, timeout=8)
+        if looped_text and len(looped_text.strip().split()) >= 20:
+            clean = sanitize_spoken_script(looped_text)
+            return {"success": True, "script": clean, "first_sentence": first_sentence}
+    except Exception as e:
+        logger.warning(f"Script looping error: {e}")
+
+    # Fallback rule-based loop bridge
+    filtered = [s for s in sentences if not any(w in s.lower() for w in ["subscribe", "follow", "like this video", "comment below"])]
+    if filtered:
+        bridge = "And that is the exact reason why..."
+        looped = " ".join(filtered) + " " + bridge
+        return {"success": True, "script": sanitize_spoken_script(looped), "first_sentence": first_sentence}
+
+    return {"success": True, "script": raw, "first_sentence": first_sentence}
+
+
 class YouTubePublishRequest(BaseModel):
     script: str = ""
     title: Optional[str] = None
@@ -800,6 +873,8 @@ class YouTubePublishRequest(BaseModel):
     project_id: Optional[str] = None
     rapid_pacing: bool = True
     category_id: str = "27"
+    enable_sfx: bool = True
+    enable_progress_bar: bool = True
 
 
 def run_youtube_publish_task(job_id: str, req: YouTubePublishRequest):
@@ -828,12 +903,14 @@ def run_youtube_publish_task(job_id: str, req: YouTubePublishRequest):
 
         # If user only passed a short topic/headline (< 20 words), generate a full 50-60s script with AI
         if clean_script and len(clean_script.split()) < 20:
-            update_progress("Expanding topic into a 60-second high-retention script...", 10)
+            update_progress("Expanding topic into a 60-second high-retention script with Infinity Loop...", 10)
             try:
                 from engine.gemini_client import generate_content as gemini_gen
                 prompt = (
-                    f"Write a full 50-60 second spoken voiceover script (130-150 words) about: {clean_script}. "
-                    "Hook in first sentence. Fast-paced, intriguing, no markdown, no stage directions, verbatim spoken words only."
+                    f"Write a full 50-58 second spoken voiceover script (130-150 words) about: {clean_script}. "
+                    "Start with an irresistible 2-second curiosity hook. Fast-paced, intriguing, no markdown, verbatim spoken words only. "
+                    "The final sentence MUST bridge seamlessly into the first sentence creating an infinite replay loop. "
+                    "Never say 'subscribe' or 'follow'."
                 )
                 ai_text, _ = gemini_gen(prompt, thinking_level="low", timeout=12)
                 if ai_text and len(ai_text.split()) >= 20:
@@ -876,7 +953,7 @@ def run_youtube_publish_task(job_id: str, req: YouTubePublishRequest):
             time.sleep(1.5)
 
         # Render 60s vertical video
-        update_progress("Rendering 1080x1920 Short with 18-22 cuts, subtitles, & audio ducking...", 50)
+        update_progress("Rendering 1080x1920 Short with 18-22 cuts, SFX, subtitles, & audio ducking...", 50)
         res = render_shorts_video(
             script_text=clean_script,
             voice=req.voice,
@@ -887,17 +964,44 @@ def run_youtube_publish_task(job_id: str, req: YouTubePublishRequest):
             progress_callback=update_progress,
             project_id=proj.id,
             rapid_pacing=req.rapid_pacing,
-            transition_style="crossfade"
+            transition_style="crossfade",
+            enable_sfx=getattr(req, "enable_sfx", True),
+            enable_progress_bar=getattr(req, "enable_progress_bar", True),
+            hook_text=f"⚠️ {metadata.get('title', '').split('#')[0].strip().upper()[:40]}" if metadata.get('title') else None
         )
 
         final_video_file = os.path.abspath(f"outputs/{os.path.basename(res['video_url'])}")
+
+        # Synthesize High-CTR Viral Thumbnail
+        thumb_path = os.path.abspath(f"outputs/thumb_{job_id}.jpg")
+        thumb_url = None
+        try:
+            from engine.thumbnail import generate_viral_thumbnail
+            first_scene_img = None
+            if proj and proj.scenes:
+                for sc in proj.scenes:
+                    sc_img = getattr(sc, "image_path", None) or getattr(sc, "media_path", None)
+                    if sc_img and os.path.exists(sc_img):
+                        first_scene_img = sc_img
+                        break
+            generate_viral_thumbnail(
+                title=metadata.get("title", "Mystery Short"),
+                script=clean_script,
+                video_path=final_video_file,
+                base_image_path=first_scene_img,
+                output_path=thumb_path
+            )
+            thumb_url = f"/outputs/{os.path.basename(thumb_path)}"
+        except Exception as e:
+            logger.warning(f"Viral thumbnail synthesis notice: {e}")
+            thumb_path = None
 
         # Check YouTube Auth and Publish
         update_progress("Checking YouTube API connection...", 75)
         auth = check_auth_status(channel_id=req.channel_id)
 
         if auth.get("authenticated"):
-            update_progress("Uploading video directly to YouTube Data API...", 80)
+            update_progress("Uploading video and viral thumbnail to YouTube...", 80)
             upload_result = upload_video_to_youtube(
                 video_path=final_video_file,
                 title=metadata.get("title", "Mystery Short #Shorts"),
@@ -906,6 +1010,7 @@ def run_youtube_publish_task(job_id: str, req: YouTubePublishRequest):
                 privacy_status=req.privacy_status,
                 category_id=req.category_id,
                 channel_id=req.channel_id,
+                thumbnail_path=thumb_path,
                 progress_callback=update_progress
             )
 
@@ -914,8 +1019,9 @@ def run_youtube_publish_task(job_id: str, req: YouTubePublishRequest):
                 cur.update({
                     "status": "completed",
                     "progress": 100,
-                    "message": "Published directly to YouTube! 🎉",
+                    "message": "Published directly to YouTube with Viral Thumbnail! 🎉",
                     "video_url": res["video_url"],
+                    "thumbnail_url": thumb_url,
                     "duration": res["duration"],
                     "metadata": metadata,
                     "youtube_published": True,
@@ -936,6 +1042,7 @@ def run_youtube_publish_task(job_id: str, req: YouTubePublishRequest):
                     "progress": 100,
                     "message": f"Video rendered! YouTube upload note: {upload_result.get('error')}",
                     "video_url": res["video_url"],
+                    "thumbnail_url": thumb_url,
                     "duration": res["duration"],
                     "metadata": metadata,
                     "youtube_published": False,

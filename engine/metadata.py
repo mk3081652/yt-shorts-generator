@@ -18,27 +18,27 @@ VIRAL_HOOKS = [
 VIRAL_TEMPLATES = {
     "mind_blowing_facts": {
         "title": "Mind-Blowing Facts",
-        "script": "Did you know that honey never ever spoils? Archaeologists found 3,000-year-old honey in Egyptian tombs that is still completely edible! Also, a cloud can weigh over a million pounds, yet it floats effortlessly in the sky. If your mind is blown, hit subscribe for more daily facts!",
+        "script": "Did you know that honey never ever spoils? Archaeologists found 3,000-year-old honey in Egyptian tombs that is still completely edible! In fact, bacteria cannot survive inside it due to its low moisture. And that is the exact reason why...",
         "category": "Facts & Science"
     },
     "money_psychology": {
         "title": "Millionaire Money Rule",
-        "script": "Stop scrolling if you want to be wealthy! Rule number one of the ultra-rich: never trade time for money. Build assets that make you money while you sleep. The average millionaire has seven streams of income. Start building yours today!",
+        "script": "The ultra-wealthy obey one hidden financial law that ordinary people never learn. They never trade time for money; instead, they build automated assets that earn while they sleep. It all comes down to the undeniable fact that...",
         "category": "Wealth & Business"
     },
     "dark_history": {
         "title": "Dark Unsolved Mystery",
-        "script": "In 1518, an inexplicable plague struck Strasbourg. Hundreds of people began dancing uncontrollably in the streets for days until their hearts literally gave out. To this day, science cannot explain what truly caused the Dancing Plague.",
+        "script": "In 1518, an inexplicable plague struck Strasbourg that baffled modern medicine. Hundreds of people began dancing uncontrollably in the streets for days until their bodies collapsed. To this day, nobody can explain the mystery of what happened...",
         "category": "Mystery & History"
     },
     "space_terror": {
         "title": "Terrifying Space Discovery",
-        "script": "Scientists discovered a black hole moving through deep space at three million miles per hour. It is trailing a chain of newborn stars behind it. If it came anywhere near our solar system, Earth would be swallowed before anyone even noticed.",
+        "script": "Astronomers tracked a runaway black hole hurtling through deep space at three million miles per hour. It is trailing a chain of newborn stars behind it. If it crossed our solar system, nothing would survive the catastrophic force of...",
         "category": "Space & Sci-Fi"
     },
     "stoic_mindset": {
         "title": "1% Stoic Mindset",
-        "script": "Marcus Aurelius once said: You have power over your mind, not outside events. Realize this, and you will find unstoppable strength. Stop worrying about things you cannot control. Focus on what is in front of you.",
+        "script": "Marcus Aurelius discovered a psychological secret that makes you mentally untouchable. You have power over your mind, not outside events. The moment you master this truth, you realize why...",
         "category": "Motivation & Stoicism"
     }
 }

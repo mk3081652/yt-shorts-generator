@@ -68,7 +68,7 @@ def get_available_sfx() -> List[str]:
 
 
 def get_random_sfx(idx: int = 0, kind: str = "whoosh") -> Optional[str]:
-    """Deterministically pick an SFX (whoosh/swipe or riser) by index."""
+    """Deterministically pick a soft SFX (air swipe or riser) by index, excluding boomy whoops."""
     sfx_list = get_available_sfx()
     if not sfx_list:
         return None
@@ -76,7 +76,10 @@ def get_random_sfx(idx: int = 0, kind: str = "whoosh") -> Optional[str]:
         risers = [f for f in sfx_list if "riser" in os.path.basename(f).lower()]
         if risers:
             return risers[idx % len(risers)]
-    whooshes = [f for f in sfx_list if "riser" not in os.path.basename(f).lower()]
+    # Use soft airy swipes/whooshes, explicitly avoiding boomy bass 'whoop' effects
+    whooshes = [f for f in sfx_list if "riser" not in os.path.basename(f).lower() and "deep" not in os.path.basename(f).lower()]
+    if not whooshes:
+        whooshes = [f for f in sfx_list if "riser" not in os.path.basename(f).lower()]
     if whooshes:
         return whooshes[idx % len(whooshes)]
     return sfx_list[idx % len(sfx_list)]
@@ -86,41 +89,47 @@ def build_sfx_track(
     cut_points: List[float],
     output_path: str,
     total_duration: float,
-    volume: float = 0.18,
-    include_riser: bool = True
+    volume: float = 0.07,
+    include_riser: bool = False
 ) -> Optional[str]:
     """
-    Builds a single mixed SFX track with procedural whoosh/swipe effects aligned to scene transitions
-    and an optional subtle sub-bass riser on the opening hook.
-    Returns path if created, or None if no SFX or failed.
+    Builds a single mixed SFX track with subtle, airy transition swooshes spaced
+    at least 7.5s apart (max 3-4 across the whole video) so it never sounds annoying or repetitive.
     """
     sfx_files = get_available_sfx()
     if not sfx_files:
         return None
 
-    valid_cuts = [cp for cp in (cut_points or []) if cp > 0.15 and cp < total_duration - 0.1]
-    valid_cuts = valid_cuts[:12]
+    # Filter out rapid micro-cuts: only trigger on major transitions at least 7.5s apart
+    spaced_cuts = []
+    last_cp = 0.0
+    for cp in (cut_points or []):
+        if cp >= last_cp + 7.5 and 2.5 < cp < total_duration - 2.5:
+            spaced_cuts.append(cp)
+            last_cp = cp
+    valid_cuts = spaced_cuts[:4]
 
     try:
         inputs = []
         filter_parts = []
 
-        # 1. Opening hook riser
+        # 1. Opening hook riser (very soft)
         riser_file = get_random_sfx(0, kind="riser")
         if include_riser and riser_file and os.path.exists(riser_file) and total_duration >= 2.0:
             inputs.extend(["-i", os.path.abspath(riser_file)])
             r_idx = len(inputs) // 2 - 1
-            filter_parts.append(f"[{r_idx}:a]adelay=50|50,volume={min(0.14, volume * 0.8):.2f}[s_riser]")
+            filter_parts.append(f"[{r_idx}:a]adelay=50|50,volume={min(0.06, volume):.2f},lowpass=f=4000[s_riser]")
 
-        # 2. Whoosh transitions on cut points
+        # 2. Soft airy swooshes on major transitions
         for i, cp in enumerate(valid_cuts):
             whoosh_file = get_random_sfx(i, kind="whoosh")
             if not whoosh_file or not os.path.exists(whoosh_file):
                 continue
             inputs.extend(["-i", os.path.abspath(whoosh_file)])
             w_idx = len(inputs) // 2 - 1
-            delay_ms = max(0, int((cp - 0.08) * 1000))
-            filter_parts.append(f"[{w_idx}:a]adelay={delay_ms}|{delay_ms},volume={volume:.2f}[s{i}]")
+            delay_ms = max(0, int((cp - 0.05) * 1000))
+            # High-pass filter removes the boomy 'whoop' resonance; gentle volume sits warmly in background
+            filter_parts.append(f"[{w_idx}:a]adelay={delay_ms}|{delay_ms},volume={volume:.2f},highpass=f=250,lowpass=f=5500[s{i}]")
 
         if not filter_parts:
             return None

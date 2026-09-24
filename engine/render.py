@@ -246,20 +246,9 @@ def render_shorts_video(
             )
 
         video_duration = total_duration + 0.35
-
-        # 2. Subtitle Generation
-        if progress_callback:
-            progress_callback("Generating viral subtitles...", 35)
-
         ass_path = os.path.join(work_dir, "subtitles.ass")
-        generate_ass_subtitles(
-            word_boundaries=word_boundaries,
-            output_ass_path=ass_path,
-            style_name=subtitle_style,
-            max_words_per_segment=2
-        )
 
-        # 3. Scene Alignment and Sequential B-Roll Rendering
+        # 2. Scene Alignment and Sequential B-Roll Rendering
         if progress_callback:
             progress_callback("Rendering scene visuals and camera motion...", 55)
 
@@ -283,6 +272,65 @@ def render_shorts_video(
             if idx < len(scenes):
                 scenes[idx]["duration"] = a["duration"]
 
+        # Rapid pacing: subdivide longer scenes into dynamic 2.5-3.0s cuts
+        if kwargs.get("rapid_pacing", True):
+            scenes = expand_scenes_to_rapid_cuts(scenes, max_cut_dur=3.0)
+
+        # Collect cut points for audio transition SFX
+        cut_points = []
+        elapsed = 0.0
+        for sc in scenes[:-1]:
+            elapsed += float(sc.get("duration", 3.0))
+            if 0.2 < elapsed < video_duration - 0.3:
+                cut_points.append(round(elapsed, 2))
+
+        actual_sfx_path = None
+        enable_sfx = kwargs.get("enable_sfx", True)
+        if enable_sfx and cut_points:
+            try:
+                from engine.audio import build_sfx_track
+                sfx_path = os.path.join(work_dir, "sfx_track.wav")
+                actual_sfx_path = build_sfx_track(
+                    cut_points=cut_points,
+                    output_path=sfx_path,
+                    total_duration=video_duration,
+                    volume=0.07,
+                    include_riser=False
+                )
+            except Exception as e:
+                print(f"[Render] SFX generation skipped: {e}")
+
+        # Prepare high-retention subtitle enhancements
+        derived_hook = kwargs.get("hook_text")
+        if not derived_hook and script_text:
+            first_clause = re.split(r'[,.!?]', script_text.strip())[0].strip()
+            words = first_clause.split()[:5]
+            if words:
+                derived_hook = f"⚠️ {' '.join(words).upper()}"
+
+        hook_banner_cfg = None
+        if derived_hook:
+            hook_banner_cfg = {
+                "text": derived_hook,
+                "start": 0.0,
+                "end": min(2.2, video_duration * 0.25)
+            }
+
+        HIGH_IMPACT_KEYWORDS = [
+            "SECRET", "NASA", "BURIED", "SHOCKED", "DISCOVERED", "MYSTERY", "HIDDEN",
+            "TERRIFYING", "WARNING", "DEADLY", "MILLION", "NEVER", "DONT", "CLASSIFIED",
+            "FOUND", "ALIEN", "TRUTH", "CONCEALED", "SURVIVED", "IMPOSSIBLE"
+        ]
+
+        generate_ass_subtitles(
+            word_boundaries=word_boundaries,
+            output_ass_path=ass_path,
+            style_name=subtitle_style,
+            max_words_per_segment=2,
+            high_impact_words=HIGH_IMPACT_KEYWORDS,
+            hook_banner=hook_banner_cfg
+        )
+
         broll_video_path = os.path.join(work_dir, "broll_master.mp4")
         render_broll_clips(
             scenes=scenes,
@@ -292,7 +340,7 @@ def render_shorts_video(
 
         # 4. Final FFmpeg Composition
         if progress_callback:
-            progress_callback("Compositing master 1080x1920 Short with music & subtitles...", 80)
+            progress_callback("Compositing master 1080x1920 Short with music, SFX & subtitles...", 80)
 
         norm_ass_path = ass_path.replace("\\", "/").replace(":", "\\:")
         bgm_file = get_bgm_file_path(bgm_track)
@@ -304,16 +352,38 @@ def render_shorts_video(
         ]
 
         video_filter_in = "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p"
-        v_chain = f"{video_filter_in},subtitles=filename='{norm_ass_path}'[vout]"
+        enable_progress_bar = kwargs.get("enable_progress_bar", True)
+        if enable_progress_bar:
+            dur_s = max(1.0, video_duration)
+            accent_color = "0x00E6FF" if subtitle_style == "glacier_cyan" else "yellow"
+            bar_filter = (
+                f"drawbox=x=0:y=1908:w=1080:h=12:color=black@0.45:t=fill,"
+                f"drawbox=x=0:y=1908:w='min(1080, (1080*t/{dur_s:.2f}))':h=12:color={accent_color}@0.95:t=fill"
+            )
+            v_chain = f"{video_filter_in},{bar_filter},subtitles=filename='{norm_ass_path}'[vout]"
+        else:
+            v_chain = f"{video_filter_in},subtitles=filename='{norm_ass_path}'[vout]"
+
+        # Compose Audio Inputs
+        audio_streams = ["[1:a]volume=1.0[v_clean]"]
+        amix_inputs = ["[v_clean]"]
+        next_in_idx = 2
 
         if bgm_file and os.path.exists(bgm_file):
             ffmpeg_cmd.extend(["-stream_loop", "-1", "-i", os.path.abspath(bgm_file)])
-            filter_complex = (
-                f"{v_chain};"
-                f"[2:a]volume={bgm_volume:.2f}[bgm_clean];"
-                f"[1:a]volume=1.0[v_clean];"
-                f"[v_clean][bgm_clean]amix=inputs=2:duration=first:dropout_transition=2[aout]"
-            )
+            audio_streams.append(f"[{next_in_idx}:a]volume={bgm_volume:.2f}[bgm_clean]")
+            amix_inputs.append("[bgm_clean]")
+            next_in_idx += 1
+
+        if actual_sfx_path and os.path.exists(actual_sfx_path):
+            ffmpeg_cmd.extend(["-i", os.path.abspath(actual_sfx_path)])
+            audio_streams.append(f"[{next_in_idx}:a]volume=1.0[sfx_clean]")
+            amix_inputs.append("[sfx_clean]")
+            next_in_idx += 1
+
+        if len(amix_inputs) > 1:
+            mix_chain = "".join(amix_inputs) + f"amix=inputs={len(amix_inputs)}:duration=first:dropout_transition=2[aout]"
+            filter_complex = f"{v_chain};" + ";".join(audio_streams) + ";" + mix_chain
             ffmpeg_cmd.extend([
                 "-filter_complex", filter_complex,
                 "-map", "[vout]",

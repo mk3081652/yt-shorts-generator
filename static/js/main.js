@@ -661,6 +661,17 @@ document.addEventListener("DOMContentLoaded", async () => {
                     if (downloadVideoBtn && job.video_url) {
                         downloadVideoBtn.href = job.video_url;
                     }
+                    const downloadThumbBtn = document.getElementById("downloadThumbBtn");
+                    if (downloadThumbBtn) {
+                        if (job.thumbnail_url) {
+                            downloadThumbBtn.href = job.thumbnail_url;
+                            downloadThumbBtn.classList.remove("hidden");
+                            downloadThumbBtn.style.display = "flex";
+                        } else {
+                            downloadThumbBtn.classList.add("hidden");
+                            downloadThumbBtn.style.display = "none";
+                        }
+                    }
 
                     // Populate SEO kit
                     if (job.metadata && seoKitCard) {
@@ -859,6 +870,36 @@ document.addEventListener("DOMContentLoaded", async () => {
             const val = e.target.value;
             localStorage.setItem("yt_privacy", val);
             if (ytPrivacySelect) ytPrivacySelect.value = val;
+        });
+    }
+
+    // 🔁 1-Click Infinity Loop Action
+    const loopScriptBtn = document.getElementById("loopScriptBtn");
+    if (loopScriptBtn) {
+        loopScriptBtn.addEventListener("click", async () => {
+            const script = scriptInput ? scriptInput.value.trim() : "";
+            if (!script) {
+                showToast("Please paste or write a script first to apply the loop.", "warning");
+                return;
+            }
+            const origHtml = loopScriptBtn.innerHTML;
+            loopScriptBtn.disabled = true;
+            loopScriptBtn.innerHTML = "⏳ Looping...";
+            try {
+                const res = await api.loopScript(script);
+                if (res && res.script) {
+                    if (scriptInput) {
+                        scriptInput.value = res.script;
+                        scriptInput.dispatchEvent(new Event("input"));
+                    }
+                    showToast("🔁 Seamless Infinity Loop applied! The ending now loops into the hook.", "success");
+                }
+            } catch (err) {
+                showToast(`Loop error: ${err.message}`, "error");
+            } finally {
+                loopScriptBtn.disabled = false;
+                loopScriptBtn.innerHTML = origHtml;
+            }
         });
     }
 
@@ -1166,6 +1207,57 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         const rapid = ytPacingMode ? (ytPacingMode.value === "rapid") : true;
 
+        // Check if visuals are already generated and ready
+        if (!isFromProject) {
+            let currentProj = state.project;
+            const needsNewProject = !currentProj || currentProj.script !== script;
+
+            if (needsNewProject) {
+                if (oneClickPublishBtn) {
+                    oneClickPublishBtn.disabled = true;
+                    oneClickPublishBtn.classList.add("btn-loading");
+                }
+                showToast("Analyzing script & planning storyboard...", "info");
+                try {
+                    currentProj = await api.createProject(script, "manual", false);
+                    state.setProject(currentProj);
+                } catch (err) {
+                    showToast(`Failed to plan storyboard: ${err.message}`, "error");
+                    if (oneClickPublishBtn) {
+                        oneClickPublishBtn.disabled = false;
+                        oneClickPublishBtn.classList.remove("btn-loading");
+                    }
+                    return;
+                } finally {
+                    if (oneClickPublishBtn) {
+                        oneClickPublishBtn.disabled = false;
+                        oneClickPublishBtn.classList.remove("btn-loading");
+                    }
+                }
+            }
+
+            // Check if all visuals are generated and ready
+            const scenes = currentProj?.scenes || [];
+            const allVisualsReady = scenes.length > 0 && scenes.every(s => (s.status === "ready" || s.status === "manual") && (s.image_url || s.media_url || s.image_path));
+
+            if (!allVisualsReady) {
+                // Not all visuals are ready -> Go to Step 2 in Manual Mode to review and rectify
+                goToStep(2);
+                const modeManualBtn = document.getElementById("modeManualBtn");
+                if (modeManualBtn) modeManualBtn.click();
+                showToast("🎨 Storyboard created! Review and rectify your scene visuals below, then click Publish.", "info", 6500);
+                return;
+            }
+        } else {
+            // When publishing from Step 2 or Step 4: verify scenes have visuals
+            const scenes = state.project?.scenes || [];
+            const hasMissing = scenes.some(s => s.status !== "ready" && s.status !== "manual" && !s.image_url && !s.media_url && !s.image_path);
+            if (hasMissing) {
+                showToast("⚠️ Some scenes are still missing visuals! Click '⚡ Generate Visuals' or upload files before publishing.", "warning", 5000);
+                return;
+            }
+        }
+
         if (oneClickPublishBtn) {
             oneClickPublishBtn.disabled = true;
             oneClickPublishBtn.classList.add("btn-loading");
@@ -1174,11 +1266,18 @@ document.addEventListener("DOMContentLoaded", async () => {
             publishProjectToYoutubeBtn.disabled = true;
             publishProjectToYoutubeBtn.classList.add("btn-loading");
         }
+        const publishFromStep2Btn = document.getElementById("publishFromStep2Btn");
+        if (publishFromStep2Btn) {
+            publishFromStep2Btn.disabled = true;
+            publishFromStep2Btn.classList.add("btn-loading");
+        }
 
         if (progressCard) progressCard.classList.remove("hidden");
         if (playerPlaceholder) playerPlaceholder.classList.remove("hidden");
         if (playerActions) playerActions.classList.add("hidden");
         if (ytPublishedBanner) ytPublishedBanner.classList.add("hidden");
+        const enableSfx = document.getElementById("ytEnableSfx") ? document.getElementById("ytEnableSfx").checked : true;
+        const enableProgressBar = document.getElementById("ytProgressBar") ? document.getElementById("ytProgressBar").checked : true;
 
         const payload = {
             script: script,
@@ -1190,6 +1289,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             bgm_track: bgmTrack,
             bgm_volume: bgmVol,
             rapid_pacing: rapid,
+            enable_sfx: enableSfx,
+            enable_progress_bar: enableProgressBar,
             project_id: isFromProject && state.project ? state.project.id : null
         };
 
@@ -1210,6 +1311,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                 publishProjectToYoutubeBtn.disabled = false;
                 publishProjectToYoutubeBtn.classList.remove("btn-loading");
             }
+            const pStep2 = document.getElementById("publishFromStep2Btn");
+            if (pStep2) {
+                pStep2.disabled = false;
+                pStep2.classList.remove("btn-loading");
+            }
             if (progressCard) progressCard.classList.add("hidden");
         }
     }
@@ -1220,6 +1326,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     if (publishProjectToYoutubeBtn) {
         publishProjectToYoutubeBtn.addEventListener("click", () => triggerYouTubePublish(true));
+    }
+
+    const publishFromStep2BtnElem = document.getElementById("publishFromStep2Btn");
+    if (publishFromStep2BtnElem) {
+        publishFromStep2BtnElem.addEventListener("click", () => triggerYouTubePublish(true));
     }
 
     function pollPublishJob(jobId) {
@@ -1244,6 +1355,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                         publishProjectToYoutubeBtn.disabled = false;
                         publishProjectToYoutubeBtn.classList.remove("btn-loading");
                     }
+                    const pStep2 = document.getElementById("publishFromStep2Btn");
+                    if (pStep2) {
+                        pStep2.disabled = false;
+                        pStep2.classList.remove("btn-loading");
+                    }
                     if (progressCard) progressCard.classList.add("hidden");
 
                     // Load video player
@@ -1259,6 +1375,17 @@ document.addEventListener("DOMContentLoaded", async () => {
                     if (playerActions) playerActions.classList.remove("hidden");
                     if (downloadVideoBtn && job.video_url) {
                         downloadVideoBtn.href = job.video_url;
+                    }
+                    const downloadThumbBtn = document.getElementById("downloadThumbBtn");
+                    if (downloadThumbBtn) {
+                        if (job.thumbnail_url) {
+                            downloadThumbBtn.href = job.thumbnail_url;
+                            downloadThumbBtn.classList.remove("hidden");
+                            downloadThumbBtn.style.display = "flex";
+                        } else {
+                            downloadThumbBtn.classList.add("hidden");
+                            downloadThumbBtn.style.display = "none";
+                        }
                     }
 
                     // Populate SEO kit
@@ -1318,6 +1445,11 @@ document.addEventListener("DOMContentLoaded", async () => {
                     if (publishProjectToYoutubeBtn) {
                         publishProjectToYoutubeBtn.disabled = false;
                         publishProjectToYoutubeBtn.classList.remove("btn-loading");
+                    }
+                    const pStep2 = document.getElementById("publishFromStep2Btn");
+                    if (pStep2) {
+                        pStep2.disabled = false;
+                        pStep2.classList.remove("btn-loading");
                     }
                     showToast(`Error: ${job.message || "Operation failed"}`, "error");
                 }

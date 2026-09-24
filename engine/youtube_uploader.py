@@ -528,6 +528,7 @@ def upload_video_to_youtube(
     made_for_kids: bool = False,
     synthetic_content: bool = True,
     channel_id: Optional[str] = None,
+    thumbnail_path: Optional[str] = None,
     progress_callback: Optional[Callable[[str, int], None]] = None
 ) -> Dict[str, Any]:
     """
@@ -618,6 +619,20 @@ def upload_video_to_youtube(
         video_id = response.get("id")
         if not video_id:
             return {"success": False, "error": f"Upload succeeded but no video ID returned: {response}"}
+
+        # Upload Eye-Catching Viral Thumbnail if provided
+        if thumbnail_path and os.path.exists(thumbnail_path):
+            try:
+                if progress_callback:
+                    progress_callback("Uploading eye-catching viral thumbnail to YouTube...", 95)
+                thumb_media = MediaFileUpload(thumbnail_path, mimetype="image/jpeg")
+                youtube.thumbnails().set(
+                    videoId=video_id,
+                    media_body=thumb_media
+                ).execute()
+                logger.info(f"[YouTube Upload] Custom thumbnail successfully uploaded for video {video_id}!")
+            except Exception as e:
+                logger.warning(f"[YouTube Upload] Custom thumbnail upload notice (channel may require phone verification for API custom thumbnails): {e}")
 
         actual_privacy = response.get("status", {}).get("privacyStatus", norm_privacy)
         logger.info(f"[YouTube Upload] Upload completed! Video ID: {video_id}, Channel: {effective_cid}, Requested: '{norm_privacy}', Assigned: '{actual_privacy}'")

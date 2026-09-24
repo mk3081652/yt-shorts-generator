@@ -97,20 +97,41 @@
                             <textarea id="scriptInput" rows="7" style="width: 100%; min-height: 160px; font-size: 14px; line-height: 1.55; padding: 14px; border-radius: 8px; background: rgba(10, 12, 22, 0.85); border: 1px solid rgba(255, 51, 75, 0.35); color: #ffffff; resize: vertical; box-sizing: border-box;" placeholder="Paste your spoken script here...&#10;&#10;Example: For centuries, historians claimed the Great Sphinx of Giza was carved for Khafre. But in 1989, a seismic radar survey revealed something that shocked the archaeological world: a massive artificial subterranean chamber hidden 40 feet below the paws!&#10;&#10;Tip: The sweet spot is 120-150 words (50-60s). 100% of your exact words are preserved verbatim!"></textarea>
                         </div>
 
-                        <!-- Script Word Count & Duration Stats -->
-                        <div class="script-stats" style="margin-bottom: 14px;">
-                            <div class="stat-badge">
-                                <span>Words:</span>
-                                <strong id="wordCount">0</strong>
+                        <!-- Script Word Count & Duration Stats + Infinity Loop Action -->
+                        <div class="script-stats" style="margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                <div class="stat-badge">
+                                    <span>Words:</span>
+                                    <strong id="wordCount">0</strong>
+                                </div>
+                                <div class="stat-badge">
+                                    <span>Est. Duration:</span>
+                                    <strong id="estDuration">0s</strong>
+                                </div>
+                                <div class="stat-badge status-good" id="retentionStatus">
+                                    <span>Pacing:</span>
+                                    <strong id="pacingText">Short & Punchy</strong>
+                                </div>
                             </div>
-                            <div class="stat-badge">
-                                <span>Est. Duration:</span>
-                                <strong id="estDuration">0s</strong>
-                            </div>
-                            <div class="stat-badge status-good" id="retentionStatus">
-                                <span>Pacing:</span>
-                                <strong id="pacingText">Short & Punchy</strong>
-                            </div>
+                            <button type="button" id="loopScriptBtn" class="btn-secondary btn-sm" style="padding: 5px 12px; font-size: 12px; font-weight: 600; border-radius: 14px; background: rgba(0, 230, 255, 0.12); border: 1px solid rgba(0, 230, 255, 0.45); color: #00e6ff; cursor: pointer; transition: all 0.2s;" title="Seamlessly bridges the final sentence back into the opening hook sentence to drive >100% retention">
+                                🔁 1-Click Infinity Loop
+                            </button>
+                        </div>
+
+                        <!-- Retention & Anti-Swipe Boosters Row -->
+                        <div style="display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 14px; padding: 10px 14px; background: rgba(0, 0, 0, 0.35); border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.1);">
+                            <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #e0e4f0; cursor: pointer;" title="Injects cinematic whooshes and sub-bass impacts on camera cuts to prevent monotone boredom drop-offs">
+                                <input type="checkbox" id="ytEnableSfx" checked style="accent-color: #00e676; cursor: pointer;">
+                                <span>🎵 Transition SFX (Whooshes)</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #e0e4f0; cursor: pointer;" title="Adds a subconscious glowing progress line at the bottom, lowering viewer swipe-aways">
+                                <input type="checkbox" id="ytProgressBar" checked style="accent-color: #00e6ff; cursor: pointer;">
+                                <span>⏱️ Retention Progress Bar</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #e0e4f0; cursor: pointer;" title="Displays a high-contrast attention-grabbing hook pill in Scene 1 to stop the thumb scroll">
+                                <input type="checkbox" id="ytHookBanner" checked style="accent-color: #ffb300; cursor: pointer;">
+                                <span>⚠️ Top Hook Banner (Scene 1)</span>
+                            </label>
                         </div>
 
                         <!-- Publishing Options Row -->
@@ -206,6 +227,9 @@
                                     📥 Drop / Upload Files
                                     <input type="file" id="multiMediaInput" accept="image/*,video/*" multiple style="display:none;">
                                 </label>
+                                <button type="button" id="publishFromStep2Btn" class="btn-master btn-sm" style="background: linear-gradient(135deg, #ff0033 0%, #ff4b2b 100%); color: #fff; font-weight: 700; padding: 6px 14px; border-radius: 6px; border: none; cursor: pointer; display: flex; align-items: center; gap: 6px;" title="Publish this reviewed storyboard directly to YouTube">
+                                    🚀 Publish to YouTube
+                                </button>
                             </div>
                         </div>
 
@@ -494,6 +518,9 @@
                         <a id="downloadVideoBtn" class="btn-download" download="viral_short.mp4" href="#" style="flex: 1;">
                             ⬇️ Download 1080x1920 MP4
                         </a>
+                        <a id="downloadThumbBtn" class="btn-secondary btn-sm hidden" download="viral_thumbnail.jpg" href="#" style="flex: 1; text-align: center; padding: 12px; font-weight: 600; text-decoration: none; border-radius: 8px; display: none; align-items: center; justify-content: center; gap: 6px; background: rgba(255, 230, 0, 0.15); border: 1px solid rgba(255, 230, 0, 0.4); color: #ffe600;">
+                            🖼️ Download Viral Thumbnail
+                        </a>
                         <a id="viewYouTubeBtn" class="btn-download hidden" target="_blank" href="#" style="background: linear-gradient(135deg, #ff0033 0%, #cc0029 100%); flex: 1; text-align: center;">
                             ▶️ Watch on YouTube
                         </a>
@@ -561,7 +588,7 @@
         </main>
     </div>
 
-    <script type="module" src="/static/js/main.js?v=20260923_v20"></script>
+    <script type="module" src="/static/js/main.js?v=20260924_retention_v1"></script>
 
     <!-- Google Material Toast Notifications Container -->
     <div id="toastContainer" class="google-toast-container"></div>
