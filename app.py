@@ -627,6 +627,62 @@ def api_project_export_prompts(id: str):
     return PlainTextResponse(text)
 
 
+@app.post("/api/jobs/{job_id}/replace_thumbnail")
+async def api_replace_thumbnail(
+    job_id: str,
+    file: UploadFile = File(...),
+):
+    """
+    Replace the auto-generated viral thumbnail for a completed job.
+    Accepts a user-uploaded image (any ratio), generates a fresh 16:9 viral
+    thumbnail with the same badge/text overlay, saves it and updates the job.
+    """
+    job = load_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found.")
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="No image data received.")
+
+    thumb_path = os.path.abspath(f"outputs/thumb_{job_id}.jpg")
+    tmp_path = os.path.abspath(f"outputs/thumb_{job_id}_custom_src.tmp")
+
+    try:
+        # Save the raw upload
+        with open(tmp_path, "wb") as f:
+            f.write(raw)
+
+        # Re-generate thumbnail with user image as backdrop (16:9 crop is handled inside)
+        from engine.thumbnail import generate_thumbnail_from_image
+        metadata = job.get("metadata") or {}
+        title = metadata.get("title") or "Viral Short"
+        script = ""
+
+        generate_thumbnail_from_image(
+            custom_image_path=tmp_path,
+            title=title,
+            script=script,
+            output_path=thumb_path,
+        )
+
+        # Update job with fresh thumbnail url
+        thumb_url = f"/outputs/{os.path.basename(thumb_path)}"
+        job["thumbnail_url"] = thumb_url
+        save_job(job_id, job)
+
+        return {"thumbnail_url": thumb_url, "success": True}
+    except Exception as e:
+        logger.error(f"replace_thumbnail error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
+
+
 @app.post("/api/projects/{id}/undo")
 def api_project_undo(id: str):
     validate_session_id(id)

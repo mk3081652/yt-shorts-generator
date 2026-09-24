@@ -37,26 +37,51 @@ def _resolve_bold_font(size: int) -> ImageFont.ImageFont:
     return ImageFont.load_default()
 
 
-def extract_best_frame_from_video(video_path: str, timestamp: float = 1.2, output_path: Optional[str] = None) -> Optional[str]:
-    """Extracts a sharp frame from the rendered video to use as thumbnail backdrop."""
+def extract_best_frame_from_video(
+    video_path: str,
+    output_path: Optional[str] = None,
+    target_w: int = 1280,
+    target_h: int = 720,
+) -> Optional[str]:
+    """
+    Extracts a sharp frame from the rendered 9:16 video and immediately
+    crops/scales it to 16:9 (target_w x target_h) using FFmpeg's crop filter.
+
+    Strategy: try several timestamps (1s, 3s, 5s, 0.5s) and return the first
+    successful extraction, avoiding black-fade frames at the very start.
+    """
     if not video_path or not os.path.exists(video_path):
         return None
 
     if not output_path:
         base = os.path.splitext(video_path)[0]
-        output_path = f"{base}_frame.jpg"
+        output_path = f"{base}_thumb16x9.jpg"
 
-    cmd = [
-        FFMPEG_EXE, "-y",
-        "-ss", f"{timestamp:.2f}",
-        "-i", os.path.abspath(video_path),
-        "-vframes", "1",
-        "-q:v", "2",
-        os.path.abspath(output_path)
-    ]
-    res = subprocess.run(cmd, capture_output=True)
-    if res.returncode == 0 and os.path.exists(output_path):
-        return output_path
+    # For a 9:16 source (w x h), the widest 16:9 landscape crop is:
+    # crop_h = h, crop_w = h * 16/9  → but since 9:16 is portrait, crop_h < h
+    # Better: crop the centre square as much as 16:9 allows:
+    #   crop_h = source_w * 9/16  (uses the full width of the portrait)
+    #   crop_w = source_w
+    # Then scale to 1280x720.
+    vf = (
+        f"crop=iw:iw*9/16:0:(ih-iw*9/16)/2,"
+        f"scale={target_w}:{target_h}:flags=lanczos"
+    )
+
+    for ts in (1.5, 3.0, 5.0, 0.5):
+        cmd = [
+            FFMPEG_EXE, "-y",
+            "-ss", f"{ts:.2f}",
+            "-i", os.path.abspath(video_path),
+            "-vframes", "1",
+            "-vf", vf,
+            "-q:v", "2",
+            os.path.abspath(output_path),
+        ]
+        res = subprocess.run(cmd, capture_output=True)
+        if res.returncode == 0 and os.path.exists(output_path):
+            return output_path
+
     return None
 
 
@@ -218,3 +243,30 @@ def generate_viral_thumbnail(
 
     bg_img.save(output_path, "JPEG", quality=95)
     return output_path
+
+
+def generate_thumbnail_from_image(
+    custom_image_path: str,
+    title: str,
+    script: str = "",
+    output_path: Optional[str] = None,
+    width: int = 1280,
+    height: int = 720,
+) -> str:
+    """
+    Generates a 16:9 viral thumbnail using a user-supplied image as the backdrop.
+    The image is center-cropped to 16:9 and the viral overlay (badge, text, border)
+    is rendered on top — identical to generate_viral_thumbnail but skips video extraction.
+
+    Used by the 'Replace Thumbnail' feature so users can swap the background while
+    keeping the high-CTR text overlay.
+    """
+    return generate_viral_thumbnail(
+        title=title,
+        script=script,
+        video_path=None,
+        base_image_path=custom_image_path,
+        output_path=output_path,
+        width=width,
+        height=height,
+    )

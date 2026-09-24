@@ -520,6 +520,16 @@
                         </div>
                     </div>
 
+                    <!-- 16:9 Thumbnail Preview (shown when thumbnail is generated) -->
+                    <div id="thumbnailPreviewArea" class="hidden" style="margin-top: 16px; width: 100%;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span style="font-size: 12px; font-weight: 700; color: #ffe600; letter-spacing: 0.04em;">🖼️ VIRAL THUMBNAIL (16:9)</span>
+                            <span style="font-size: 11px; color: #5a6480;">1280 × 720 · YouTube standard</span>
+                        </div>
+                        <img id="thumbnailPreviewImg" src="" alt="Viral Thumbnail Preview"
+                             style="width: 100%; border-radius: 8px; border: 2px solid rgba(255, 220, 0, 0.45); display: block; object-fit: cover; aspect-ratio: 16/9; background: #0a0f1e;">
+                    </div>
+
                     <!-- Player Actions below phone frame -->
                     <div id="playerActions" class="player-actions hidden" style="display: flex; gap: 8px; flex-wrap: wrap;">
                         <a id="downloadVideoBtn" class="btn-download" download="viral_short.mp4" href="#" style="flex: 1;">
@@ -528,6 +538,13 @@
                         <a id="downloadThumbBtn" class="btn-secondary btn-sm hidden" download="viral_thumbnail.jpg" href="#" style="flex: 1; text-align: center; padding: 12px; font-weight: 600; text-decoration: none; border-radius: 8px; display: none; align-items: center; justify-content: center; gap: 6px; background: rgba(255, 230, 0, 0.15); border: 1px solid rgba(255, 230, 0, 0.4); color: #ffe600;">
                             🖼️ Download Viral Thumbnail
                         </a>
+                        <!-- Replace Thumbnail: hidden input + styled button -->
+                        <input type="file" id="replaceThumbnailInput" accept="image/*" style="display: none;">
+                        <button type="button" id="replaceThumbnailBtn" class="btn-secondary btn-sm hidden"
+                            title="Upload your own image — we'll apply the viral overlay on it in 16:9"
+                            style="flex: 1; padding: 12px; font-size: 13px; font-weight: 600; border-radius: 8px; background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(168, 85, 247, 0.4); color: #c084fc; cursor: pointer; white-space: nowrap;">
+                            🔄 Replace Thumbnail
+                        </button>
                         <a id="viewYouTubeBtn" class="btn-download hidden" target="_blank" href="#" style="background: linear-gradient(135deg, #ff0033 0%, #cc0029 100%); flex: 1; text-align: center;">
                             ▶️ Watch on YouTube
                         </a>

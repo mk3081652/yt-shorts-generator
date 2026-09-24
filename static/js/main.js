@@ -762,6 +762,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const res = await api.generateShort(payload);
                 if (res && res.job_id) {
                     renderJobId = res.job_id;
+                    state._lastJobId = res.job_id;   // persist for replace-thumbnail handler
                     startRenderPolling(renderJobId);
                 }
             } catch (err) {
@@ -816,15 +817,27 @@ document.addEventListener("DOMContentLoaded", async () => {
                         downloadVideoBtn.href = job.video_url;
                     }
                     const downloadThumbBtn = document.getElementById("downloadThumbBtn");
-                    if (downloadThumbBtn) {
-                        if (job.thumbnail_url) {
+                    const replaceThumbnailBtn = document.getElementById("replaceThumbnailBtn");
+                    const thumbnailPreviewArea = document.getElementById("thumbnailPreviewArea");
+                    const thumbnailPreviewImg = document.getElementById("thumbnailPreviewImg");
+
+                    if (job.thumbnail_url) {
+                        if (downloadThumbBtn) {
                             downloadThumbBtn.href = job.thumbnail_url;
                             downloadThumbBtn.classList.remove("hidden");
                             downloadThumbBtn.style.display = "flex";
-                        } else {
-                            downloadThumbBtn.classList.add("hidden");
-                            downloadThumbBtn.style.display = "none";
                         }
+                        if (replaceThumbnailBtn) {
+                            replaceThumbnailBtn.classList.remove("hidden");
+                        }
+                        if (thumbnailPreviewArea && thumbnailPreviewImg) {
+                            thumbnailPreviewImg.src = job.thumbnail_url + "?t=" + Date.now();
+                            thumbnailPreviewArea.classList.remove("hidden");
+                        }
+                    } else {
+                        if (downloadThumbBtn) { downloadThumbBtn.classList.add("hidden"); downloadThumbBtn.style.display = "none"; }
+                        if (replaceThumbnailBtn) replaceThumbnailBtn.classList.add("hidden");
+                        if (thumbnailPreviewArea) thumbnailPreviewArea.classList.add("hidden");
                     }
 
                     // Populate SEO kit
@@ -845,6 +858,62 @@ document.addEventListener("DOMContentLoaded", async () => {
                 console.error("[Render Poll Error]:", err);
             }
         }, 1500);
+    }
+
+    // ── Replace Thumbnail ──────────────────────────────────────────────────
+    const replaceThumbnailBtnEl = document.getElementById("replaceThumbnailBtn");
+    const replaceThumbnailInputEl = document.getElementById("replaceThumbnailInput");
+
+    if (replaceThumbnailBtnEl && replaceThumbnailInputEl) {
+        replaceThumbnailBtnEl.addEventListener("click", () => {
+            replaceThumbnailInputEl.click();
+        });
+
+        replaceThumbnailInputEl.addEventListener("change", async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            // Determine current job_id from the active polling job
+            const jobId = state._lastJobId || null;
+            if (!jobId) {
+                showToast("No active render job found — generate a video first.", "warning");
+                return;
+            }
+
+            const origText = replaceThumbnailBtnEl.textContent;
+            replaceThumbnailBtnEl.disabled = true;
+            replaceThumbnailBtnEl.textContent = "⏳ Generating...";
+            showToast("🖼️ Generating 16:9 thumbnail with your image...", "info", 5000);
+
+            try {
+                const fd = new FormData();
+                fd.append("file", file);
+                const resp = await fetch(`/api/jobs/${jobId}/replace_thumbnail`, {
+                    method: "POST",
+                    body: fd,
+                });
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.detail || `Server error ${resp.status}`);
+                }
+                const data = await resp.json();
+                const newThumbUrl = data.thumbnail_url + "?t=" + Date.now();
+
+                // Refresh preview
+                const thumbPreviewImg = document.getElementById("thumbnailPreviewImg");
+                if (thumbPreviewImg) thumbPreviewImg.src = newThumbUrl;
+                const thumbDownload = document.getElementById("downloadThumbBtn");
+                if (thumbDownload) thumbDownload.href = data.thumbnail_url;
+
+                showToast("✅ Thumbnail replaced! Download the new 16:9 version below.", "success", 5000);
+            } catch (err) {
+                showToast(`Replace thumbnail failed: ${err.message}`, "error");
+            } finally {
+                replaceThumbnailBtnEl.disabled = false;
+                replaceThumbnailBtnEl.textContent = origText;
+                replaceThumbnailInputEl.value = "";
+            }
+        });
     }
 
     // SEO Copy buttons
@@ -1523,6 +1592,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         try {
             const res = await api.publishToYouTube(payload);
             if (res && res.job_id) {
+                state._lastJobId = res.job_id;  // persist for replace-thumbnail handler
                 pollPublishJob(res.job_id);
             }
         } catch (err) {
@@ -1601,16 +1671,26 @@ document.addEventListener("DOMContentLoaded", async () => {
                         downloadVideoBtn.href = job.video_url;
                     }
                     const downloadThumbBtn = document.getElementById("downloadThumbBtn");
-                    if (downloadThumbBtn) {
-                        if (job.thumbnail_url) {
+                    const replaceThumbnailBtn = document.getElementById("replaceThumbnailBtn");
+                    const thumbnailPreviewArea = document.getElementById("thumbnailPreviewArea");
+                    const thumbnailPreviewImg = document.getElementById("thumbnailPreviewImg");
+                    if (job.thumbnail_url) {
+                        if (downloadThumbBtn) {
                             downloadThumbBtn.href = job.thumbnail_url;
                             downloadThumbBtn.classList.remove("hidden");
                             downloadThumbBtn.style.display = "flex";
-                        } else {
-                            downloadThumbBtn.classList.add("hidden");
-                            downloadThumbBtn.style.display = "none";
                         }
+                        if (replaceThumbnailBtn) replaceThumbnailBtn.classList.remove("hidden");
+                        if (thumbnailPreviewArea && thumbnailPreviewImg) {
+                            thumbnailPreviewImg.src = job.thumbnail_url + "?t=" + Date.now();
+                            thumbnailPreviewArea.classList.remove("hidden");
+                        }
+                    } else {
+                        if (downloadThumbBtn) { downloadThumbBtn.classList.add("hidden"); downloadThumbBtn.style.display = "none"; }
+                        if (replaceThumbnailBtn) replaceThumbnailBtn.classList.add("hidden");
+                        if (thumbnailPreviewArea) thumbnailPreviewArea.classList.add("hidden");
                     }
+
 
                     // Populate SEO kit
                     if (job.metadata && seoKitCard) {

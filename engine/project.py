@@ -948,7 +948,7 @@ Return JSON only:
 
 
 def export_prompts(project_id: str) -> Tuple[str, Optional[str], int]:
-    """Exports numbered list of image prompts formatted for external tools."""
+    """Exports numbered list of scene narration + image prompts formatted for external AI tools."""
     project = load_project(project_id)
     if not project:
         return "", "Project not found", 404
@@ -957,9 +957,16 @@ def export_prompts(project_id: str) -> Tuple[str, Optional[str], int]:
     prefix = f"[{project.style_lock.strip()}] " if project.style_lock.strip() else ""
     for idx, sc in enumerate(project.scenes):
         p_text = sc.image_prompt.strip()
-        lines.append(f"Scene #{idx + 1} ({sc.duration}s): {prefix}{p_text}")
+        narration = (sc.text or "").strip()
+        header = f"── Scene #{idx + 1}  ({sc.duration}s) ──"
+        block = [header]
+        if narration:
+            block.append(f"Narration : {narration}")
+        block.append(f"Prompt    : {prefix}{p_text}")
+        lines.append("\n".join(block))
 
     return "\n\n".join(lines), None, 200
+
 
 
 def undo_project(project_id: str) -> Tuple[Optional[Project], Optional[str], int]:
