@@ -61,12 +61,23 @@ def _migrate_legacy_token_if_needed():
     _MIGRATION_RUN = True
 
     t_dir = ensure_tokens_dir()
+    existing_tokens = [f for f in os.listdir(t_dir) if f.endswith(".json") and not f.endswith(".meta.json") and f != "channels.json"]
+
+    env_token = os.environ.get("YOUTUBE_TOKEN_JSON", "").strip()
+    if env_token and not existing_tokens:
+        try:
+            token_dict = json.loads(env_token)
+            save_channel_credentials(token_dict)
+            logger.info("[YouTube Auth] Channel token successfully initialized from YOUTUBE_TOKEN_JSON environment variable.")
+            return
+        except Exception as e:
+            logger.warning(f"Failed to load YOUTUBE_TOKEN_JSON from env: {e}")
+
     legacy_token_path = get_youtube_token_path()
     if not os.path.exists(legacy_token_path):
         return
 
     # If channels already exist in tokens directory, no need to re-migrate
-    existing_tokens = [f for f in os.listdir(t_dir) if f.endswith(".json") and not f.endswith(".meta.json") and f != "channels.json"]
     if existing_tokens:
         return
 
