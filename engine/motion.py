@@ -142,12 +142,12 @@ def create_ken_burns_motion_clip(
 
 
 def make_blank_clip(duration: float, output_path: str) -> bool:
-    """Generates a solid black 1080x1920 video clip for blank scenes via lavfi."""
+    """Generates an aesthetic dark cinematic 1080x1920 video clip for empty/quota scenes via lavfi."""
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
     cmd = [
         FFMPEG_EXE, "-y",
         "-f", "lavfi",
-        "-i", "color=c=black:s=1080x1920:r=30",
+        "-i", "color=c=0x0b1120:s=1080x1920:r=30",
         "-t", f"{duration:.2f}",
         "-c:v", "libx264",
         "-preset", "ultrafast",

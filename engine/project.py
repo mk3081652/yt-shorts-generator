@@ -653,35 +653,39 @@ def upload_media(project_id: str, scene_id: str, file_bytes: bytes, filename: st
         out_filename = f"{project_id}_{scene_id}_{uuid.uuid4().hex[:8]}.jpg"
         out_path = os.path.join(CUSTOM_MEDIA_DIR, out_filename)
 
-        # Downscale and crop to 9:16 if needed
-        img = Image.open(BytesIO(file_bytes))
+        try:
+            # Downscale and crop to 9:16 if needed
+            img = Image.open(BytesIO(file_bytes))
 
-        # Handle RGBA / transparency before saving as JPEG
-        if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
-            img = img.convert("RGBA")
-            bg = Image.new("RGB", img.size, (0, 0, 0))
-            bg.paste(img, mask=img.split()[3])
-            img = bg
-        elif img.mode != "RGB":
-            img = img.convert("RGB")
+            # Handle RGBA / transparency before saving as JPEG
+            if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+                img = img.convert("RGBA")
+                bg = Image.new("RGB", img.size, (0, 0, 0))
+                bg.paste(img, mask=img.split()[3])
+                img = bg
+            elif img.mode != "RGB":
+                img = img.convert("RGB")
 
-        w, h = img.size
-        target_ratio = 9.0 / 16.0
-        current_ratio = w / float(h)
+            w, h = img.size
+            target_ratio = 9.0 / 16.0
+            current_ratio = w / float(h)
 
-        if abs(current_ratio - target_ratio) > 0.01:
-            if current_ratio > target_ratio:
-                new_w = int(h * target_ratio)
-                offset = (w - new_w) // 2
-                img = img.crop((offset, 0, offset + new_w, h))
-            else:
-                new_h = int(w / target_ratio)
-                offset = (h - new_h) // 2
-                img = img.crop((0, offset, w, offset + new_h))
+            if abs(current_ratio - target_ratio) > 0.01:
+                if current_ratio > target_ratio:
+                    new_w = int(h * target_ratio)
+                    offset = (w - new_w) // 2
+                    img = img.crop((offset, 0, offset + new_w, h))
+                else:
+                    new_h = int(w / target_ratio)
+                    offset = (h - new_h) // 2
+                    img = img.crop((0, offset, w, offset + new_h))
 
-        if img.size != (1080, 1920):
-            img = img.resize((1080, 1920), Image.Resampling.LANCZOS)
-        img.save(out_path, "JPEG", quality=92)
+            if img.size != (1080, 1920):
+                img = img.resize((1080, 1920), Image.Resampling.BILINEAR)
+            img.save(out_path, "JPEG", quality=90, optimize=True)
+            del img
+        except Exception as img_err:
+            return None, f"Image processing failed: {str(img_err)}", 400
     else:
         ext = os.path.splitext(safe_name.lower())[1] or ".mp4"
         out_filename = f"{project_id}_{scene_id}_{uuid.uuid4().hex[:8]}{ext}"

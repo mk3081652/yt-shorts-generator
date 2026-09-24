@@ -87,6 +87,8 @@ def log_and_raise_safe(e: Exception, user_message: str, status_code: int = 500):
 allowed_origins_env = os.environ.get("ALLOWED_ORIGINS", "").strip()
 if allowed_origins_env:
     allowed_origins = [orig.strip() for orig in allowed_origins_env.split(",") if orig.strip()]
+elif bool(os.environ.get("RENDER") or os.environ.get("PORT")):
+    allowed_origins = ["*"]
 else:
     allowed_origins = [
         "http://localhost:8000",
@@ -94,8 +96,6 @@ else:
         "http://localhost:3000",
         "http://127.0.0.1:3000"
     ]
-    if bool(os.environ.get("RENDER") or os.environ.get("PORT")):
-        print("[WARNING] ALLOWED_ORIGINS is not set in production. Defaulting to localhost. Set ALLOWED_ORIGINS to your production domain.")
 
 app.add_middleware(
     CORSMiddleware,
@@ -537,11 +537,17 @@ async def api_project_upload_media(
     segment_id: str = Form(...)
 ):
     validate_session_id(id)
-    file_bytes = await file.read()
-    proj, err, code = upload_project_media(id, segment_id, file_bytes, file.filename)
-    if err:
-        raise HTTPException(status_code=code, detail=err)
-    return proj.to_dict()
+    try:
+        file_bytes = await file.read()
+        proj, err, code = upload_project_media(id, segment_id, file_bytes, file.filename or "media.jpg")
+        if err:
+            raise HTTPException(status_code=code, detail=err)
+        return proj.to_dict()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[Upload Error] Project {id}, Scene {segment_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to process media upload: {str(e)}")
 
 
 @app.post("/api/projects/{id}/upload_bulk")
@@ -550,14 +556,20 @@ async def api_project_upload_bulk(
     files: List[UploadFile] = File(...)
 ):
     validate_session_id(id)
-    files_data = []
-    for f in files:
-        data = await f.read()
-        files_data.append((f.filename, data))
-    proj, results, err, code = upload_project_bulk(id, files_data)
-    if err:
-        raise HTTPException(status_code=code, detail=err)
-    return {"project": proj.to_dict(), "session": proj.to_dict(), "results": results}
+    try:
+        files_data = []
+        for f in files:
+            data = await f.read()
+            files_data.append((f.filename or "media.jpg", data))
+        proj, results, err, code = upload_project_bulk(id, files_data)
+        if err:
+            raise HTTPException(status_code=code, detail=err)
+        return {"project": proj.to_dict(), "session": proj.to_dict(), "results": results}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[Bulk Upload Error] Project {id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to process bulk upload: {str(e)}")
 
 
 @app.post("/api/projects/{id}/clear_media")
