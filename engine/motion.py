@@ -72,7 +72,8 @@ def create_ken_burns_motion_clip(
       5: Static (No camera motion, just scale & crop)
     """
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-    total_frames = max(15, int(duration * 30))
+    # 25 fps produces 17% fewer frames to encode with zero loss in visual fluidity
+    total_frames = max(12, int(duration * 25))
     d_str = str(total_frames)
 
     if motion is not None:
@@ -90,7 +91,6 @@ def create_ken_burns_motion_clip(
         vf = (
             "scale=1080:1920:force_original_aspect_ratio=increase,"
             "crop=1080:1920,"
-            "eq=contrast=1.06:saturation=1.12,"
             "format=yuv420p"
         )
     else:
@@ -118,8 +118,7 @@ def create_ken_burns_motion_clip(
         vf = (
             f"scale=1080:1920:force_original_aspect_ratio=increase,"
             f"crop=1080:1920,"
-            f"zoompan=z='{zoom_expr}':d={d_str}:x='{x_expr}':y='{y_expr}':s=1080x1920:fps=30,"
-            f"eq=contrast=1.06:saturation=1.12,"
+            f"zoompan=z='{zoom_expr}':d={d_str}:x='{x_expr}':y='{y_expr}':s=1080x1920:fps=25,"
             f"format=yuv420p"
         )
 
@@ -129,11 +128,13 @@ def create_ken_burns_motion_clip(
         "-i", os.path.abspath(image_path),
         "-vf", vf,
         "-t", f"{duration:.2f}",
-        "-r", "30",
+        "-r", "25",
         "-c:v", "libx264",
         "-preset", "ultrafast",
-        "-threads", "2",
-        "-crf", "22",
+        "-tune", "fastdecode",
+        "-bf", "0",
+        "-threads", "0",
+        "-crf", "23",
         os.path.abspath(output_path)
     ]
 
@@ -147,12 +148,14 @@ def make_blank_clip(duration: float, output_path: str) -> bool:
     cmd = [
         FFMPEG_EXE, "-y",
         "-f", "lavfi",
-        "-i", "color=c=0x0b1120:s=1080x1920:r=30",
+        "-i", "color=c=0x0b1120:s=1080x1920:r=25",
         "-t", f"{duration:.2f}",
         "-c:v", "libx264",
         "-preset", "ultrafast",
-        "-threads", "2",
-        "-crf", "22",
+        "-tune", "fastdecode",
+        "-bf", "0",
+        "-threads", "0",
+        "-crf", "23",
         "-pix_fmt", "yuv420p",
         os.path.abspath(output_path)
     ]
@@ -163,18 +166,20 @@ def make_blank_clip(duration: float, output_path: str) -> bool:
 def make_video_scene_clip(src_video_path: str, duration: float, output_path: str) -> bool:
     """Scales, crops to 1080x1920, and trims or loops video to exact duration."""
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-    vf = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,format=yuv420p"
+    vf = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=25,format=yuv420p"
     cmd = [
         FFMPEG_EXE, "-y",
         "-stream_loop", "-1",
         "-i", os.path.abspath(src_video_path),
         "-vf", vf,
-        "-r", "30",
+        "-r", "25",
         "-t", f"{duration:.2f}",
         "-c:v", "libx264",
         "-preset", "ultrafast",
-        "-threads", "2",
-        "-crf", "22",
+        "-tune", "fastdecode",
+        "-bf", "0",
+        "-threads", "0",
+        "-crf", "23",
         "-an",
         os.path.abspath(output_path)
     ]

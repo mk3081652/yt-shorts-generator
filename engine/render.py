@@ -39,10 +39,10 @@ def preprocess_image_for_motion(image_path: str, temp_dir: str, idx: int) -> str
             if w <= 1080 and h <= 1920:
                 return image_path
 
-            # Downscale preserving aspect ratio
-            img.thumbnail((1080, 1920), Image.Resampling.LANCZOS)
+            # Fast downscale preserving aspect ratio
+            img.thumbnail((1080, 1920), Image.Resampling.BILINEAR)
             scaled_path = os.path.join(temp_dir, f"prep_img_{idx:03d}.jpg")
-            img.convert("RGB").save(scaled_path, "JPEG", quality=90)
+            img.convert("RGB").save(scaled_path, "JPEG", quality=88, optimize=True)
             return scaled_path
     except Exception as e:
         print(f"[Render] Preprocess image error for {image_path}: {e}")
@@ -59,10 +59,10 @@ def render_scene_clip(
     idx: int
 ) -> bool:
     """
-    Renders an individual scene to a 1080x1920 30fps MP4 clip:
+    Renders an individual scene to a 1080x1920 25fps MP4 clip:
     - Image: Downscaled & Ken Burns motion applied.
     - Video: 9:16 scaled/cropped/looped.
-    - Blank / Missing: 1080x1920 black clip.
+    - Blank / Missing: 1080x1920 dark slate clip.
     """
     if duration <= 0:
         duration = 1.0
@@ -88,11 +88,11 @@ def render_scene_clip(
 def expand_scenes_to_rapid_cuts(scenes: List[Dict[str, Any]], max_cut_dur: float = 3.2) -> List[Dict[str, Any]]:
     """
     Subdivides scenes longer than max_cut_dur into dynamic sub-cuts using multi-focal camera
-    framing (zoom_in, pan_right, snap_zoom, pan_left, tilt_up, parallax_25d) so videos maintain
-    18-22 rapid cuts (~2.5s-3.2s per visual) to maximize viewer retention.
+    framing (zoom_in, pan_right, snap_zoom, pan_left, tilt_up) so videos maintain
+    high viewer retention.
     """
     expanded = []
-    MOTION_CYCLE = ["zoom_in", "pan_right", "snap_zoom", "pan_left", "tilt_up", "parallax_25d"]
+    MOTION_CYCLE = ["zoom_in", "pan_right", "snap_zoom", "pan_left", "tilt_up"]
     motion_idx = 0
     for sc in scenes:
         dur = float(sc.get("duration", 3.0))
@@ -351,7 +351,8 @@ def render_shorts_video(
             "-i", os.path.abspath(actual_voice_path)
         ]
 
-        video_filter_in = "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p"
+        # Passthrough format since broll_master.mp4 is ALREADY generated at exact 1080x1920
+        video_filter_in = "[0:v]format=yuv420p"
         enable_progress_bar = kwargs.get("enable_progress_bar", True)
         if enable_progress_bar:
             dur_s = max(1.0, video_duration)
@@ -398,10 +399,13 @@ def render_shorts_video(
 
         ffmpeg_cmd.extend([
             "-t", f"{video_duration:.2f}",
+            "-r", "25",
             "-c:v", "libx264",
-            "-preset", "veryfast",
-            "-threads", "2",
-            "-crf", "22",
+            "-preset", "ultrafast",
+            "-tune", "fastdecode",
+            "-bf", "0",
+            "-threads", "0",
+            "-crf", "23",
             "-c:a", "aac",
             "-b:a", "192k",
             "-pix_fmt", "yuv420p",
