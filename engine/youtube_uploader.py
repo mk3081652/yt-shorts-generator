@@ -599,7 +599,7 @@ def upload_video_to_youtube(
     media = None
     try:
         if progress_callback:
-            progress_callback("Authenticating with YouTube API...", 70)
+            progress_callback("Authenticating with YouTube API...", 10)
 
         effective_cid = channel_id or get_active_channel_id()
         youtube = get_authenticated_service(channel_id=effective_cid)
@@ -634,14 +634,14 @@ def upload_video_to_youtube(
         )
 
         if progress_callback:
-            progress_callback("Uploading video chunks to YouTube...", 75)
+            progress_callback("Uploading video chunks to YouTube...", 20)
 
         response = None
         while response is None:
             status, response = request.next_chunk()
             if status and progress_callback:
                 pct = int(status.progress() * 100)
-                mapped_pct = 75 + int(pct * 0.20)
+                mapped_pct = 20 + int(pct * 0.70)
                 progress_callback(f"Uploading to YouTube... {pct}%", mapped_pct)
 
         video_id = response.get("id")
@@ -661,6 +661,9 @@ def upload_video_to_youtube(
                 logger.info(f"[YouTube Upload] Custom thumbnail successfully uploaded for video {video_id}!")
             except Exception as e:
                 logger.warning(f"[YouTube Upload] Custom thumbnail upload notice (channel may require phone verification for API custom thumbnails): {e}")
+
+        if progress_callback:
+            progress_callback("YouTube upload complete!", 100)
 
         actual_privacy = response.get("status", {}).get("privacyStatus", norm_privacy)
         logger.info(f"[YouTube Upload] Upload completed! Video ID: {video_id}, Channel: {effective_cid}, Requested: '{norm_privacy}', Assigned: '{actual_privacy}'")

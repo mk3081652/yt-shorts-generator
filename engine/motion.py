@@ -144,7 +144,7 @@ def create_ken_burns_motion_clip(
         "-preset", "ultrafast",
         "-tune", "fastdecode",
         "-bf", "0",
-        "-threads", "0",
+        "-threads", "2",
         "-crf", "23",
         os.path.abspath(output_path)
     ]
@@ -165,7 +165,7 @@ def make_blank_clip(duration: float, output_path: str, width: int = 1080, height
         "-preset", "ultrafast",
         "-tune", "fastdecode",
         "-bf", "0",
-        "-threads", "0",
+        "-threads", "2",
         "-crf", "23",
         "-pix_fmt", "yuv420p",
         os.path.abspath(output_path)
@@ -189,7 +189,7 @@ def make_video_scene_clip(src_video_path: str, duration: float, output_path: str
         "-preset", "ultrafast",
         "-tune", "fastdecode",
         "-bf", "0",
-        "-threads", "0",
+        "-threads", "2",
         "-crf", "23",
         "-an",
         os.path.abspath(output_path)

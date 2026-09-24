@@ -711,7 +711,9 @@ def get_metadata(req: MetadataRequest):
 def run_render_task(job_id: str, req: RenderRequest):
     def update_progress(msg: str, pct: int):
         cur = load_job(job_id) or {}
-        cur.update({"status": "processing", "message": msg, "progress": pct})
+        cur_pct = cur.get("progress", 0)
+        safe_pct = max(cur_pct, pct)
+        cur.update({"status": "processing", "message": msg, "progress": safe_pct})
         save_job(job_id, cur)
 
     try:
@@ -744,6 +746,7 @@ def run_render_task(job_id: str, req: RenderRequest):
         metadata = generate_youtube_metadata(script_for_meta)
 
         # Generate high-CTR viral thumbnail for download/preview
+        update_progress("Synthesizing high-CTR viral thumbnail...", 96)
         thumb_path = os.path.abspath(f"outputs/thumb_{job_id}.jpg")
         thumb_url = None
         try:
@@ -895,7 +898,9 @@ class YouTubePublishRequest(BaseModel):
 def run_youtube_publish_task(job_id: str, req: YouTubePublishRequest):
     def update_progress(msg: str, pct: int):
         cur = load_job(job_id) or {}
-        cur.update({"status": "processing", "message": msg, "progress": pct})
+        cur_pct = cur.get("progress", 0)
+        safe_pct = max(cur_pct, pct)
+        cur.update({"status": "processing", "message": msg, "progress": safe_pct})
         save_job(job_id, cur)
 
     try:
@@ -972,7 +977,13 @@ def run_youtube_publish_task(job_id: str, req: YouTubePublishRequest):
 
         # Render vertical video (720p Turbo default or 1080p)
         target_res = getattr(req, "resolution", "720p") or "720p"
-        update_progress(f"Turbo rendering {target_res} Short with camera motion, SFX, & subtitles...", 50)
+        update_progress(f"Turbo rendering {target_res} Short with camera motion, SFX, & subtitles...", 45)
+
+        # Adapter that maps render_shorts_video's 0-100% scale into 45% -> 88%
+        def render_progress(msg: str, pct: int):
+            mapped_pct = 45 + int(pct * 0.43)
+            update_progress(msg, mapped_pct)
+
         res = render_shorts_video(
             script_text=clean_script,
             voice=req.voice,
@@ -980,7 +991,7 @@ def run_youtube_publish_task(job_id: str, req: YouTubePublishRequest):
             subtitle_style=req.subtitle_style,
             bgm_track=req.bgm_track,
             bgm_volume=req.bgm_volume,
-            progress_callback=update_progress,
+            progress_callback=render_progress,
             project_id=proj.id,
             rapid_pacing=req.rapid_pacing,
             transition_style="crossfade",
@@ -993,6 +1004,7 @@ def run_youtube_publish_task(job_id: str, req: YouTubePublishRequest):
         final_video_file = os.path.abspath(f"outputs/{os.path.basename(res['video_url'])}")
 
         # Synthesize High-CTR Viral Thumbnail
+        update_progress("Synthesizing high-CTR viral thumbnail...", 89)
         thumb_path = os.path.abspath(f"outputs/thumb_{job_id}.jpg")
         thumb_url = None
         try:
@@ -1017,11 +1029,16 @@ def run_youtube_publish_task(job_id: str, req: YouTubePublishRequest):
             thumb_path = None
 
         # Check YouTube Auth and Publish
-        update_progress("Checking YouTube API connection...", 75)
+        update_progress("Connecting to YouTube channel...", 91)
         auth = check_auth_status(channel_id=req.channel_id)
 
         if auth.get("authenticated"):
-            update_progress("Uploading video and viral thumbnail to YouTube...", 80)
+            update_progress("Uploading video and viral thumbnail to YouTube...", 93)
+
+            def upload_progress(msg: str, pct: int):
+                mapped_pct = 93 + int(pct * 0.06)
+                update_progress(msg, mapped_pct)
+
             upload_result = upload_video_to_youtube(
                 video_path=final_video_file,
                 title=metadata.get("title", "Mystery Short #Shorts"),
@@ -1031,7 +1048,7 @@ def run_youtube_publish_task(job_id: str, req: YouTubePublishRequest):
                 category_id=req.category_id,
                 channel_id=req.channel_id,
                 thumbnail_path=thumb_path,
-                progress_callback=update_progress
+                progress_callback=upload_progress
             )
 
             if upload_result.get("success"):
