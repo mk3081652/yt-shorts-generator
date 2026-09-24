@@ -58,6 +58,105 @@ export function showToast(message, type = "info", duration = 3500) {
 
 window.showToast = showToast;
 
+/**
+ * Displays a rich assignment summary panel showing which file was assigned to which scene.
+ */
+function showBulkUploadSummary(succeeded, skipped, failed) {
+    // Remove any existing panel
+    const existing = document.getElementById("bulkUploadSummaryPanel");
+    if (existing) existing.remove();
+
+    const panel = document.createElement("div");
+    panel.id = "bulkUploadSummaryPanel";
+    panel.className = "bulk-upload-summary-panel";
+
+    const header = document.createElement("div");
+    header.className = "bulk-summary-header";
+    header.innerHTML = `
+        <span class="bulk-summary-title">📥 Upload Assignment Results</span>
+        <button class="bulk-summary-close" title="Dismiss">×</button>
+    `;
+    panel.appendChild(header);
+
+    const body = document.createElement("div");
+    body.className = "bulk-summary-body";
+
+    if (succeeded.length > 0) {
+        const successTitle = document.createElement("div");
+        successTitle.className = "bulk-summary-section-title success";
+        successTitle.textContent = `✅ ${succeeded.length} file${succeeded.length > 1 ? "s" : ""} assigned:`;
+        body.appendChild(successTitle);
+
+        succeeded.forEach((r, i) => {
+            const row = document.createElement("div");
+            row.className = "bulk-summary-row success";
+            const fname = r.filename || `File ${i + 1}`;
+            const shortName = fname.length > 22 ? fname.substring(0, 19) + "..." : fname;
+            row.innerHTML = `
+                <span class="bulk-row-num">${String(i + 1).padStart(2, "0")}</span>
+                <span class="bulk-row-file" title="${fname}">🖼️ ${shortName}</span>
+                <span class="bulk-row-arrow">→</span>
+                <span class="bulk-row-scene">Scene #${r.scene_index}</span>
+            `;
+            // Click to scroll to that scene card
+            row.style.cursor = "pointer";
+            row.addEventListener("click", () => {
+                const card = document.querySelector(`[data-scene-id="${r.scene_id}"]`);
+                if (card) {
+                    card.scrollIntoView({ behavior: "smooth", block: "center" });
+                    card.classList.add("scene-just-uploaded");
+                    setTimeout(() => card.classList.remove("scene-just-uploaded"), 1800);
+                }
+            });
+            body.appendChild(row);
+        });
+    }
+
+    if (skipped.length > 0) {
+        const skipTitle = document.createElement("div");
+        skipTitle.className = "bulk-summary-section-title warn";
+        skipTitle.textContent = `⚠️ ${skipped.length} skipped (no scene slot):`;
+        body.appendChild(skipTitle);
+        skipped.forEach(r => {
+            const row = document.createElement("div");
+            row.className = "bulk-summary-row warn";
+            row.textContent = `⚠️ ${r.filename}`;
+            body.appendChild(row);
+        });
+    }
+
+    if (failed.length > 0) {
+        const failTitle = document.createElement("div");
+        failTitle.className = "bulk-summary-section-title error";
+        failTitle.textContent = `❌ ${failed.length} failed:`;
+        body.appendChild(failTitle);
+        failed.forEach(r => {
+            const row = document.createElement("div");
+            row.className = "bulk-summary-row error";
+            row.textContent = `❌ ${r.filename}: ${r.reason || "invalid"}`;
+            body.appendChild(row);
+        });
+    }
+
+    panel.appendChild(body);
+
+    // Insert after the editor-actions-row in step2
+    const actionsRow = document.querySelector(".editor-actions-row");
+    if (actionsRow && actionsRow.parentNode) {
+        actionsRow.parentNode.insertBefore(panel, actionsRow.nextSibling);
+    } else {
+        document.body.appendChild(panel);
+    }
+
+    // Auto-dismiss after 12s
+    const autoDismiss = setTimeout(() => panel.remove(), 12000);
+
+    panel.querySelector(".bulk-summary-close").addEventListener("click", () => {
+        clearTimeout(autoDismiss);
+        panel.remove();
+    });
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
     // DOM Elements - Step 1
     const topicInput = document.getElementById("topicInput");
@@ -520,15 +619,68 @@ document.addEventListener("DOMContentLoaded", async () => {
                 showToast("Please create a project first before uploading files!", "warning");
                 return;
             }
-            showToast(`Uploading ${files.length} file(s)...`, "info");
+
+            const fileArray = Array.from(files);
+            showToast(`📥 Uploading ${fileArray.length} file(s) and assigning to scenes...`, "info", 4000);
+
+            // Show per-file loading state on button label
+            const dropLabel = multiMediaInput.closest("label");
+            const origText = dropLabel ? dropLabel.childNodes[0] && dropLabel.childNodes[0].textContent : null;
+            if (dropLabel) dropLabel.setAttribute("data-uploading", "true");
+
             try {
-                const res = await api.uploadBulk(proj.id, Array.from(files));
+                const res = await api.uploadBulk(proj.id, fileArray);
                 if (res && res.project) {
                     state.setProject(res.project);
-                    showToast(`Assigned ${files.length} file(s) to scenes!`, "success");
+
+                    // Show assignment results panel
+                    const results = res.results || [];
+                    const succeeded = results.filter(r => r.status === "success");
+                    const skipped = results.filter(r => r.status === "skipped");
+                    const failed = results.filter(r => r.status === "failed");
+
+                    // Flash highlight newly assigned scene cards
+                    succeeded.forEach(r => {
+                        const card = document.querySelector(`[data-scene-id="${r.scene_id}"]`);
+                        if (card) {
+                            card.classList.add("scene-just-uploaded");
+                            // Add file number badge overlay to media box
+                            const mediaBox = card.querySelector(".scene-media-box");
+                            if (mediaBox) {
+                                const existingBadge = mediaBox.querySelector(".upload-seq-badge");
+                                if (existingBadge) existingBadge.remove();
+                                const badge = document.createElement("div");
+                                badge.className = "upload-seq-badge";
+                                const fname = r.filename || "";
+                                const shortName = fname.length > 18 ? fname.substring(0, 15) + "..." : fname;
+                                badge.innerHTML = `<span class="upload-badge-num">📥 ${shortName}</span>`;
+                                mediaBox.appendChild(badge);
+                                setTimeout(() => {
+                                    badge.classList.add("fade-out");
+                                    setTimeout(() => badge.remove(), 600);
+                                }, 3500);
+                            }
+                            setTimeout(() => card.classList.remove("scene-just-uploaded"), 2500);
+                        }
+                    });
+
+                    // Show summary toast
+                    if (succeeded.length > 0) {
+                        const lines = succeeded.map(r => `📷 ${r.filename} → Scene #${r.scene_index}`).join("\n");
+                        showBulkUploadSummary(succeeded, skipped, failed);
+                    }
+                    if (skipped.length > 0) {
+                        showToast(`⚠️ ${skipped.length} file(s) skipped — no available scene slot.`, "warning", 5000);
+                    }
+                    if (failed.length > 0) {
+                        showToast(`❌ ${failed.length} file(s) failed validation.`, "error", 5000);
+                    }
                 }
             } catch (err) {
                 showToast(`Bulk upload failed: ${err.message}`, "error");
+            } finally {
+                multiMediaInput.value = "";
+                if (dropLabel) dropLabel.removeAttribute("data-uploading");
             }
         });
     }

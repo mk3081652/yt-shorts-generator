@@ -814,7 +814,15 @@ def upload_bulk(project_id: str, files_data: List[Tuple[str, bytes]]) -> Tuple[O
         assigned_scene.status = "manual"
         assigned_scene.source_tier = "manual"
         assigned_scene.fail_reason = None
-        results.append({"filename": fname, "scene_id": assigned_scene.id, "status": "success"})
+        scene_index = next((i for i, s in enumerate(project.scenes) if s.id == assigned_scene.id), 0)
+        results.append({
+            "filename": fname,
+            "scene_id": assigned_scene.id,
+            "scene_index": scene_index + 1,  # 1-based for display
+            "media_url": assigned_scene.media_url,
+            "media_type": m_type,
+            "status": "success"
+        })
 
     save_project(project)
     return project, results, None, 200
