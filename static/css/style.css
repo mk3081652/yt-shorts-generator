@@ -2654,3 +2654,97 @@ body {
     text-overflow: ellipsis;
     backdrop-filter: blur(4px);
 }
+
+/* ============================================================
+   VIDEO PLAYBACK PROGRESS BAR (YouTube Shorts-style)
+   Overlaid at the bottom of the phone frame, glowing green,
+   moves in real-time as the video plays. Click to seek.
+   ============================================================ */
+
+.video-progress-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    padding: 0 0 6px 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 100%);
+    pointer-events: none;   /* track itself re-enables pointer-events */
+}
+.video-progress-overlay.hidden { display: none; }
+
+.vp-time-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 8px 4px 8px;
+    font-size: 10px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.85);
+    letter-spacing: 0.04em;
+    font-family: inherit;
+    pointer-events: none;
+}
+
+/* The clickable seek track */
+.vp-track {
+    position: relative;
+    width: 100%;
+    height: 18px;           /* tall hit-target for thumb */
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    pointer-events: all;
+    padding: 0 0px;
+    box-sizing: border-box;
+}
+
+/* Dim background rail */
+.vp-track-bg {
+    position: absolute;
+    left: 0; right: 0;
+    top: 50%; transform: translateY(-50%);
+    height: 3px;
+    background: rgba(255,255,255,0.18);
+    border-radius: 3px;
+}
+
+/* Green filled portion */
+.vp-fill {
+    position: absolute;
+    left: 0;
+    top: 50%; transform: translateY(-50%);
+    height: 3px;
+    width: 0%;
+    border-radius: 3px;
+    background: #00e676;
+    box-shadow:
+        0 0 6px  rgba(0, 230, 118, 0.9),
+        0 0 12px rgba(0, 230, 118, 0.55),
+        0 0 22px rgba(0, 230, 118, 0.25);
+    transition: width 0.18s linear;
+    will-change: width;
+}
+
+/* Glowing scrubber dot */
+.vp-thumb {
+    position: absolute;
+    top: 50%; transform: translate(-50%, -50%);
+    left: 0%;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: #00e676;
+    box-shadow:
+        0 0 0 2px rgba(0,230,118,0.35),
+        0 0 8px rgba(0,230,118,0.9);
+    transition: left 0.18s linear, transform 0.12s ease, width 0.12s ease, height 0.12s ease;
+    will-change: left;
+    pointer-events: none;
+}
+.vp-track:hover .vp-thumb {
+    width: 14px;
+    height: 14px;
+}
+.vp-track:hover .vp-fill {
+    height: 4px;
+}

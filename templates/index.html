@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Montserrat:wght@800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/style.css?v=20260925_v5">
+    <link rel="stylesheet" href="/static/css/style.css?v=20260925_v6">
 </head>
 <body>
     <div class="app-container">
@@ -505,7 +505,22 @@
                         
                         <div class="video-display-area">
                             <video id="finalVideoPlayer" class="video-player" controls playsinline preload="auto"></video>
-                            
+
+                            <!-- YouTube Shorts-style playback progress bar -->
+                            <div id="videoProgressOverlay" class="video-progress-overlay hidden">
+                                <!-- Time labels -->
+                                <div class="vp-time-row">
+                                    <span id="vpCurrentTime" class="vp-time">0:00</span>
+                                    <span id="vpDuration" class="vp-time">0:00</span>
+                                </div>
+                                <!-- Seekable track -->
+                                <div id="vpTrack" class="vp-track" title="Click to seek">
+                                    <div class="vp-track-bg"></div>
+                                    <div id="vpFill" class="vp-fill" style="width:0%"></div>
+                                    <div id="vpThumb" class="vp-thumb" style="left:0%"></div>
+                                </div>
+                            </div>
+
                             <!-- Placeholder when no video yet -->
                             <div id="playerPlaceholder" class="player-placeholder">
                                 <div class="placeholder-icon">📱</div>

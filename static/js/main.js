@@ -212,6 +212,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const downloadVideoBtn = document.getElementById("downloadVideoBtn");
 
     if (finalVideoPlayer) {
+        // Toggle play/pause on click (but not when clicking the track)
         finalVideoPlayer.addEventListener("click", () => {
             if (finalVideoPlayer.src) {
                 if (finalVideoPlayer.paused) {
@@ -222,6 +223,79 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         });
     }
+
+    // ── Video Playback Progress Bar ─────────────────────────────────────────
+    // Wires the green glowing progress overlay to the video's actual playback
+    // position. Updates every animation frame while playing, supports seek-click.
+    (function initVideoProgressBar() {
+        const vid      = document.getElementById("finalVideoPlayer");
+        const overlay  = document.getElementById("videoProgressOverlay");
+        const fill     = document.getElementById("vpFill");
+        const thumb    = document.getElementById("vpThumb");
+        const track    = document.getElementById("vpTrack");
+        const curLabel = document.getElementById("vpCurrentTime");
+        const durLabel = document.getElementById("vpDuration");
+
+        if (!vid || !overlay || !fill || !thumb || !track) return;
+
+        function fmtTime(s) {
+            if (!isFinite(s) || s < 0) return "0:00";
+            const m = Math.floor(s / 60);
+            const sec = String(Math.floor(s % 60)).padStart(2, "0");
+            return `${m}:${sec}`;
+        }
+
+        function updateBar() {
+            const pct = vid.duration ? (vid.currentTime / vid.duration) * 100 : 0;
+            fill.style.width  = pct + "%";
+            thumb.style.left  = pct + "%";
+            if (curLabel) curLabel.textContent = fmtTime(vid.currentTime);
+            if (durLabel) durLabel.textContent = fmtTime(vid.duration);
+        }
+
+        // Show overlay once video has metadata (duration known)
+        vid.addEventListener("loadedmetadata", () => {
+            if (durLabel) durLabel.textContent = fmtTime(vid.duration);
+            overlay.classList.remove("hidden");
+            updateBar();
+        });
+
+        // Real-time update on every frame while playing
+        vid.addEventListener("timeupdate", updateBar);
+
+        // Reset on end
+        vid.addEventListener("ended", () => {
+            fill.style.width = "0%";
+            thumb.style.left = "0%";
+            if (curLabel) curLabel.textContent = "0:00";
+        });
+
+        // Hide when src is cleared (new render starting)
+        vid.addEventListener("emptied", () => {
+            overlay.classList.add("hidden");
+            fill.style.width = "0%";
+            thumb.style.left = "0%";
+        });
+
+        // ── Seek on click / drag ──────────────────────────────────────────
+        function seekFromEvent(e) {
+            if (!vid.duration) return;
+            const rect = track.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+            vid.currentTime = ratio * vid.duration;
+            updateBar();
+        }
+
+        let dragging = false;
+        track.addEventListener("mousedown",  (e) => { dragging = true; seekFromEvent(e); e.preventDefault(); });
+        track.addEventListener("touchstart", (e) => { dragging = true; seekFromEvent(e); }, { passive: true });
+
+        document.addEventListener("mousemove",  (e) => { if (dragging) seekFromEvent(e); });
+        document.addEventListener("touchmove",  (e) => { if (dragging) seekFromEvent(e); }, { passive: true });
+        document.addEventListener("mouseup",    () => { dragging = false; });
+        document.addEventListener("touchend",   () => { dragging = false; });
+    })();
 
     const seoKitCard = document.getElementById("seoKitCard");
     const seoTitle = document.getElementById("seoTitle");
