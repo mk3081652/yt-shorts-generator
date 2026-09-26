@@ -37,32 +37,38 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("daily_pipeline")
 
 # Daily Batch Schedule: 2 Motivational + 2 Mystery
+# Daily Batch Schedule: 2 Motivational + 2 Mystery
+# Speed: 1.0x gives deep, commanding gravitas. You can customize per job (e.g. 0.95 - 1.15).
 DAILY_BATCH = [
     {
         "id": "motivational_01",
         "channel": "motivational",
-        "voice_type": "primary",   # am_adam (1.15x)
+        "voice_type": "primary",     # am_adam
+        "speed": float(os.environ.get("MOTIVATIONAL_SPEED", os.environ.get("VOICE_SPEED", 1.0))),  # Natural commanding pace
         "topic": "The Brutal Rule of the Top One Percent",
         "bgm_id": "assets/bgm/phonk_energetic.wav"
     },
     {
         "id": "motivational_02",
         "channel": "motivational",
-        "voice_type": "alternative", # am_onyx (1.15x)
+        "voice_type": "alternative", # am_onyx
+        "speed": float(os.environ.get("MOTIVATIONAL_SPEED", os.environ.get("VOICE_SPEED", 1.0))),  # Resonant gritty pace
         "topic": "Why Comfort Destroys Every Man",
         "bgm_id": "assets/bgm/epic_cinematic.wav"
     },
     {
         "id": "mystery_01",
         "channel": "mystery",
-        "voice_type": "primary",   # am_michael (0.99x)
+        "voice_type": "primary",     # am_michael
+        "speed": float(os.environ.get("MYSTERY_SPEED", os.environ.get("VOICE_SPEED", 0.95))),      # Atmospheric suspense
         "topic": "The Stolen Boeing 727 That Vanished Off Radar",
         "bgm_id": "assets/bgm/mystery_suspense.wav"
     },
     {
         "id": "mystery_02",
         "channel": "mystery",
-        "voice_type": "alternative", # bm_george (0.97x)
+        "voice_type": "alternative", # bm_george
+        "speed": float(os.environ.get("MYSTERY_SPEED", os.environ.get("VOICE_SPEED", 0.95))),      # British documentary tone
         "topic": "Flight 19 and the Disappearing Rescue Plane",
         "bgm_id": "assets/bgm/mystery_suspense.wav"
     }
@@ -122,16 +128,19 @@ def run_single_short(job: Dict[str, Any], output_dir: str = "outputs/daily_batch
     print(f"📝 Script ({word_count} words):\n\"{script_text}\"")
 
     # 2. Local Kokoro TTS Synthesis
-    logger.info(f"Step 2: Synthesizing voiceover via Kokoro TTS ({channel} - {voice_type})...")
+    speed = job.get("speed")
+    speed_label = f" (speed: {speed}x)" if speed else ""
+    logger.info(f"Step 2: Synthesizing voiceover via Kokoro TTS ({channel} - {voice_type}){speed_label}...")
     raw_vo_path = os.path.join(job_dir, "voiceover_raw.wav")
     tts_engine = KokoroTTSEngine.get_instance()
     vo_path, vo_duration = tts_engine.synthesize(
         text=script_text,
         output_path=raw_vo_path,
         channel=channel,
-        voice_type=voice_type
+        voice_type=voice_type,
+        speed_override=speed
     )
-    print(f"🎙️ Voiceover generated: {vo_duration:.2f}s -> {vo_path}")
+    print(f"🎙️ Voiceover generated: {vo_duration:.2f}s (speed: {speed or 'default'}) -> {vo_path}")
 
     # 3. Dynamic Word-Level Subtitles
     logger.info("Step 3: Extracting word timestamps and building karaoke subtitles...")
@@ -191,6 +200,22 @@ def run_single_short(job: Dict[str, Any], output_dir: str = "outputs/daily_batch
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Automated Daily YouTube Shorts Batch Orchestrator")
+    parser.add_argument("--speed", type=float, default=None, help="Global voice speed override (e.g. 0.95, 1.0, 1.05)")
+    parser.add_argument("--motivational-speed", type=float, default=None, help="Speed override for Motivational shorts (e.g. 1.0)")
+    parser.add_argument("--mystery-speed", type=float, default=None, help="Speed override for Mystery shorts (e.g. 0.95)")
+    args = parser.parse_args()
+
+    # Apply CLI speed overrides
+    for job in DAILY_BATCH:
+        if args.speed is not None:
+            job["speed"] = args.speed
+        elif job["channel"] == "motivational" and args.motivational_speed is not None:
+            job["speed"] = args.motivational_speed
+        elif job["channel"] == "mystery" and args.mystery_speed is not None:
+            job["speed"] = args.mystery_speed
+
     print("""
 ========================================================================
    YOUTUBE SHORTS RETENTION UPGRADE PIPELINE - DAILY BATCH AUTOMATION
