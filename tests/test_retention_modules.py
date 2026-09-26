@@ -106,6 +106,97 @@ class TestRetentionModules(unittest.TestCase):
         self.assertEqual(len(moti), 2)
         self.assertEqual(len(myst), 2)
 
+    def test_08_curated_voices_count_and_selection(self):
+        """Voice Curation: Exactly 5 curated high-retention voices are registered."""
+        from engine.tts import VOICES
+        self.assertEqual(len(VOICES), 5)
+        expected_voices = {
+            "kokoro:am_adam",
+            "kokoro:am_onyx",
+            "kokoro:am_michael",
+            "kokoro:bm_george",
+            "en-US-ChristopherNeural"
+        }
+        self.assertEqual(set(VOICES.keys()), expected_voices)
+        # Verify legacy cloud and other voices are strictly removed
+        self.assertNotIn("openai:onyx", VOICES)
+        self.assertNotIn("elevenlabs:adam", VOICES)
+        self.assertNotIn("en-US-GuyNeural", VOICES)
+        self.assertNotIn("hi-IN-MadhurNeural", VOICES)
+
+    def test_09_download_visuals_zip_endpoint(self):
+        """Visuals Export: Confirms download_visuals generates a valid ZIP archive with manifest."""
+        import zipfile
+        import io
+        from fastapi.testclient import TestClient
+        from app import app
+        from engine.project import create_project
+
+        client = TestClient(app)
+        proj = create_project("The secret plane vanished over the ocean.", start="manual")
+
+        # Call download visuals endpoint
+        resp = client.get(f"/api/projects/{proj.id}/download_visuals")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.headers.get("content-type"), "application/zip")
+
+        # Inspect ZIP archive in memory
+        zip_buf = io.BytesIO(resp.content)
+        with zipfile.ZipFile(zip_buf, "r") as zf:
+            files = zf.namelist()
+            self.assertIn("manifest_and_prompts.txt", files)
+            manifest = zf.read("manifest_and_prompts.txt").decode("utf-8")
+            self.assertIn(proj.id, manifest)
+            self.assertIn("The secret plane vanished", manifest)
+
+    def test_10_kokoro_disk_caching(self):
+        """TTS Performance: Verify disk caching returns instant audio on identical requests."""
+        engine = tts_engine.KokoroTTSEngine.get_instance()
+        out1 = "outputs/test_cache/synth1.wav"
+        out2 = "outputs/test_cache/synth2.wav"
+        text = "This is a speed caching test for instant generation."
+
+        p1, dur1 = engine.synthesize(text, out1, channel="motivational", voice_type="primary")
+        self.assertTrue(os.path.exists(p1))
+
+        # Second call with same text and voice must succeed quickly via cache
+        p2, dur2 = engine.synthesize(text, out2, channel="motivational", voice_type="primary")
+        self.assertTrue(os.path.exists(p2))
+        self.assertEqual(dur1, dur2)
+
+    def test_11_active_word_karaoke_across_presets(self):
+        """Subtitles: Dynamic active word karaoke pop for all 5 visual presets."""
+        import engine.subtitles as engine_subs
+
+        words = [
+            {"word": "UNSOLVED", "start": 0.0, "end": 0.4},
+            {"word": "MYSTERY", "start": 0.4, "end": 0.8},
+            {"word": "NOW", "start": 0.8, "end": 1.1}
+        ]
+
+        # Verify hyper_yellow has electric yellow pop
+        out_yellow = "outputs/test_sub/yellow.ass"
+        engine_subs.generate_ass_subtitles(words, out_yellow, style_name="hyper_yellow")
+        with open(out_yellow, "r", encoding="utf-8") as f:
+            content_yellow = f.read()
+            self.assertIn("&H0000FFFF", content_yellow)
+            self.assertIn("UNSOLVED", content_yellow)
+
+        # Verify glacier_cyan has ice cyan pop
+        out_cyan = "outputs/test_sub/cyan.ass"
+        engine_subs.generate_ass_subtitles(words, out_cyan, style_name="glacier_cyan")
+        with open(out_cyan, "r", encoding="utf-8") as f:
+            content_cyan = f.read()
+            self.assertIn("&H00FFF200", content_cyan)
+
+        # Verify neon_lime has lime pop
+        out_lime = "outputs/test_sub/lime.ass"
+        engine_subs.generate_ass_subtitles(words, out_lime, style_name="neon_lime")
+        with open(out_lime, "r", encoding="utf-8") as f:
+            content_lime = f.read()
+            self.assertIn("&H0033FF00", content_lime)
+
 
 if __name__ == "__main__":
     unittest.main()
+

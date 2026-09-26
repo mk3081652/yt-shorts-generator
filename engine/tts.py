@@ -17,7 +17,7 @@ from engine.config import (
 )
 from engine.whisper_client import align_words_for_audio
 
-# Curated list of high-retention viral voices (Kokoro Local AI, Edge-TTS, OpenAI TTS-HD)
+# Curated list of high-retention viral voices (4 Kokoro Local AI voices + 1 Christopher Neural voice)
 VOICES = {
     # Local Zero-Cost Neural Voices (Kokoro TTS)
     "kokoro:am_adam": {
@@ -44,105 +44,15 @@ VOICES = {
         "lang": "en-GB",
         "vibe": "Atmospheric, Classy, Historical"
     },
-    # Premium Neural Voices (OpenAI & ElevenLabs)
-    "openai:onyx": {
-        "name": "OpenAI Onyx (Deep Authoritative Baritone - HD)",
-        "gender": "Male",
-        "lang": "en-US",
-        "vibe": "Documentary, Conspiracies, Stoic"
-    },
-    "openai:alloy": {
-        "name": "OpenAI Alloy (Versatile Dynamic Neutral - HD)",
-        "gender": "Neutral",
-        "lang": "en-US",
-        "vibe": "Trending Facts, Tech, Life Hacks"
-    },
-    "openai:echo": {
-        "name": "OpenAI Echo (Warm Cinematic Storyteller - HD)",
-        "gender": "Male",
-        "lang": "en-US",
-        "vibe": "Cinematic Storytelling, History"
-    },
-    "openai:shimmer": {
-        "name": "OpenAI Shimmer (Clear Engaging Female - HD)",
-        "gender": "Female",
-        "lang": "en-US",
-        "vibe": "Psychology, Mysteries, Education"
-    },
-    "elevenlabs:adam": {
-        "name": "ElevenLabs Adam (Ultra-Realistic Deep Narration)",
-        "gender": "Male",
-        "lang": "en-US",
-        "vibe": "High Retention, Investigative, Viral"
-    },
-    "elevenlabs:rachel": {
-        "name": "ElevenLabs Rachel (Calm Narrative Professional)",
-        "gender": "Female",
-        "lang": "en-US",
-        "vibe": "True Crime, Insights, Storytelling"
-    },
-    # Edge-TTS Fast Neural Voices (Free & Built-in)
+    # Ultra-Fast Built-in Neural Voice (Free & Instant)
     "en-US-ChristopherNeural": {
         "name": "Christopher (US - Deep & Authoritative / MrBeast style)",
         "gender": "Male",
         "lang": "en-US",
         "vibe": "Storytelling, Facts, Mysteries"
-    },
-    "en-US-GuyNeural": {
-        "name": "Guy (US - Energetic & Fast-Paced)",
-        "gender": "Male",
-        "lang": "en-US",
-        "vibe": "YouTube Viral, Gaming, Quick Tips"
-    },
-    "en-US-JennyNeural": {
-        "name": "Jenny (US - Engaging & Clear)",
-        "gender": "Female",
-        "lang": "en-US",
-        "vibe": "Lifestyle, Psychology, Facts"
-    },
-    "en-US-AvaNeural": {
-        "name": "Ava (US - Modern, Crisp & Professional)",
-        "gender": "Female",
-        "lang": "en-US",
-        "vibe": "Tech, Business, Motivation"
-    },
-    "en-US-AndrewNeural": {
-        "name": "Andrew (US - Cinematic Warm Baritone)",
-        "gender": "Male",
-        "lang": "en-US",
-        "vibe": "Documentary, Deep Quotes, History"
-    },
-    "en-US-EricNeural": {
-        "name": "Eric (US - Dramatic & Intense)",
-        "gender": "Male",
-        "lang": "en-US",
-        "vibe": "Action, Thriller, Conspiracies"
-    },
-    "en-GB-RyanNeural": {
-        "name": "Ryan (UK - Sophisticated British)",
-        "gender": "Male",
-        "lang": "en-GB",
-        "vibe": "Classy Facts, Science, Fiction"
-    },
-    "en-IN-PrabhatNeural": {
-        "name": "Prabhat (Indian English - Dynamic)",
-        "gender": "Male",
-        "lang": "en-IN",
-        "vibe": "India Tech, Finance, Motivation"
-    },
-    "hi-IN-MadhurNeural": {
-        "name": "Madhur (Hindi - Confident & Powerful)",
-        "gender": "Male",
-        "lang": "hi-IN",
-        "vibe": "Hindi Kahaniyan, Facts, Shorts"
-    },
-    "hi-IN-SwaraNeural": {
-        "name": "Swara (Hindi - Melodic & Clear)",
-        "gender": "Female",
-        "lang": "hi-IN",
-        "vibe": "Hindi Motivation, Top 5"
     }
 }
+
 
 
 def clean_text_for_tts(text: str) -> str:
@@ -382,7 +292,7 @@ async def generate_speech_with_words(
 
     # 3. Edge-TTS Route (Fast, zero-cost, native WordBoundaries)
     edge_voice = voice
-    if edge_voice.startswith("openai:") or edge_voice.startswith("elevenlabs:") or edge_voice not in VOICES:
+    if edge_voice.startswith("openai:") or edge_voice.startswith("elevenlabs:") or (edge_voice not in VOICES and "Neural" not in edge_voice):
         edge_voice = "en-US-ChristopherNeural"
 
     last_error = None

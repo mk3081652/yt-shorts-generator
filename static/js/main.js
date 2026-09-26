@@ -890,6 +890,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                     if (downloadVideoBtn && job.video_url) {
                         downloadVideoBtn.href = job.video_url;
                     }
+                    const downloadVisualsZipPlayerBtn = document.getElementById("downloadVisualsZipPlayerBtn");
+                    if (downloadVisualsZipPlayerBtn) {
+                        downloadVisualsZipPlayerBtn.href = `/api/jobs/${jobId}/download_visuals`;
+                        downloadVisualsZipPlayerBtn.classList.remove("hidden");
+                        downloadVisualsZipPlayerBtn.style.display = "inline-flex";
+                    }
                     const downloadThumbBtn = document.getElementById("downloadThumbBtn");
                     const replaceThumbnailBtn = document.getElementById("replaceThumbnailBtn");
                     const thumbnailPreviewArea = document.getElementById("thumbnailPreviewArea");
@@ -1114,6 +1120,45 @@ document.addEventListener("DOMContentLoaded", async () => {
                     scriptInput.value = `${e.target.value}\n\n${scriptInput.value}`.trim();
                     updateScriptStats();
                     showToast("Prepended viral hook to script!", "info");
+                }
+            });
+        }
+
+        // Local visuals folder path setup from server config
+        if (cfg.local_visuals_dir) {
+            const localVisualsPathCode = document.getElementById("localVisualsPathCode");
+            if (localVisualsPathCode) {
+                localVisualsPathCode.textContent = cfg.local_visuals_dir;
+            }
+        }
+
+        // Download Visuals ZIP button (Step 2 Storyboard)
+        const downloadVisualsZipBtn = document.getElementById("downloadVisualsZipBtn");
+        if (downloadVisualsZipBtn) {
+            downloadVisualsZipBtn.addEventListener("click", () => {
+                if (!state.project || !state.project.id) {
+                    showToast("No active project. Create or generate a script first!", "warning");
+                    return;
+                }
+                showToast("Preparing ZIP archive of all project visuals...", "info");
+                window.location.href = `/api/projects/${state.project.id}/download_visuals`;
+            });
+        }
+
+        // Copy Local Visuals Folder Path button
+        const copyLocalPathBtn = document.getElementById("copyLocalPathBtn");
+        if (copyLocalPathBtn) {
+            copyLocalPathBtn.addEventListener("click", () => {
+                const pathElem = document.getElementById("localVisualsPathCode");
+                const path = pathElem ? pathElem.textContent : "outputs\\ai_previews";
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(path).then(() => {
+                        showToast("Visuals folder path copied to clipboard!", "success");
+                    }).catch(() => {
+                        showToast(`Local path: ${path}`, "info");
+                    });
+                } else {
+                    showToast(`Local path: ${path}`, "info");
                 }
             });
         }

@@ -281,7 +281,7 @@ def render_shorts_video(
 
         # 1. Voiceover Synthesis or Cached Voice
         if progress_callback:
-            progress_callback("Preparing AI voiceover...", 15)
+            progress_callback("Synthesizing neural voiceover & timing speech...", 12)
 
         actual_voice_path = None
         word_boundaries = None
@@ -316,12 +316,15 @@ def render_shorts_video(
                 )
             )
 
+        if progress_callback:
+            progress_callback("Speech synthesis complete. Aligning scenes to word boundaries...", 22)
+
         video_duration = total_duration + 0.35
         ass_path = os.path.join(work_dir, "subtitles.ass")
 
         # 2. Scene Alignment and Sequential B-Roll Rendering
         if progress_callback:
-            progress_callback("Rendering scene visuals and camera motion...", 55)
+            progress_callback("Preparing visual cuts and dynamic camera motion...", 25)
 
         scenes = list(preview_scenes or [])
         if not scenes:

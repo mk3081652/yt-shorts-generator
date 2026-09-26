@@ -259,10 +259,22 @@
                                 <button type="button" id="copyAllPromptsBtn" class="btn-secondary btn-xs" title="Copy all prompts numbered to clipboard">
                                     📋 Copy All Prompts
                                 </button>
+                                <button type="button" id="downloadVisualsZipBtn" class="btn-secondary btn-xs" title="Download all generated visuals as a ZIP archive">
+                                    📥 Download Visuals (ZIP)
+                                </button>
                                 <button type="button" id="addBeatBtn" class="btn-secondary btn-xs" title="Add a new scene at the end">
                                     ➕ Add Scene
                                 </button>
                             </div>
+                        </div>
+
+                        <!-- Local Visuals Folder Info & Clipboard Copy -->
+                        <div class="local-browse-bar" style="display: flex; align-items: center; justify-content: space-between; margin: 8px 0; padding: 7px 12px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; font-size: 11.5px; color: #a0a6b8;">
+                            <div style="display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                <span>📁 <strong>Local Visuals Folder:</strong></span>
+                                <code id="localVisualsPathCode" style="color: #64ffda; background: rgba(100, 255, 218, 0.08); padding: 2px 6px; border-radius: 4px; user-select: all; font-size: 11px;">outputs\ai_previews</code>
+                            </div>
+                            <button type="button" id="copyLocalPathBtn" class="btn-secondary btn-xs" style="padding: 2px 8px; font-size: 11px; white-space: nowrap;" title="Copy local folder path to clipboard">📋 Copy Path</button>
                         </div>
 
                         <!-- Blank Scene Warning Banner -->
@@ -549,6 +561,9 @@
                     <div id="playerActions" class="player-actions hidden" style="display: flex; gap: 8px; flex-wrap: wrap;">
                         <a id="downloadVideoBtn" class="btn-download" download="viral_short.mp4" href="#" style="flex: 1;">
                             ⬇️ Download 1080x1920 MP4
+                        </a>
+                        <a id="downloadVisualsZipPlayerBtn" class="btn-secondary btn-sm" download="visuals.zip" href="#" style="flex: 1; text-align: center; padding: 12px; font-weight: 600; text-decoration: none; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); color: #38bdf8;">
+                            📥 Download Visuals (ZIP)
                         </a>
                         <a id="downloadThumbBtn" class="btn-secondary btn-sm hidden" download="viral_thumbnail.jpg" href="#" style="flex: 1; text-align: center; padding: 12px; font-weight: 600; text-decoration: none; border-radius: 8px; display: none; align-items: center; justify-content: center; gap: 6px; background: rgba(255, 230, 0, 0.15); border: 1px solid rgba(255, 230, 0, 0.4); color: #ffe600;">
                             🖼️ Download Viral Thumbnail

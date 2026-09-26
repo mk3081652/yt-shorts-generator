@@ -235,33 +235,53 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     if current_chunk:
         chunks.append(current_chunk)
 
-    accent_c = STYLE_ACCENTS.get(resolved_style_name, "&H00FFFFFF")
-    primary_c = style['primary_color']
+    # Vibrant highlight colors for active word karaoke pop per preset
+    STYLE_HIGHLIGHTS = {
+        "hyper_yellow": "&H0000FFFF",  # Brilliant Electric Yellow
+        "glacier_cyan": "&H00FFF200",  # Ice Cyan
+        "neon_lime": "&H0033FF00",     # Neon Lime Energy
+        "sunset_coral": "&H004455FF",  # Flame Coral
+        "clean": "&H0000E6FF"          # High-contrast Gold
+    }
+
+    highlight_c = STYLE_HIGHLIGHTS.get(resolved_style_name, "&H0000FFFF")
+    base_c = "&H00FFFFFF"
 
     for chunk in chunks:
-        start_time = format_ass_time(chunk[0]["start"])
-        end_time = format_ass_time(chunk[-1]["end"] + 0.08)
-        
-        words_formatted = []
-        for w in chunk:
-            raw_w = w["word"]
-            disp_w = raw_w.upper() if style.get("uppercase", True) else raw_w
-            if is_high_impact_word(raw_w, high_impact_words):
-                # Accent pop + 120% kinetic scale, then revert back to primary color and 100% scale
-                words_formatted.append(f"{{\\c{accent_c}&\\fscx120\\fscy120}}{disp_w}{{\\c{primary_c}&\\fscx100\\fscy100}}")
+        num_words = len(chunk)
+        for active_idx in range(num_words):
+            active_word = chunk[active_idx]
+            start_t = active_word["start"]
+            if active_idx < num_words - 1:
+                end_t = max(start_t + 0.05, chunk[active_idx + 1]["start"])
             else:
-                words_formatted.append(disp_w)
+                end_t = active_word["end"] + 0.12
 
-        text_content = ' '.join(words_formatted)
+            start_time = format_ass_time(start_t)
+            end_time = format_ass_time(end_t)
 
-        # Eye-catching, modern, simple micro-pop bounce (snappy 65ms scale pop)
-        if resolved_style_name == "clean":
-            formatted_text = f"{{\\fscx106\\fscy106\\t(0,60,\\fscx100\\fscy100)\\c{primary_c}&}}{text_content}"
-        else:
-            formatted_text = f"{{\\fscx112\\fscy112\\t(0,65,\\fscx100\\fscy100)\\c{primary_c}&}}{text_content}"
+            words_formatted = []
+            for w_idx, w_item in enumerate(chunk):
+                raw_w = w_item["word"]
+                disp_w = raw_w.upper() if style.get("uppercase", True) else raw_w
+                is_hi = is_high_impact_word(raw_w, high_impact_words)
 
-        dialogue_line = f"Dialogue: 0,{start_time},{end_time},ViralDefault,,0,0,0,,{formatted_text}"
-        events.append(dialogue_line)
+                if w_idx == active_idx:
+                    # Active spoken word in bright highlight color with kinetic scale bounce
+                    if is_hi:
+                        words_formatted.append(f"{{\\c{highlight_c}&\\fscx120\\fscy120}}{disp_w}{{\\c{base_c}&\\fscx100\\fscy100}}")
+                    else:
+                        words_formatted.append(f"{{\\c{highlight_c}&\\fscx110\\fscy110}}{disp_w}{{\\c{base_c}&\\fscx100\\fscy100}}")
+                else:
+                    # Non-active word in the current chunk
+                    if is_hi:
+                        words_formatted.append(f"{{\\c{highlight_c}&\\fscx120\\fscy120}}{disp_w}{{\\c{base_c}&\\fscx100\\fscy100}}")
+                    else:
+                        words_formatted.append(f"{{\\c{base_c}&}}{disp_w}")
+
+            text_content = ' '.join(words_formatted)
+            dialogue_line = f"Dialogue: 0,{start_time},{end_time},ViralDefault,,0,0,0,,{text_content}"
+            events.append(dialogue_line)
 
     # Bold on-screen hook banner overlay for Scene 1 (Layer 1, non-interfering top pill box)
     if hook_banner and hook_banner.get("text"):

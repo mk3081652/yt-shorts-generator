@@ -22,7 +22,7 @@ if hasattr(sys.stderr, 'reconfigure'):
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, FileResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, FileResponse, RedirectResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict
 
@@ -311,7 +311,9 @@ def get_config():
         "bgm_tracks": get_available_bgm(),
         "hooks": get_viral_hooks(),
         "templates": get_script_templates(),
-        "ai_planner_configured": bool(os.environ.get("GEMINI_API_KEY", "").strip())
+        "ai_planner_configured": bool(os.environ.get("GEMINI_API_KEY", "").strip()),
+        "local_visuals_dir": os.path.abspath("outputs/ai_previews"),
+        "local_outputs_dir": os.path.abspath("outputs")
     }
 
 
@@ -442,6 +444,12 @@ def api_create_project(req: CreateProjectRequest):
         return proj.to_dict()
     except Exception as e:
         log_and_raise_safe(e, "Failed to create project", status_code=500)
+
+
+@app.post("/api/prepare_scenes")
+def api_prepare_scenes_alias(req: CreateProjectRequest):
+    """Backwards compatibility alias for older UI scripts or cached client sessions."""
+    return api_create_project(req)
 
 
 @app.get("/api/projects/{id}")
@@ -626,6 +634,123 @@ def api_project_export_prompts(id: str):
     if err:
         raise HTTPException(status_code=code, detail=err)
     return PlainTextResponse(text)
+
+
+@app.get("/api/projects/{id}/download_visuals")
+def api_project_download_visuals(id: str):
+    """
+    Packages all FLUX-generated and uploaded scene visuals for a project into a ZIP archive.
+    Includes a manifest of scene prompts and narration so assets are preserved locally.
+    """
+    validate_session_id(id)
+    proj = load_project(id)
+    if not proj:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    import zipfile
+    import io
+
+    zip_buffer = io.BytesIO()
+    found_count = 0
+    manifest_lines = [
+        "=== YouTube Shorts Project Visuals Manifest ===",
+        f"Project ID: {proj.id}",
+        f"Created At: {time.ctime(proj.created_at)}",
+        f"Total Scenes: {len(proj.scenes)}",
+        f"Script: {proj.script}\n",
+        "=== Scene Assets ==="
+    ]
+
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        for idx, sc in enumerate(proj.scenes, start=1):
+            m_path = getattr(sc, "media_path", "") or getattr(sc, "image_path", "") or ""
+            resolved_path = None
+            if m_path:
+                if os.path.isabs(m_path) and os.path.exists(m_path):
+                    resolved_path = m_path
+                elif os.path.exists(os.path.abspath(m_path)):
+                    resolved_path = os.path.abspath(m_path)
+                elif m_path.startswith("/outputs/"):
+                    rel = m_path.lstrip("/")
+                    if os.path.exists(rel):
+                        resolved_path = os.path.abspath(rel)
+
+            if resolved_path and os.path.isfile(resolved_path):
+                _, ext = os.path.splitext(resolved_path)
+                ext = ext or ".jpg"
+                arcname = f"scene_{idx:02d}_{sc.id[:8]}{ext}"
+                try:
+                    zip_file.write(resolved_path, arcname=arcname)
+                    found_count += 1
+                except Exception as e:
+                    logger.warning(f"Could not add {resolved_path} to zip: {e}")
+            else:
+                arcname = "[NO_MEDIA_GENERATED_YET]"
+
+            manifest_lines.append(f"\nScene #{idx} ({sc.duration}s):")
+            manifest_lines.append(f"  Status: {sc.status}")
+            manifest_lines.append(f"  Spoken Text: {sc.text}")
+            manifest_lines.append(f"  Visual Prompt: {sc.image_prompt}")
+            manifest_lines.append(f"  File in Zip: {arcname}")
+
+        manifest_text = "\n".join(manifest_lines)
+        zip_file.writestr("manifest_and_prompts.txt", manifest_text)
+
+    zip_buffer.seek(0)
+    filename = f"visuals_project_{id[:8]}.zip"
+    return Response(
+        content=zip_buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@app.get("/api/jobs/{job_id}/download_visuals")
+def api_job_download_visuals(job_id: str):
+    """
+    Downloads all visuals and assets associated with a render job into a ZIP archive.
+    """
+    job = load_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    p_id = job.get("project_id") or job.get("session_id")
+    if p_id:
+        proj = load_project(p_id)
+        if proj:
+            return api_project_download_visuals(p_id)
+
+    import zipfile
+    import io
+
+    zip_buffer = io.BytesIO()
+    found_count = 0
+    work_dir = os.path.abspath(f"outputs/temp_{job_id}")
+
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        if os.path.exists(work_dir):
+            for fname in os.listdir(work_dir):
+                if fname.lower().endswith((".jpg", ".jpeg", ".png", ".webp", ".mp4", ".ass", ".txt")):
+                    fpath = os.path.join(work_dir, fname)
+                    if os.path.isfile(fpath):
+                        zip_file.write(fpath, arcname=fname)
+                        found_count += 1
+
+        thumb_path = os.path.abspath(f"outputs/thumb_{job_id}.jpg")
+        if os.path.exists(thumb_path):
+            zip_file.write(thumb_path, arcname="thumbnail.jpg")
+
+        manifest = f"Job ID: {job_id}\nStatus: {job.get('status')}\nScript: {job.get('script', '')}\nFiles collected: {found_count}\n"
+        zip_file.writestr("job_info.txt", manifest)
+
+    zip_buffer.seek(0)
+    filename = f"visuals_job_{job_id}.zip"
+    return Response(
+        content=zip_buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
 
 
 @app.post("/api/jobs/{job_id}/replace_thumbnail")

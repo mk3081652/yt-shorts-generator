@@ -15,7 +15,9 @@ import re
 import wave
 import struct
 import logging
-from typing import Dict, Any, Tuple, Optional, List
+import hashlib
+import shutil
+from typing import Dict, Any, Tuple, Optional, List, Callable
 
 logger = logging.getLogger("kokoro_tts_engine")
 
@@ -148,10 +150,12 @@ class KokoroTTSEngine:
         output_path: str,
         channel: str = "motivational",
         voice_type: str = "primary",
-        speed_override: Optional[float] = None
+        speed_override: Optional[float] = None,
+        progress_callback: Optional[Callable[[int, str], None]] = None
     ) -> Tuple[str, float]:
         """
         Synthesizes speech using Kokoro TTS and writes a 24kHz WAV file.
+        Features disk caching and torch inference optimizations for fast generation.
 
         Args:
             text: Spoken narration script.
@@ -159,6 +163,7 @@ class KokoroTTSEngine:
             channel: 'motivational' or 'mystery'.
             voice_type: 'primary' or 'alternative'.
             speed_override: Custom speed multiplier (defaults to channel-configured +10% pace).
+            progress_callback: Optional callback for incremental progress reporting.
 
         Returns:
             Tuple of (output_path, duration_in_seconds).
@@ -176,18 +181,49 @@ class KokoroTTSEngine:
         speed = speed_override if speed_override is not None else voice_cfg["speed"]
 
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+
+        # 1. Fast Cache Check: Instant return if identical text + voice was synthesized
+        cache_dir = os.path.abspath("outputs/cache/tts")
+        os.makedirs(cache_dir, exist_ok=True)
+        cache_key = hashlib.sha256(f"{voice}_{speed:.2f}_{norm_text}".encode("utf-8")).hexdigest()
+        cached_wav = os.path.join(cache_dir, f"{cache_key}.wav")
+
+        if os.path.exists(cached_wav) and os.path.getsize(cached_wav) > 1000:
+            shutil.copyfile(cached_wav, output_path)
+            try:
+                with wave.open(output_path, "rb") as wf:
+                    frames = wf.getnframes()
+                    rate = wf.getframerate()
+                    dur = round(frames / float(rate), 3)
+                    logger.info(f"[KokoroTTS Cache Hit] Loaded {dur:.2f}s speech from cache -> {output_path}")
+                    if progress_callback:
+                        progress_callback(100, "Loaded cached voiceover instantly")
+                    return output_path, dur
+            except Exception:
+                pass
+
         pipeline = self.get_pipeline(lang_code)
 
         if pipeline is not None:
             try:
                 import soundfile as sf
                 import numpy as np
+                import torch
+
+                # Configure PyTorch CPU thread count and inference mode for maximum throughput
+                try:
+                    torch.set_num_threads(min(4, os.cpu_count() or 2))
+                except Exception:
+                    pass
 
                 audio_chunks: List[np.ndarray] = []
-                generator = pipeline(norm_text, voice=voice, speed=speed)
-                for _, _, audio in generator:
-                    if audio is not None and len(audio) > 0:
-                        audio_chunks.append(audio)
+                with torch.inference_mode():
+                    generator = pipeline(norm_text, voice=voice, speed=speed)
+                    for chunk_idx, (_, _, audio) in enumerate(generator):
+                        if audio is not None and len(audio) > 0:
+                            audio_chunks.append(audio)
+                            if progress_callback:
+                                progress_callback(min(90, 20 + chunk_idx * 15), f"Synthesized speech chunk {chunk_idx + 1}...")
 
                 if audio_chunks:
                     full_audio = np.concatenate(audio_chunks)
@@ -195,12 +231,20 @@ class KokoroTTSEngine:
                     sf.write(output_path, full_audio, sample_rate)
                     duration = round(len(full_audio) / float(sample_rate), 3)
                     logger.info(f"[KokoroTTS] Generated {duration:.2f}s speech with voice '{voice}' -> {output_path}")
+
+                    # Save to cache
+                    try:
+                        shutil.copyfile(output_path, cached_wav)
+                    except Exception:
+                        pass
+
                     return output_path, duration
             except Exception as e:
                 logger.error(f"[KokoroTTS] Synthesis failed via Kokoro: {e}. Falling back to clean audio generator.")
 
         # Fallback synthesizer if Kokoro or soundfile is not yet installed in local environment
         return self._generate_fallback_wav(norm_text, output_path, speed=speed)
+
 
     def _generate_fallback_wav(self, text: str, output_path: str, speed: float = 1.0) -> Tuple[str, float]:
         """
