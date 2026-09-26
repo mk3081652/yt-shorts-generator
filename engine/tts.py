@@ -17,8 +17,33 @@ from engine.config import (
 )
 from engine.whisper_client import align_words_for_audio
 
-# Curated list of high-retention viral voices (Edge-TTS, ElevenLabs & OpenAI TTS-HD)
+# Curated list of high-retention viral voices (Kokoro Local AI, Edge-TTS, OpenAI TTS-HD)
 VOICES = {
+    # Local Zero-Cost Neural Voices (Kokoro TTS)
+    "kokoro:am_adam": {
+        "name": "Kokoro Adam (Motivational Authority - Local AI)",
+        "gender": "Male",
+        "lang": "en-US",
+        "vibe": "Deep, Commanding, 1% Mindset"
+    },
+    "kokoro:am_onyx": {
+        "name": "Kokoro Onyx (Motivational Resonant - Local AI)",
+        "gender": "Male",
+        "lang": "en-US",
+        "vibe": "Gritty, Powerful, Discipline"
+    },
+    "kokoro:am_michael": {
+        "name": "Kokoro Michael (True-Crime Mystery - Local AI)",
+        "gender": "Male",
+        "lang": "en-US",
+        "vibe": "Investigative, Chilling, Unsolved"
+    },
+    "kokoro:bm_george": {
+        "name": "Kokoro George (British Suspense - Local AI)",
+        "gender": "Male",
+        "lang": "en-GB",
+        "vibe": "Atmospheric, Classy, Historical"
+    },
     # Premium Neural Voices (OpenAI & ElevenLabs)
     "openai:onyx": {
         "name": "OpenAI Onyx (Deep Authoritative Baritone - HD)",
@@ -297,6 +322,37 @@ async def generate_speech_with_words(
         raise ValueError("Script text cannot be empty.")
 
     req_provider = (provider or get_tts_provider()).lower()
+
+    # 0. Kokoro Local AI Route (Zero Cloud Cost)
+    if req_provider == "kokoro" or voice.startswith("kokoro:"):
+        try:
+            import tts_engine
+            kokoro_voice = voice.replace("kokoro:", "")
+            channel = "mystery" if any(k in kokoro_voice for k in ("george", "michael")) else "motivational"
+            voice_type = "alternative" if any(k in kokoro_voice for k in ("onyx", "george")) else "primary"
+
+            # Parse speed from rate string (e.g. "+10%", "-5%", "+0%")
+            speed_val = 1.0
+            if rate:
+                m = re.search(r'([+-]?\d+)', str(rate))
+                if m:
+                    pct = float(m.group(1))
+                    speed_val = max(0.6, min(1.8, 1.0 + (pct / 100.0)))
+
+            engine = tts_engine.KokoroTTSEngine.get_instance()
+            out_p, dur = engine.synthesize(
+                text=clean_text,
+                output_path=output_audio_path,
+                channel=channel,
+                voice_type=voice_type,
+                speed_override=speed_val
+            )
+            if os.path.exists(output_audio_path):
+                from subtitles import extract_word_timestamps
+                words = extract_word_timestamps(output_audio_path, script_text=clean_text)
+                return output_audio_path, words, dur
+        except Exception as e:
+            print(f"[TTS] Kokoro synthesis warning: {e}. Falling back...")
 
     # 1. ElevenLabs Premium Route
     if req_provider == "elevenlabs" or voice.startswith("elevenlabs:"):
