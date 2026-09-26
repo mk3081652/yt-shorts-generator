@@ -515,7 +515,8 @@ def render_shorts_video(
             if result.returncode != 0:
                 raise RuntimeError(f"FFmpeg compositing failed: {getattr(result, 'stderr', '')}")
         else:
-            # Stream FFmpeg progress in real-time
+            # Stream FFmpeg progress in real-time with concurrent stderr drain to prevent pipe buffer deadlock
+            import threading
             ffmpeg_cmd_progress = list(ffmpeg_cmd[:-1]) + ["-progress", "pipe:1", ffmpeg_cmd[-1]]
             proc = subprocess.Popen(
                 ffmpeg_cmd_progress,
@@ -525,6 +526,18 @@ def render_shorts_video(
                 bufsize=1,
                 universal_newlines=True
             )
+
+            stderr_log = []
+            def _drain_stderr():
+                try:
+                    if proc.stderr:
+                        for err_line in proc.stderr:
+                            stderr_log.append(err_line)
+                except Exception:
+                    pass
+
+            drain_thread = threading.Thread(target=_drain_stderr, daemon=True)
+            drain_thread.start()
 
             last_reported_sec = -1.0
             if proc.stdout:
@@ -544,19 +557,22 @@ def render_shorts_video(
                         except (ValueError, IndexError):
                             pass
 
-                    if curr_sec is not None and (curr_sec - last_reported_sec >= 1.0 or curr_sec >= video_duration):
+                    if curr_sec is not None and (curr_sec - last_reported_sec >= 0.5 or curr_sec >= video_duration):
                         last_reported_sec = curr_sec
                         frac = min(1.0, max(0.0, curr_sec / max(1.0, video_duration)))
                         pct = 74 + int(frac * 20)
+                        rem_sec = max(0, int(video_duration - curr_sec))
                         if progress_callback:
                             progress_callback(
-                                f"Compositing audio, animated subtitles & motion ({int(curr_sec)}s / {int(video_duration)}s)...",
+                                f"Compositing audio, animated subtitles & motion ({int(curr_sec)}s / {int(video_duration)}s - ~{rem_sec}s remaining)...",
                                 pct
                             )
 
-            _, stderr = proc.communicate()
+            proc.wait()
+            drain_thread.join(timeout=1.5)
             if proc.returncode != 0:
-                raise RuntimeError(f"FFmpeg compositing failed: {stderr[-800:] if stderr else 'Unknown error'}")
+                err_text = "".join(stderr_log)
+                raise RuntimeError(f"FFmpeg compositing failed: {err_text[-800:] if err_text else 'Unknown error'}")
 
         if progress_callback:
             progress_callback("Complete! Viral YouTube Short is ready.", 100)
