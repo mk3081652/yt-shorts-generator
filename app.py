@@ -375,28 +375,29 @@ def api_generate_script(req: GenerateScriptRequest):
     model_used = None
 
     if api_key:
-        prompt = f"""You are an elite, viral YouTube Shorts narrative specialist.
-Write a full-length, high-retention 50-60 second spoken voiceover script about: "{topic}".
+        prompt = f"""You are a viral YouTube Shorts scriptwriter. Topic: "{topic}"
 
 {angle_instruction}
 
-STRICT HIGH-RETENTION & LOW-SWIPE RULES (Algorithmic Virality):
-1. PATTERN-INTERRUPT HOOK (First 1.5 seconds): The first sentence MUST be an irresistible, forbidden-secret or curiosity-gap statement that forces the viewer's thumb to halt immediately. No introductions, no greetings, no throat-clearing.
-2. Fast-paced, intriguing storytelling with genuine surprises, drama, or twists every 5-8 seconds.
-3. Cadence variation: Keep sentence lengths varied between 1.8s and 3.2s per phrase (roughly 5 to 10 words per phrase) for rapid visual transitions without monotone pacing.
-4. Total word count MUST be between 130 and 150 words (aiming for exactly 50 to 58 seconds of speech, staying safely under the 60-second YouTube Shorts limit).
-5. Pacing: Break the story into 4 distinct beats:
-   - Beat 1 (0-10s): The shocking hook and the setup.
-   - Beat 2 (10-30s): The rising intrigue and strange clues or discoveries.
-   - Beat 3 (30-48s): The climactic revelation or unexpected twist.
-   - Beat 4 (48-56s): SEAMLESS INFINITY LOOP! The final sentence MUST grammatically connect directly back into the opening hook sentence of Beat 1, creating an endless loop so viewers re-watch without realizing it ended (boosting retention above 100%).
-   - STRICT BAN: DO NOT SAY "Subscribe for more", "Follow for more", or "Leave a comment" anywhere in the script! It triggers viewers to swipe away instantly.
-6. OUTPUT SPOKEN NARRATION WORDS ONLY!
-   - DO NOT include scene directions or camera angles.
-   - DO NOT include bracketed sound effects or notes like [Dramatic pause], [Cut to plane].
-   - DO NOT include prompt instructions or image descriptions.
-   - DO NOT include labels like "Voiceover:", "Narrator:", "Hook:", "Image prompt:".
-   - Return ONLY the exact words the voice actor will speak aloud.
+STRICT RULES — READ EVERY ONE OR THE SCRIPT WILL FAIL:
+
+1. THE 1.5-SECOND HOOK: The first sentence must trigger INSTANT shock or curiosity. NEVER introduce the topic formally. Get straight to the most insane/forbidden detail.
+   - BAD: "In 2003, a Boeing 727 vanished from an airport in Africa."
+   - GOOD: "Two men stole a 150-foot commercial jet, cut all the lights, and vanished off radar forever."
+
+2. PACING: Write SHORT, punchy clauses — 4 to 7 words max per sentence. Vary sentence length for dramatic rhythm. Every sentence must create tension or reveal a new detail.
+
+3. THE PERFECT LOOP: The FINAL sentence must seamlessly transition DIRECTLY back into sentence #1 so the Short loops endlessly without the viewer realizing it ended. Do NOT say "Thanks for watching", "Like and subscribe", "Follow for more", or any call-to-action. These trigger immediate swipe-away.
+
+4. DURATION: HARD LIMIT of 75 to 90 words total (~30 to 38 seconds of spoken audio). Count carefully. Do NOT exceed 90 words.
+
+5. BEAT STRUCTURE:
+   - Beat 1 (0-8s): Shocking hook + setup. 1-2 sentences.
+   - Beat 2 (8-22s): Rising intrigue. Strange clues, facts, anomalies. 3-4 sentences.
+   - Beat 3 (22-32s): Climactic twist or revelation. The thing no one knows. 2-3 sentences.
+   - Beat 4 (32-38s): Loop closer. Final sentence connects directly back to Hook.
+
+6. OUTPUT: Spoken narration words ONLY. No labels, no brackets, no stage directions, no scene descriptions, no markdown. Just the words the voice will say aloud.
 """
         try:
             from engine.gemini_client import generate_content
@@ -983,10 +984,13 @@ def run_youtube_publish_task(job_id: str, req: YouTubePublishRequest):
             try:
                 from engine.gemini_client import generate_content as gemini_gen
                 prompt = (
-                    f"Write a full 50-58 second spoken voiceover script (130-150 words) about: {clean_script}. "
-                    "Start with an irresistible 2-second curiosity hook. Fast-paced, intriguing, no markdown, verbatim spoken words only. "
-                    "The final sentence MUST bridge seamlessly into the first sentence creating an infinite replay loop. "
-                    "Never say 'subscribe' or 'follow'."
+                    f"You are a viral YouTube Shorts scriptwriter. Write a script about: {clean_script}.\n"
+                    "RULES:\n"
+                    "1. HOOK: First sentence = instant shock/curiosity, 4-7 words, never introduce the topic formally.\n"
+                    "2. PACING: 4-7 words max per sentence, punchy and tense.\n"
+                    "3. LOOP: Final sentence connects directly back to sentence #1 so it loops endlessly. NO 'subscribe', 'follow', or CTAs.\n"
+                    "4. HARD LIMIT: 75-90 words total. Count carefully. Do not exceed 90 words.\n"
+                    "5. OUTPUT: Spoken words ONLY. No labels, no brackets, no markdown."
                 )
                 ai_text, _ = gemini_gen(prompt, thinking_level="low", timeout=12)
                 if ai_text and len(ai_text.split()) >= 20:
