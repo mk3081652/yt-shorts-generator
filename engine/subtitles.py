@@ -14,84 +14,87 @@ def format_ass_time(seconds: float) -> str:
 
 # Modern, eye-catching, simple viral subtitle presets
 # Colors in ASS are &HAABBGGRR (Hex: Alpha, Blue, Green, Red)
+# alignment: 5 = center-screen (middle-center) — keeps eyes locked in the middle-third
+# MarginV for alignment=5: distance from the vertical center (positive = above center)
+# On 1920px screen: center=960px. MarginV=-80 places text ~80px BELOW center (lower-middle-third)
 STYLE_PRESETS = {
     "hyper_yellow": {
         "name": "Hyper Yellow",
         "font_name": "Arial Black",
-        "font_size": 17, # Crisp ~68px on 1080x1920
-        "primary_color": "&H0000E6FF", # High-contrast Electric Yellow (R:FF G:E6 B:00)
+        "font_size": 19,  # ~76px on 1080x1920 — large enough to read in 0.5s glance
+        "primary_color": "&H0000E6FF",  # Electric Yellow
         "secondary_color": "&H00FFFFFF",
-        "outline_color": "&H00000000", # Deep Black razor outline
+        "outline_color": "&H00000000",  # Deep Black razor outline
         "back_color": "&HA0000000",
         "bold": 1,
-        "outline": 3.2,
+        "outline": 3.5,
         "shadow": 2.0,
-        "alignment": 2, # bottom-center
-        "margin_v": 620, # Shorts safe zone: 20%+ clearance from bottom UI
+        "alignment": 5,    # Middle-center — eye-lock zone
+        "margin_v": -80,   # Slightly below center = lower-middle-third
         "uppercase": True,
         "border_style": 1
     },
     "glacier_cyan": {
         "name": "Glacier Cyan",
         "font_name": "Arial Black",
-        "font_size": 17,
-        "primary_color": "&H00FFF200", # Vivid Ice Cyan (R:00 G:F2 B:FF)
+        "font_size": 19,
+        "primary_color": "&H00FFF200",  # Ice Cyan
         "secondary_color": "&H00FFFFFF",
         "outline_color": "&H00000000",
         "back_color": "&HA0000000",
         "bold": 1,
-        "outline": 3.2,
+        "outline": 3.5,
         "shadow": 2.0,
-        "alignment": 2,
-        "margin_v": 620,
+        "alignment": 5,
+        "margin_v": -80,
         "uppercase": True,
         "border_style": 1
     },
     "neon_lime": {
         "name": "Neon Lime",
         "font_name": "Arial Black",
-        "font_size": 17,
-        "primary_color": "&H0033FF00", # Vivid Electric Lime (R:00 G:FF B:33)
+        "font_size": 19,
+        "primary_color": "&H0033FF00",  # Electric Lime
         "secondary_color": "&H00FFFFFF",
         "outline_color": "&H00000000",
         "back_color": "&HA0000000",
         "bold": 1,
-        "outline": 3.2,
+        "outline": 3.5,
         "shadow": 2.0,
-        "alignment": 2,
-        "margin_v": 620,
+        "alignment": 5,
+        "margin_v": -80,
         "uppercase": True,
         "border_style": 1
     },
     "sunset_coral": {
         "name": "Sunset Coral",
         "font_name": "Arial Black",
-        "font_size": 17,
-        "primary_color": "&H004455FF", # Trendy Warm Coral / Flame (R:FF G:55 B:44)
+        "font_size": 19,
+        "primary_color": "&H004455FF",  # Flame Coral
         "secondary_color": "&H00FFFFFF",
         "outline_color": "&H00000000",
         "back_color": "&HA0000000",
         "bold": 1,
-        "outline": 3.2,
+        "outline": 3.5,
         "shadow": 2.0,
-        "alignment": 2,
-        "margin_v": 620,
+        "alignment": 5,
+        "margin_v": -80,
         "uppercase": True,
         "border_style": 1
     },
     "clean": {
         "name": "Cinematic Clean White",
-        "font_name": "Arial",
-        "font_size": 16, # Clean ~64px on 1080x1920
-        "primary_color": "&H00FFFFFF", # Pure Crisp White
+        "font_name": "Arial Black",
+        "font_size": 18,
+        "primary_color": "&H00FFFFFF",  # Pure White
         "secondary_color": "&H00FFFFFF",
-        "outline_color": "&H80111111", # Soft translucent outline
+        "outline_color": "&H80111111",
         "back_color": "&H90000000",
         "bold": 1,
-        "outline": 2.2,
+        "outline": 2.5,
         "shadow": 1.5,
-        "alignment": 2,
-        "margin_v": 620,
+        "alignment": 5,
+        "margin_v": -80,
         "uppercase": False,
         "border_style": 1
     }
@@ -154,16 +157,18 @@ def generate_ass_subtitles(
     word_boundaries: List[Dict[str, Any]],
     output_ass_path: str,
     style_name: str = "hyper_yellow",
-    max_words_per_segment: int = 2,
+    max_words_per_segment: int = 3,   # 1-3 words per cut for max retention
     margin_v: int = None,
     high_impact_words: Optional[List[str]] = None,
     hook_banner: Optional[Dict[str, Any]] = None
 ) -> str:
     """
     Builds an Advanced SubStation Alpha (.ass) subtitle file.
-    Groups words into punchy 1-2 word segments with eye-catching, modern kinetic styling,
-    per-word emphasis (larger font scale + accent color for numbers/caps/keywords),
-    and an optional bold on-screen hook banner overlay for Scene 1.
+    Groups words into punchy 1-3 word segments shown in the middle-third of the
+    screen (alignment=5, center-screen). Each word segment pops in with a
+    kinetic scale bounce. High-impact words (numbers, ALL-CAPS, keywords)
+    get accent color + 120% scale pop for maximum eye-lock retention.
+    Optional bold hook banner overlay at top for Scene 1.
     """
     resolved_style_name = STYLE_ALIASES.get(style_name, style_name)
     style = dict(STYLE_PRESETS.get(resolved_style_name, STYLE_PRESETS["hyper_yellow"]))
@@ -172,8 +177,12 @@ def generate_ass_subtitles(
 
     play_res_x = 1080
     play_res_y = 1920
-    font_size = style["font_size"] * 4  # ~64-68px on 1080x1920
+    font_size = style["font_size"] * 4  # 19*4=76px on 1080x1920
     border_style = style.get("border_style", 1)
+    # MarginV in ASS for alignment=5 is measured from bottom (same as alignment=2)
+    # But to position at center, we rely on alignment=5 which already centers vertically.
+    # MarginV here shifts from the center: positive shifts up, negative shifts down.
+    ass_margin_v = max(0, style["margin_v"]) if style["margin_v"] >= 0 else 0
 
     ass_header = f"""[Script Info]
 Title: Viral YouTube Shorts Subtitles
@@ -186,7 +195,7 @@ PlayResY: {play_res_y}
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: ViralDefault,{style['font_name']},{font_size},{style['primary_color']},{style['secondary_color']},{style['outline_color']},{style['back_color']},{style['bold']},0,0,0,100,100,2,0,{border_style},{style['outline'] * 2},{style['shadow'] * 2},{style['alignment']},40,40,{style['margin_v']},1
+Style: ViralDefault,{style['font_name']},{font_size},{style['primary_color']},{style['secondary_color']},{style['outline_color']},{style['back_color']},{style['bold']},0,0,0,100,100,2,0,{border_style},{style['outline'] * 2},{style['shadow'] * 2},{style['alignment']},40,40,{ass_margin_v},1
 Style: HookBanner,Arial Black,56,&H00FFFFFF,&H0000E6FF,&H00000000,&HA0000000,1,0,0,0,100,100,2,0,3,4.0,2.0,8,60,60,310,1
 
 [Events]
@@ -194,11 +203,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
     events = []
-    
+
     if not word_boundaries:
         return output_ass_path
 
-    # Clean words and group into 1-2 punchy words
+    # Clean words and group into 1-3 punchy words
     clean_items = []
     for item in word_boundaries:
         cw = clean_word_text(item["word"])
