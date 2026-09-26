@@ -17,6 +17,7 @@ import struct
 import logging
 import hashlib
 import shutil
+import subprocess
 from typing import Dict, Any, Tuple, Optional, List, Callable
 
 logger = logging.getLogger("kokoro_tts_engine")
@@ -134,11 +135,11 @@ class KokoroTTSEngine:
         try:
             from kokoro import KPipeline
             logger.info(f"[KokoroTTS] Initializing local KPipeline for lang_code='{lang}'...")
-            pipeline = KPipeline(lang_code=lang)
+            pipeline = KPipeline(lang_code=lang, repo_id='hexgrad/Kokoro-82M')
             self._pipelines[lang] = pipeline
             return pipeline
         except ImportError:
-            logger.warning("[KokoroTTS] 'kokoro' package not installed. Running in mock/fallback mode.")
+            logger.warning("[KokoroTTS] 'kokoro' package not installed. Running in fallback mode.")
             return None
         except Exception as e:
             logger.error(f"[KokoroTTS] Failed to initialize KPipeline('{lang}'): {e}")
@@ -148,61 +149,106 @@ class KokoroTTSEngine:
         self,
         text: str,
         output_path: str,
+        voice: Optional[str] = None,
         channel: str = "motivational",
         voice_type: str = "primary",
         speed_override: Optional[float] = None,
         progress_callback: Optional[Callable[[int, str], None]] = None
     ) -> Tuple[str, float]:
         """
-        Synthesizes speech using Kokoro TTS and writes a 24kHz WAV file.
+        Synthesizes speech using Kokoro TTS and writes a clean 24kHz WAV or MP3 file.
         Features disk caching and torch inference optimizations for fast generation.
 
         Args:
             text: Spoken narration script.
-            output_path: Target .wav filepath.
-            channel: 'motivational' or 'mystery'.
+            output_path: Target .wav or .mp3 filepath.
+            voice: Direct voice name ('am_adam', 'am_onyx', 'am_michael', 'bm_george').
+            channel: 'motivational' or 'mystery' (used if voice not directly specified).
             voice_type: 'primary' or 'alternative'.
-            speed_override: Custom speed multiplier (defaults to channel-configured +10% pace).
+            speed_override: Custom speed multiplier (defaults to channel-configured pace).
             progress_callback: Optional callback for incremental progress reporting.
 
         Returns:
             Tuple of (output_path, duration_in_seconds).
         """
+        import imageio_ffmpeg
+
         norm_text = normalize_text_for_kokoro(text)
         if not norm_text:
             raise ValueError("Input text cannot be empty.")
 
-        channel_key = channel.lower() if channel.lower() in CHANNEL_CONFIG else "motivational"
-        voice_key = voice_type.lower() if voice_type.lower() in ("primary", "alternative") else "primary"
-        voice_cfg = CHANNEL_CONFIG[channel_key][voice_key]
+        # Determine voice and language code
+        resolved_voice = "am_adam"
+        resolved_lang = "a"
+        resolved_speed = 1.15
 
-        voice = voice_cfg["voice"]
-        lang_code = voice_cfg["lang_code"]
-        speed = speed_override if speed_override is not None else voice_cfg["speed"]
+        if voice:
+            v_lower = voice.lower().replace("kokoro:", "").strip()
+            if "george" in v_lower:
+                resolved_voice = "bm_george"
+                resolved_lang = "b"
+                resolved_speed = 0.97
+            elif "michael" in v_lower:
+                resolved_voice = "am_michael"
+                resolved_lang = "a"
+                resolved_speed = 0.99
+            elif "onyx" in v_lower:
+                resolved_voice = "am_onyx"
+                resolved_lang = "a"
+                resolved_speed = 1.15
+            elif "adam" in v_lower:
+                resolved_voice = "am_adam"
+                resolved_lang = "a"
+                resolved_speed = 1.15
+            else:
+                channel_key = channel.lower() if channel.lower() in CHANNEL_CONFIG else "motivational"
+                voice_key = voice_type.lower() if voice_type.lower() in ("primary", "alternative") else "primary"
+                cfg = CHANNEL_CONFIG[channel_key][voice_key]
+                resolved_voice = cfg["voice"]
+                resolved_lang = cfg["lang_code"]
+                resolved_speed = cfg["speed"]
+        else:
+            channel_key = channel.lower() if channel.lower() in CHANNEL_CONFIG else "motivational"
+            voice_key = voice_type.lower() if voice_type.lower() in ("primary", "alternative") else "primary"
+            cfg = CHANNEL_CONFIG[channel_key][voice_key]
+            resolved_voice = cfg["voice"]
+            resolved_lang = cfg["lang_code"]
+            resolved_speed = cfg["speed"]
+
+        speed = speed_override if speed_override is not None else resolved_speed
 
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
 
-        # 1. Fast Cache Check: Instant return if identical text + voice was synthesized
+        # 1. Fast Cache Check: Master WAV cached audio
         cache_dir = os.path.abspath("outputs/cache/tts")
         os.makedirs(cache_dir, exist_ok=True)
-        cache_key = hashlib.sha256(f"{voice}_{speed:.2f}_{norm_text}".encode("utf-8")).hexdigest()
+        cache_key = hashlib.sha256(f"{resolved_voice}_{speed:.2f}_{norm_text}".encode("utf-8")).hexdigest()
         cached_wav = os.path.join(cache_dir, f"{cache_key}.wav")
 
         if os.path.exists(cached_wav) and os.path.getsize(cached_wav) > 1000:
-            shutil.copyfile(cached_wav, output_path)
             try:
-                with wave.open(output_path, "rb") as wf:
+                with wave.open(cached_wav, "rb") as wf:
                     frames = wf.getnframes()
                     rate = wf.getframerate()
                     dur = round(frames / float(rate), 3)
+
+                if dur > 0.5:
+                    if output_path.lower().endswith(".mp3"):
+                        cmd = [ffmpeg_exe, "-y", "-i", cached_wav, "-c:a", "libmp3lame", "-b:a", "192k", os.path.abspath(output_path)]
+                        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                    else:
+                        shutil.copyfile(cached_wav, output_path)
+
                     logger.info(f"[KokoroTTS Cache Hit] Loaded {dur:.2f}s speech from cache -> {output_path}")
                     if progress_callback:
                         progress_callback(100, "Loaded cached voiceover instantly")
                     return output_path, dur
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"[KokoroTTS Cache Hit] Cached WAV invalid ({e}), regenerating...")
 
-        pipeline = self.get_pipeline(lang_code)
+        # 2. Kokoro Pipeline Inference
+        pipeline = self.get_pipeline(resolved_lang)
 
         if pipeline is not None:
             try:
@@ -210,7 +256,6 @@ class KokoroTTSEngine:
                 import numpy as np
                 import torch
 
-                # Configure PyTorch CPU thread count and inference mode for maximum throughput
                 try:
                     torch.set_num_threads(min(4, os.cpu_count() or 2))
                 except Exception:
@@ -218,7 +263,7 @@ class KokoroTTSEngine:
 
                 audio_chunks: List[np.ndarray] = []
                 with torch.inference_mode():
-                    generator = pipeline(norm_text, voice=voice, speed=speed)
+                    generator = pipeline(norm_text, voice=resolved_voice, speed=speed)
                     for chunk_idx, (_, _, audio) in enumerate(generator):
                         if audio is not None and len(audio) > 0:
                             audio_chunks.append(audio)
@@ -228,54 +273,75 @@ class KokoroTTSEngine:
                 if audio_chunks:
                     full_audio = np.concatenate(audio_chunks)
                     sample_rate = 24000
-                    sf.write(output_path, full_audio, sample_rate)
+                    # Write master 24kHz WAV into cache
+                    sf.write(cached_wav, full_audio, sample_rate)
                     duration = round(len(full_audio) / float(sample_rate), 3)
-                    logger.info(f"[KokoroTTS] Generated {duration:.2f}s speech with voice '{voice}' -> {output_path}")
 
-                    # Save to cache
-                    try:
-                        shutil.copyfile(output_path, cached_wav)
-                    except Exception:
-                        pass
+                    # Export to requested format
+                    if output_path.lower().endswith(".mp3"):
+                        cmd = [ffmpeg_exe, "-y", "-i", cached_wav, "-c:a", "libmp3lame", "-b:a", "192k", os.path.abspath(output_path)]
+                        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                    else:
+                        shutil.copyfile(cached_wav, output_path)
 
+                    logger.info(f"[KokoroTTS] Generated {duration:.2f}s speech with voice '{resolved_voice}' -> {output_path}")
                     return output_path, duration
             except Exception as e:
-                logger.error(f"[KokoroTTS] Synthesis failed via Kokoro: {e}. Falling back to clean audio generator.")
+                logger.error(f"[KokoroTTS] Synthesis failed via Kokoro: {e}. Falling back to natural offline speech.")
 
-        # Fallback synthesizer if Kokoro or soundfile is not yet installed in local environment
-        return self._generate_fallback_wav(norm_text, output_path, speed=speed)
+        # 3. Fallback synthesizer: Uses local offline pyttsx3 speech (Never synthetic carrier buzz)
+        return self._generate_fallback_speech(norm_text, output_path, speed=speed)
 
-
-    def _generate_fallback_wav(self, text: str, output_path: str, speed: float = 1.0) -> Tuple[str, float]:
+    def _generate_fallback_speech(self, text: str, output_path: str, speed: float = 1.0) -> Tuple[str, float]:
         """
-        Lightweight fallback audio generator (24kHz WAV) to guarantee continuous operation
-        during setup, headless tests, or pipeline dry-runs.
+        Resilient offline fallback audio generator using local Windows speech (pyttsx3).
+        Produces real, intelligible spoken words. Never outputs carrier waves or buzzing tones.
         """
-        words = text.split()
-        word_count = len(words)
-        # Average reading rate: 2.8 words/sec adjusted by speed
-        duration = max(2.5, round((word_count / (2.8 * speed)), 2))
-        sample_rate = 24000
-        num_frames = int(sample_rate * duration)
+        import imageio_ffmpeg
+        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
 
-        # Generate harmonic speech-band modulated carrier
-        with wave.open(output_path, "wb") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(sample_rate)
-            raw = bytearray()
-            for i in range(num_frames):
-                t = i / sample_rate
-                # Warm 130Hz vocal formant with soft modulation
-                val = 0.25 * (
-                    0.6 * ((i % 184) / 184.0 - 0.5) +
-                    0.3 * ((i % 92) / 92.0 - 0.5)
-                ) * (0.8 + 0.2 * (i % 2400 / 2400.0))
-                # Add brief pause silences at sentence breaks
-                sample_val = int(val * 16000)
-                raw.extend(struct.pack("<h", sample_val))
-            wf.writeframes(raw)
+        temp_wav = output_path.rsplit(".", 1)[0] + "_fallback_temp.wav"
+        try:
+            import pyttsx3
+            engine = pyttsx3.init()
+            rate_val = int(165 * speed)
+            engine.setProperty('rate', rate_val)
+            engine.save_to_file(text, temp_wav)
+            engine.runAndWait()
 
+            dur = 3.0
+            if os.path.exists(temp_wav):
+                try:
+                    with wave.open(temp_wav, "rb") as wf:
+                        dur = round(wf.getnframes() / float(wf.getframerate()), 2)
+                except Exception:
+                    dur = max(2.5, round(len(text.split()) / 2.7, 2))
+
+                if output_path.lower().endswith(".mp3"):
+                    cmd = [ffmpeg_exe, "-y", "-i", temp_wav, "-c:a", "libmp3lame", "-b:a", "192k", os.path.abspath(output_path)]
+                    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                else:
+                    shutil.copyfile(temp_wav, output_path)
+
+                if os.path.exists(temp_wav):
+                    try:
+                        os.remove(temp_wav)
+                    except Exception:
+                        pass
+                return output_path, dur
+        except Exception as e:
+            logger.error(f"[KokoroTTS Fallback] pyttsx3 fallback failed: {e}")
+
+        # Emergency silence padding (intelligible empty audio instead of harsh buzz)
+        duration = max(2.5, round(len(text.split()) / 2.7, 2))
+        cmd = [
+            ffmpeg_exe, "-y",
+            "-f", "lavfi", "-i", f"anullsrc=r=24000:cl=mono",
+            "-t", f"{duration:.2f}",
+            "-c:a", "libmp3lame" if output_path.lower().endswith(".mp3") else "pcm_s16le",
+            os.path.abspath(output_path)
+        ]
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return output_path, duration
 
 
@@ -283,6 +349,7 @@ class KokoroTTSEngine:
 def generate_speech(
     text: str,
     output_path: str,
+    voice: Optional[str] = None,
     channel: str = "motivational",
     voice_type: str = "primary",
     speed: Optional[float] = None
@@ -292,7 +359,9 @@ def generate_speech(
     return engine.synthesize(
         text=text,
         output_path=output_path,
+        voice=voice,
         channel=channel,
         voice_type=voice_type,
         speed_override=speed
     )
+

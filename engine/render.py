@@ -471,9 +471,6 @@ def render_shorts_video(
                 audio_streams.append(f"[{next_in_idx}:a]volume={bgm_volume:.2f}[bgm_clean]")
             amix_inputs.append("[bgm_clean]")
             next_in_idx += 1
-        elif motion_texture == "film_grain":
-            audio_streams = ["[1:a]volume=1.0,sidechaincompress=threshold=0.08:ratio=5:attack=50:release=350[v_clean]"]
-            amix_inputs = ["[v_clean]"]
 
         if actual_sfx_path and os.path.exists(actual_sfx_path):
             ffmpeg_cmd.extend(["-i", os.path.abspath(actual_sfx_path)])

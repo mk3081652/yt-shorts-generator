@@ -253,16 +253,18 @@ async def generate_speech_with_words(
             out_p, dur = engine.synthesize(
                 text=clean_text,
                 output_path=output_audio_path,
+                voice=kokoro_voice,
                 channel=channel,
                 voice_type=voice_type,
                 speed_override=speed_val
             )
-            if os.path.exists(output_audio_path):
+            if os.path.exists(output_audio_path) and os.path.getsize(output_audio_path) > 1000:
                 from subtitles import extract_word_timestamps
                 words = extract_word_timestamps(output_audio_path, script_text=clean_text)
                 return output_audio_path, words, dur
         except Exception as e:
-            print(f"[TTS] Kokoro synthesis warning: {e}. Falling back...")
+            print(f"[TTS] Kokoro synthesis warning: {e}. Falling back to cloud/offline TTS...")
+
 
     # 1. ElevenLabs Premium Route
     if req_provider == "elevenlabs" or voice.startswith("elevenlabs:"):
