@@ -311,12 +311,19 @@ async def generate_speech_with_words(
                 voice_type=voice_type,
                 speed_override=kokoro_speed
             )
-            if os.path.exists(output_audio_path) and os.path.getsize(output_audio_path) > 1000:
-                from subtitles import extract_word_timestamps
-                words = extract_word_timestamps(output_audio_path, script_text=clean_text)
+            if os.path.exists(output_audio_path) and os.path.getsize(output_audio_path) > 500:
+                words = []
+                try:
+                    from subtitles import extract_word_timestamps
+                    words = extract_word_timestamps(output_audio_path, script_text=clean_text)
+                except Exception as w_err:
+                    print(f"[TTS] Word extraction warning: {w_err}")
+                if not words:
+                    from subtitles import align_words_duration_fallback
+                    words = align_words_duration_fallback(output_audio_path, script_text=clean_text)
                 return output_audio_path, words, dur
         except Exception as e:
-            print(f"[TTS] Kokoro synthesis warning: {e}. Falling back to cloud/offline TTS...")
+            print(f"[TTS] Kokoro synthesis error: {e}. Falling back to next available provider...")
 
 
     # 1. ElevenLabs Premium Route

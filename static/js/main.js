@@ -593,6 +593,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (voiceSelect) {
         voiceSelect.addEventListener("change", () => {
             const curVoice = voiceSelect.value;
+            localStorage.setItem("yt_selected_voice", curVoice);
             const spd = getVoiceSpeed(curVoice);
             setVoiceSpeed(curVoice, spd, true);
         });
@@ -603,7 +604,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         previewVoiceBtn.addEventListener("click", async () => {
             const voice = voiceSelect ? voiceSelect.value : "kokoro:am_adam";
             const rate = getVoiceSpeed(voice).toFixed(2);
-            const sampleText = scriptInput.value.trim().slice(0, 100) || "Welcome to the ultimate YouTube Shorts Creator!";
+            const sampleText = scriptInput.value.trim().slice(0, 140) || "Welcome to the ultimate YouTube Shorts Creator!";
 
             previewVoiceBtn.disabled = true;
             previewVoiceBtn.textContent = "🔊 Generating...";
@@ -611,8 +612,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             try {
                 const res = await api.previewVoice(sampleText, voice, rate);
                 if (res && res.audio_url) {
-                    voiceAudioPreview.src = res.audio_url;
-                    voiceAudioPreview.play();
+                    voiceAudioPreview.src = res.audio_url + "?t=" + Date.now();
+                    try {
+                        await voiceAudioPreview.play();
+                    } catch (playErr) {
+                        console.warn("Audio autoplay blocked by browser policy:", playErr);
+                    }
                     showToast(`Playing voice audition (${rate}x speed)!`, "info");
                 }
             } catch (err) {
@@ -1170,15 +1175,23 @@ document.addEventListener("DOMContentLoaded", async () => {
                 ? cfg.voices
                 : Object.entries(cfg.voices).map(([id, info]) => ({ id, ...info }));
 
+            const savedVoice = localStorage.getItem("yt_selected_voice") || "kokoro:am_adam";
+
             voiceList.forEach((v) => {
                 const opt = document.createElement("option");
-                opt.value = v.id || v.name;
-                opt.textContent = `${v.name || v.id} (${v.gender || "Neural"})`;
-                if (v.id === "kokoro:am_adam" || v.id === "en-US-ChristopherNeural") {
+                const voiceId = v.id || v.name;
+                opt.value = voiceId;
+                opt.textContent = `${v.name || voiceId} (${v.gender || "Neural"})`;
+                if (voiceId === savedVoice) {
                     opt.selected = true;
                 }
                 voiceSelect.appendChild(opt);
             });
+
+            // Ensure a valid selection
+            if (!voiceSelect.value && voiceSelect.options.length > 0) {
+                voiceSelect.selectedIndex = 0;
+            }
 
             // Initialize speed control to match the active voice
             if (voiceSelect && voiceSelect.value) {

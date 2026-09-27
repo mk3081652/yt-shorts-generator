@@ -149,11 +149,16 @@ export const api = {
         });
     },
 
-    async previewVoice(text, voice, rate = "+0%") {
+    async previewVoice(text, voice, rate = "0.85") {
         return await request("/api/preview_voice", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text, voice, rate })
+            body: JSON.stringify({
+                text,
+                voice,
+                rate: String(rate),
+                voice_rate: String(rate)
+            })
         });
     },
 

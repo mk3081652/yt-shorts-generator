@@ -53,38 +53,27 @@ def extract_word_timestamps(
     if not os.path.exists(audio_path):
         return []
 
-    # 1. Attempt local Whisper model
-    try:
-        import whisper
-        model = whisper.load_model("base")
-        result = model.transcribe(audio_path, word_timestamps=True)
-        words: List[Dict[str, Any]] = []
-        for segment in result.get("segments", []):
-            for word_obj in segment.get("words", []):
-                clean_w = word_obj.get("word", "").strip()
-                if clean_w:
-                    words.append({
-                        "word": clean_w,
-                        "start": round(float(word_obj.get("start", 0.0)), 3),
-                        "end": round(float(word_obj.get("end", 0.0)), 3)
-                    })
-        if words:
-            return words
-    except Exception:
-        pass
+_CACHED_WHISPER_MODEL = None
 
-    # 2. Attempt remote OpenAI Whisper API if key exists
-    api_key = openai_api_key or os.environ.get("OPENAI_API_KEY", "").strip()
-    if api_key:
+def _get_whisper_model():
+    global _CACHED_WHISPER_MODEL
+    if _CACHED_WHISPER_MODEL is None:
         try:
-            from engine.whisper_client import transcribe_with_whisper_api
-            api_words = transcribe_with_whisper_api(audio_path, api_key=api_key)
-            if api_words:
-                return api_words
+            import whisper
+            _CACHED_WHISPER_MODEL = whisper.load_model("base")
         except Exception:
-            pass
+            _CACHED_WHISPER_MODEL = False
+    return _CACHED_WHISPER_MODEL if _CACHED_WHISPER_MODEL is not False else None
 
-    # 3. Deterministic zero-RAM word aligner
+
+def align_words_duration_fallback(
+    audio_path: str,
+    script_text: str = ""
+) -> List[Dict[str, Any]]:
+    """
+    Deterministic zero-RAM word aligner as resilient fallback when Whisper is unavailable.
+    Distributes spoken duration proportionally across script words based on syllable/punctuation weights.
+    """
     from engine.whisper_client import get_audio_duration
     total_dur = get_audio_duration(audio_path)
     clean_words = [w.strip() for w in script_text.split() if w.strip()]
@@ -117,6 +106,59 @@ def extract_word_timestamps(
         cur_t = end_t
 
     return words
+
+
+def extract_word_timestamps(
+    audio_path: str,
+    script_text: str = "",
+    openai_api_key: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    """
+    Extracts word-level timestamps from audio using:
+    1. Local OpenAI Whisper library if installed (word_timestamps=True).
+    2. OpenAI Whisper API if key is present.
+    3. Zero-RAM deterministic audio duration aligner as resilient fallback.
+
+    Returns:
+        List of dicts: [{"word": "TWO", "start": 0.00, "end": 0.28}, ...]
+    """
+    if not os.path.exists(audio_path):
+        return []
+
+    # 1. Attempt cached local Whisper model
+    try:
+        model = _get_whisper_model()
+        if model is not None:
+            result = model.transcribe(audio_path, word_timestamps=True)
+            words: List[Dict[str, Any]] = []
+            for segment in result.get("segments", []):
+                for word_obj in segment.get("words", []):
+                    clean_w = word_obj.get("word", "").strip()
+                    if clean_w:
+                        words.append({
+                            "word": clean_w,
+                            "start": round(float(word_obj.get("start", 0.0)), 3),
+                            "end": round(float(word_obj.get("end", 0.0)), 3)
+                        })
+            if words:
+                return words
+    except Exception:
+        pass
+
+    # 2. Attempt remote OpenAI Whisper API if key exists
+    api_key = openai_api_key or os.environ.get("OPENAI_API_KEY", "").strip()
+    if api_key:
+        try:
+            from engine.whisper_client import transcribe_with_whisper_api
+            api_words = transcribe_with_whisper_api(audio_path, api_key=api_key)
+            if api_words:
+                return api_words
+        except Exception:
+            pass
+
+    # 3. Deterministic zero-RAM word aligner
+    return align_words_duration_fallback(audio_path, script_text)
+
 
 
 def chunk_words(
