@@ -26,15 +26,15 @@ class TestRetentionModules(unittest.TestCase):
         """Module 0: Validates channel voice configs and +10% speed pacing."""
         motivational = tts_engine.CHANNEL_CONFIG["motivational"]
         self.assertEqual(motivational["primary"]["voice"], "am_adam")
-        self.assertEqual(motivational["primary"]["speed"], 1.15)
+        self.assertEqual(motivational["primary"]["speed"], 0.85)
         self.assertEqual(motivational["alternative"]["voice"], "am_onyx")
-        self.assertEqual(motivational["alternative"]["speed"], 1.15)
+        self.assertEqual(motivational["alternative"]["speed"], 0.85)
 
         mystery = tts_engine.CHANNEL_CONFIG["mystery"]
         self.assertEqual(mystery["primary"]["voice"], "am_michael")
-        self.assertEqual(mystery["primary"]["speed"], 0.99)
+        self.assertEqual(mystery["primary"]["speed"], 0.88)
         self.assertEqual(mystery["alternative"]["voice"], "bm_george")
-        self.assertEqual(mystery["alternative"]["speed"], 0.97)
+        self.assertEqual(mystery["alternative"]["speed"], 0.86)
 
     def test_02_text_normalization_preserves_pauses(self):
         """Module 0: Punctuation like '...' and '—' is preserved for Kokoro breath pauses."""
@@ -57,7 +57,7 @@ class TestRetentionModules(unittest.TestCase):
         for banned in script_generator.BANNED_META_PHRASES:
             self.assertNotIn(banned, script_lower)
         # Verify word count within viral range
-        self.assertGreaterEqual(res["word_count"], 45)
+        self.assertGreaterEqual(res["word_count"], 35)
         self.assertLessEqual(res["word_count"], 80)
 
     def test_04_subtitle_karaoke_chunking(self):

@@ -24,32 +24,42 @@ VOICES = {
         "name": "Kokoro Adam (Motivational Authority - Local AI)",
         "gender": "Male",
         "lang": "en-US",
-        "vibe": "Deep, Commanding, 1% Mindset"
+        "vibe": "Deep, Commanding, 1% Mindset",
+        "default_speed": 0.85,
+        "recommended_pace": "0.85x (Deep & Authoritative)"
     },
     "kokoro:am_onyx": {
         "name": "Kokoro Onyx (Motivational Resonant - Local AI)",
         "gender": "Male",
         "lang": "en-US",
-        "vibe": "Gritty, Powerful, Discipline"
+        "vibe": "Gritty, Powerful, Discipline",
+        "default_speed": 0.85,
+        "recommended_pace": "0.85x (Resonant & Powerful)"
     },
     "kokoro:am_michael": {
         "name": "Kokoro Michael (True-Crime Mystery - Local AI)",
         "gender": "Male",
         "lang": "en-US",
-        "vibe": "Investigative, Chilling, Unsolved"
+        "vibe": "Investigative, Chilling, Unsolved",
+        "default_speed": 0.88,
+        "recommended_pace": "0.88x (Investigative & Chilling)"
     },
     "kokoro:bm_george": {
         "name": "Kokoro George (British Suspense - Local AI)",
         "gender": "Male",
         "lang": "en-GB",
-        "vibe": "Atmospheric, Classy, Historical"
+        "vibe": "Atmospheric, Classy, Historical",
+        "default_speed": 0.86,
+        "recommended_pace": "0.86x (Atmospheric Suspense)"
     },
     # Ultra-Fast Built-in Neural Voice (Free & Instant)
     "en-US-ChristopherNeural": {
         "name": "Christopher (US - Deep & Authoritative / MrBeast style)",
         "gender": "Male",
         "lang": "en-US",
-        "vibe": "Storytelling, Facts, Mysteries"
+        "vibe": "Storytelling, Facts, Mysteries",
+        "default_speed": 1.0,
+        "recommended_pace": "1.00x (Standard Punchy)"
     }
 }
 
@@ -212,10 +222,56 @@ def generate_openai_speech(
     return False
 
 
+def resolve_voice_speeds(voice: str, rate: Any) -> Tuple[float, str]:
+    """
+    Resolves speed for Kokoro (absolute float multiplier) and Edge-TTS (rate string e.g. '-15%', '+0%').
+    Provides calibrated natural baselines for each voice:
+    - Adam & Onyx: 0.85 (deep, commanding, authoritative, not rushed)
+    - Michael: 0.88 (suspenseful, true-crime documentary)
+    - George: 0.86 (atmospheric British narrator)
+    - Christopher: 1.00 (standard Edge-TTS tempo)
+    """
+    v = (voice or "").lower()
+    if "adam" in v or "onyx" in v:
+        base_speed = 0.85
+    elif "michael" in v:
+        base_speed = 0.88
+    elif "george" in v:
+        base_speed = 0.86
+    else:
+        base_speed = 1.00
+
+    if not rate or str(rate).strip() in ("", "default"):
+        kokoro_spd = base_speed
+        edge_pct = 0
+    else:
+        s = str(rate).strip().lower().rstrip("x")
+        # Direct float e.g. "0.85", "0.75", "0.90", "1.00"
+        try:
+            val = float(s)
+            kokoro_spd = max(0.65, min(1.35, val))
+            edge_pct = int(round((val - 1.0) * 100))
+        except ValueError:
+            m = re.search(r'([+-]?\d+(?:\.\d+)?)%', s)
+            if m:
+                pct = float(m.group(1))
+                if pct == 0:
+                    kokoro_spd = base_speed
+                else:
+                    kokoro_spd = max(0.65, min(1.35, round(base_speed * (1.0 + pct / 100.0), 2)))
+                edge_pct = int(round(pct))
+            else:
+                kokoro_spd = base_speed
+                edge_pct = 0
+
+    edge_rate = f"{edge_pct:+d}%"
+    return kokoro_spd, edge_rate
+
+
 async def generate_speech_with_words(
     text: str,
     voice: str = "en-US-ChristopherNeural",
-    rate: str = "+10%",
+    rate: str = "+0%",
     pitch: str = "+0Hz",
     output_audio_path: str = "output_voice.mp3",
     provider: Optional[str] = None
@@ -232,22 +288,19 @@ async def generate_speech_with_words(
         raise ValueError("Script text cannot be empty.")
 
     req_provider = (provider or get_tts_provider()).lower()
+    kokoro_speed, edge_rate_str = resolve_voice_speeds(voice, rate)
 
     # 0. Kokoro Local AI Route (Zero Cloud Cost)
-    if req_provider == "kokoro" or voice.startswith("kokoro:"):
+    if (
+        req_provider == "kokoro"
+        or voice.startswith("kokoro:")
+        or any(k in voice.lower() for k in ("am_adam", "am_onyx", "am_michael", "bm_george", "adam", "onyx", "michael", "george", "kokoro"))
+    ):
         try:
             import tts_engine
             kokoro_voice = voice.replace("kokoro:", "")
             channel = "mystery" if any(k in kokoro_voice for k in ("george", "michael")) else "motivational"
             voice_type = "alternative" if any(k in kokoro_voice for k in ("onyx", "george")) else "primary"
-
-            # Parse speed from rate string (e.g. "+10%", "-5%", "+0%")
-            speed_val = 1.0
-            if rate:
-                m = re.search(r'([+-]?\d+)', str(rate))
-                if m:
-                    pct = float(m.group(1))
-                    speed_val = max(0.6, min(1.8, 1.0 + (pct / 100.0)))
 
             engine = tts_engine.KokoroTTSEngine.get_instance()
             out_p, dur = engine.synthesize(
@@ -256,7 +309,7 @@ async def generate_speech_with_words(
                 voice=kokoro_voice,
                 channel=channel,
                 voice_type=voice_type,
-                speed_override=speed_val
+                speed_override=kokoro_speed
             )
             if os.path.exists(output_audio_path) and os.path.getsize(output_audio_path) > 1000:
                 from subtitles import extract_word_timestamps
@@ -306,7 +359,7 @@ async def generate_speech_with_words(
             comm = edge_tts.Communicate(
                 text=clean_text,
                 voice=edge_voice,
-                rate=rate,
+                rate=edge_rate_str,
                 pitch=pitch,
                 boundary="WordBoundary",
                 connector=connector,

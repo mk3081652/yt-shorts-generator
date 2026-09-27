@@ -33,15 +33,15 @@ CHANNEL_CONFIG = {
         "primary": {
             "voice": "am_adam",
             "lang_code": "a",
-            "base_speed": 1.05,
-            "speed": 1.15,  # Automatic +10% pacing boost
+            "base_speed": 0.85,
+            "speed": 0.85,
             "description": "Deep, commanding, high authority"
         },
         "alternative": {
             "voice": "am_onyx",
             "lang_code": "a",
-            "base_speed": 1.05,
-            "speed": 1.15,  # Automatic +10% pacing boost
+            "base_speed": 0.85,
+            "speed": 0.85,
             "description": "Resonant, powerful, gritty"
         }
     },
@@ -50,15 +50,15 @@ CHANNEL_CONFIG = {
         "primary": {
             "voice": "am_michael",
             "lang_code": "a",
-            "base_speed": 0.90,
-            "speed": 0.99,  # Automatic +10% pacing boost (0.90 * 1.10 = 0.99)
+            "base_speed": 0.88,
+            "speed": 0.88,
             "description": "Deep, documentary, true-crime tone"
         },
         "alternative": {
             "voice": "bm_george",
             "lang_code": "b",
-            "base_speed": 0.88,
-            "speed": 0.97,  # Automatic +10% pacing boost (0.88 * 1.10 ≈ 0.97)
+            "base_speed": 0.86,
+            "speed": 0.86,
             "description": "Gritty British narrator, atmospheric suspense"
         }
     }
@@ -177,29 +177,29 @@ class KokoroTTSEngine:
         if not norm_text:
             raise ValueError("Input text cannot be empty.")
 
-        # Determine voice and language code
+        # Determine voice and language code with calibrated natural baselines
         resolved_voice = "am_adam"
         resolved_lang = "a"
-        resolved_speed = 1.15
+        resolved_speed = 0.85
 
         if voice:
             v_lower = voice.lower().replace("kokoro:", "").strip()
             if "george" in v_lower:
                 resolved_voice = "bm_george"
                 resolved_lang = "b"
-                resolved_speed = 0.97
+                resolved_speed = 0.86
             elif "michael" in v_lower:
                 resolved_voice = "am_michael"
                 resolved_lang = "a"
-                resolved_speed = 0.99
+                resolved_speed = 0.88
             elif "onyx" in v_lower:
                 resolved_voice = "am_onyx"
                 resolved_lang = "a"
-                resolved_speed = 1.15
+                resolved_speed = 0.85
             elif "adam" in v_lower:
                 resolved_voice = "am_adam"
                 resolved_lang = "a"
-                resolved_speed = 1.15
+                resolved_speed = 0.85
             else:
                 channel_key = channel.lower() if channel.lower() in CHANNEL_CONFIG else "motivational"
                 voice_key = voice_type.lower() if voice_type.lower() in ("primary", "alternative") else "primary"
@@ -215,7 +215,13 @@ class KokoroTTSEngine:
             resolved_lang = cfg["lang_code"]
             resolved_speed = cfg["speed"]
 
-        speed = speed_override if speed_override is not None else resolved_speed
+        if speed_override is not None:
+            try:
+                speed = max(0.60, min(1.40, float(speed_override)))
+            except (ValueError, TypeError):
+                speed = resolved_speed
+        else:
+            speed = resolved_speed
 
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
         ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()

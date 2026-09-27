@@ -42,6 +42,7 @@ def extract_best_frame_from_video(
     output_path: Optional[str] = None,
     target_w: int = 1280,
     target_h: int = 720,
+    timestamp: Optional[float] = None,
 ) -> Optional[str]:
     """
     Extracts a sharp frame from the rendered 9:16 video and immediately
@@ -68,7 +69,10 @@ def extract_best_frame_from_video(
         f"scale={target_w}:{target_h}:flags=lanczos"
     )
 
-    for ts in (1.5, 3.0, 5.0, 0.5):
+    ts_list = [timestamp] if timestamp is not None else []
+    ts_list.extend([ts for ts in (1.5, 3.0, 5.0, 0.5) if ts not in ts_list])
+
+    for ts in ts_list:
         cmd = [
             FFMPEG_EXE, "-y",
             "-ss", f"{ts:.2f}",

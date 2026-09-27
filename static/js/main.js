@@ -171,6 +171,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const voiceSelect = document.getElementById("voiceSelect");
     const speedSelect = document.getElementById("speedSelect");
+    const voiceSpeedSlider = document.getElementById("voiceSpeedSlider");
+    const voiceSpeedValue = document.getElementById("voiceSpeedValue");
+    const voiceSpeedBadge = document.getElementById("voiceSpeedBadge");
     const previewVoiceBtn = document.getElementById("previewVoiceBtn");
     const voiceAudioPreview = document.getElementById("voiceAudioPreview");
 
@@ -376,7 +379,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         if (sumVoice && voiceSelect) {
             const opt = voiceSelect.options[voiceSelect.selectedIndex];
-            sumVoice.textContent = opt ? opt.text : "Neural Voice";
+            const curVoice = voiceSelect.value;
+            const spd = getVoiceSpeed(curVoice);
+            const label = getSpeedLabel(spd);
+            const voiceTitle = opt ? opt.text.split("(")[0].trim() : "Neural Voice";
+            sumVoice.textContent = `${voiceTitle} (${spd.toFixed(2)}x • ${label})`;
         }
 
         if (sumStoryboard) {
@@ -482,11 +489,120 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    // Audition Voice
+    // ==========================================
+    // Per-Voice Calibrated Pacing & Speed Management
+    // ==========================================
+    const SPEED_LABELS = {
+        0.70: "Dramatic Slow",
+        0.75: "Dramatic Slow",
+        0.80: "Relaxed Storyteller",
+        0.85: "Natural & Deep",
+        0.88: "Suspenseful Mystery",
+        0.90: "Steady & Clear",
+        0.95: "Brisk & Engaging",
+        1.00: "Fast YouTube Pacing",
+        1.05: "Punchy Shorts",
+        1.10: "Rapid High-Energy",
+        1.15: "Hyper Turbo",
+        1.20: "Hyper Turbo",
+        1.25: "Maximum Speed"
+    };
+
+    function getSpeedLabel(val) {
+        const rounded = Math.round(parseFloat(val) * 100) / 100;
+        if (SPEED_LABELS[rounded]) return SPEED_LABELS[rounded];
+        if (rounded <= 0.75) return "Dramatic Slow";
+        if (rounded <= 0.85) return "Natural & Deep";
+        if (rounded <= 0.95) return "Steady & Clear";
+        if (rounded <= 1.05) return "Punchy Pacing";
+        return "Rapid High-Energy";
+    }
+
+    const DEFAULT_VOICE_SPEEDS = {
+        "kokoro:am_adam": 0.85,
+        "kokoro:am_onyx": 0.85,
+        "kokoro:am_michael": 0.88,
+        "kokoro:bm_george": 0.86,
+        "en-US-ChristopherNeural": 1.00
+    };
+
+    let userVoiceSpeeds = {};
+    try {
+        userVoiceSpeeds = JSON.parse(localStorage.getItem("yt_voice_speeds") || "{}");
+    } catch (e) {
+        userVoiceSpeeds = {};
+    }
+
+    function getVoiceSpeed(voiceId) {
+        if (userVoiceSpeeds && userVoiceSpeeds[voiceId] !== undefined) {
+            return parseFloat(userVoiceSpeeds[voiceId]);
+        }
+        return DEFAULT_VOICE_SPEEDS[voiceId] || 0.85;
+    }
+
+    function setVoiceSpeed(voiceId, speedVal, syncInputs = true) {
+        const num = Math.max(0.70, Math.min(1.25, parseFloat(speedVal) || 0.85));
+        const formatted = num.toFixed(2);
+        userVoiceSpeeds[voiceId] = formatted;
+        try {
+            localStorage.setItem("yt_voice_speeds", JSON.stringify(userVoiceSpeeds));
+        } catch (e) {}
+
+        const label = getSpeedLabel(num);
+        if (voiceSpeedValue) voiceSpeedValue.textContent = `${formatted}x`;
+        if (voiceSpeedBadge) voiceSpeedBadge.textContent = `${formatted}x • ${label}`;
+        if (syncInputs) {
+            if (voiceSpeedSlider) voiceSpeedSlider.value = formatted;
+            if (speedSelect) speedSelect.value = formatted;
+        }
+
+        // Highlight active preset button
+        document.querySelectorAll(".btn-speed-preset").forEach(btn => {
+            const btnSpeed = parseFloat(btn.dataset.speed || 0).toFixed(2);
+            if (btnSpeed === formatted) {
+                btn.classList.add("active-speed-preset");
+                btn.style.borderColor = "#00e6ff";
+                btn.style.background = "rgba(0, 230, 255, 0.15)";
+                btn.style.color = "#00e6ff";
+            } else {
+                btn.classList.remove("active-speed-preset");
+                btn.style.borderColor = "rgba(255, 255, 255, 0.12)";
+                btn.style.background = "rgba(255, 255, 255, 0.04)";
+                btn.style.color = "#cbd5e1";
+            }
+        });
+    }
+
+    // Attach speed control listeners
+    if (voiceSpeedSlider) {
+        voiceSpeedSlider.addEventListener("input", (e) => {
+            const curVoice = voiceSelect ? voiceSelect.value : "kokoro:am_adam";
+            setVoiceSpeed(curVoice, e.target.value, false);
+            if (speedSelect) speedSelect.value = parseFloat(e.target.value).toFixed(2);
+        });
+    }
+
+    document.querySelectorAll(".btn-speed-preset").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const spd = btn.dataset.speed;
+            const curVoice = voiceSelect ? voiceSelect.value : "kokoro:am_adam";
+            setVoiceSpeed(curVoice, spd, true);
+        });
+    });
+
+    if (voiceSelect) {
+        voiceSelect.addEventListener("change", () => {
+            const curVoice = voiceSelect.value;
+            const spd = getVoiceSpeed(curVoice);
+            setVoiceSpeed(curVoice, spd, true);
+        });
+    }
+
+    // Audition Voice with exact selected pace
     if (previewVoiceBtn) {
         previewVoiceBtn.addEventListener("click", async () => {
-            const voice = voiceSelect.value;
-            const rate = speedSelect.value;
+            const voice = voiceSelect ? voiceSelect.value : "kokoro:am_adam";
+            const rate = getVoiceSpeed(voice).toFixed(2);
             const sampleText = scriptInput.value.trim().slice(0, 100) || "Welcome to the ultimate YouTube Shorts Creator!";
 
             previewVoiceBtn.disabled = true;
@@ -497,7 +613,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 if (res && res.audio_url) {
                     voiceAudioPreview.src = res.audio_url;
                     voiceAudioPreview.play();
-                    showToast("Playing voice audition!", "info");
+                    showToast(`Playing voice audition (${rate}x speed)!`, "info");
                 }
             } catch (err) {
                 showToast(`Voice audition failed: ${err.message}`, "error");
@@ -794,8 +910,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                 return;
             }
 
-            const voice = voiceSelect.value;
-            const voiceRate = speedSelect.value;
+            const voice = voiceSelect ? voiceSelect.value : "kokoro:am_adam";
+            const voiceRate = getVoiceSpeed(voice).toFixed(2);
             const subtitleStyle = document.querySelector('input[name="subtitleStyle"]:checked')?.value || "hyper_yellow";
             const bgmTrack = bgmSelect.value;
             const bgmVol = parseFloat(bgmVolume.value) || 0.18;
@@ -1058,9 +1174,16 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const opt = document.createElement("option");
                 opt.value = v.id || v.name;
                 opt.textContent = `${v.name || v.id} (${v.gender || "Neural"})`;
-                if (v.id === "en-US-ChristopherNeural") opt.selected = true;
+                if (v.id === "kokoro:am_adam" || v.id === "en-US-ChristopherNeural") {
+                    opt.selected = true;
+                }
                 voiceSelect.appendChild(opt);
             });
+
+            // Initialize speed control to match the active voice
+            if (voiceSelect && voiceSelect.value) {
+                setVoiceSpeed(voiceSelect.value, getVoiceSpeed(voiceSelect.value), true);
+            }
         }
 
         // Populate BGM
@@ -1598,8 +1721,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             return;
         }
 
-        const voice = voiceSelect ? voiceSelect.value : "en-US-ChristopherNeural";
-        const voiceRate = speedSelect ? speedSelect.value : "+10%";
+        const voice = voiceSelect ? voiceSelect.value : "kokoro:am_adam";
+        const voiceRate = getVoiceSpeed(voice).toFixed(2);
         const subtitleStyle = document.querySelector('input[name="subtitleStyle"]:checked')?.value || "hyper_yellow";
         const bgmTrack = bgmSelect ? bgmSelect.value : "mystery_suspense";
         const bgmVol = bgmVolume ? (parseFloat(bgmVolume.value) || 0.18) : 0.18;

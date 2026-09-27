@@ -315,6 +315,19 @@ def render_shorts_video(
                     output_audio_path=voice_path
                 )
             )
+            if project:
+                try:
+                    from engine.project import save_project
+                    project.timeline = {
+                        "audio_path": actual_voice_path,
+                        "voice": voice,
+                        "rate": voice_rate,
+                        "total_duration": total_duration,
+                        "word_boundaries": word_boundaries
+                    }
+                    save_project(project)
+                except Exception as e:
+                    logger.warning(f"Could not cache timeline to project: {e}")
 
         if progress_callback:
             progress_callback("Speech synthesis complete. Aligning scenes to word boundaries...", 22)
@@ -458,28 +471,34 @@ def render_shorts_video(
         else:
             v_chain = f"{video_filter_in},subtitles=filename='{norm_ass_path}'[vout]"
 
-        # Compose Audio Inputs
-        audio_streams = ["[1:a]volume=1.0[v_clean]"]
+        # Compose Audio Inputs: Boost voiceover, standardize sample rates, mix without attenuation
+        audio_streams = ["[1:a]volume=1.25,aformat=sample_rates=44100:channel_layouts=stereo[v_clean]"]
         amix_inputs = ["[v_clean]"]
         next_in_idx = 2
 
         if bgm_file and os.path.exists(bgm_file):
             ffmpeg_cmd.extend(["-stream_loop", "-1", "-i", os.path.abspath(bgm_file)])
+            # Keep BGM background level soft so spoken narration is dominant and crystal clear
+            bgm_level = max(0.08, min(0.22, bgm_volume if bgm_volume is not None else 0.16))
             if motion_texture == "film_grain" or kwargs.get("sidechain_ducking"):
-                audio_streams.append(f"[{next_in_idx}:a]volume={bgm_volume:.2f},sidechaincompress=threshold=0.08:ratio=5:attack=50:release=350[bgm_clean]")
+                audio_streams.append(
+                    f"[{next_in_idx}:a]volume={bgm_level:.2f},sidechaincompress=threshold=0.08:ratio=5:attack=50:release=350,aformat=sample_rates=44100:channel_layouts=stereo[bgm_clean]"
+                )
             else:
-                audio_streams.append(f"[{next_in_idx}:a]volume={bgm_volume:.2f}[bgm_clean]")
+                audio_streams.append(
+                    f"[{next_in_idx}:a]volume={bgm_level:.2f},aformat=sample_rates=44100:channel_layouts=stereo[bgm_clean]"
+                )
             amix_inputs.append("[bgm_clean]")
             next_in_idx += 1
 
         if actual_sfx_path and os.path.exists(actual_sfx_path):
             ffmpeg_cmd.extend(["-i", os.path.abspath(actual_sfx_path)])
-            audio_streams.append(f"[{next_in_idx}:a]volume=1.0[sfx_clean]")
+            audio_streams.append(f"[{next_in_idx}:a]volume=0.20,aformat=sample_rates=44100:channel_layouts=stereo[sfx_clean]")
             amix_inputs.append("[sfx_clean]")
             next_in_idx += 1
 
         if len(amix_inputs) > 1:
-            mix_chain = "".join(amix_inputs) + f"amix=inputs={len(amix_inputs)}:duration=first:dropout_transition=2[aout]"
+            mix_chain = "".join(amix_inputs) + f"amix=inputs={len(amix_inputs)}:duration=first:dropout_transition=2:normalize=0[aout]"
             filter_complex = f"{v_chain};" + ";".join(audio_streams) + ";" + mix_chain
             ffmpeg_cmd.extend([
                 "-filter_complex", filter_complex,

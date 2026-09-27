@@ -184,16 +184,40 @@
                             <select id="voiceSelect" class="form-select"></select>
                         </div>
 
-                        <div class="form-row">
-                            <div class="form-group flex-1">
-                                <label for="speedSelect">Speed Pacing</label>
-                                <select id="speedSelect" class="form-select">
-                                    <option value="+0%">Normal (1.0x)</option>
-                                    <option value="+10%" selected>Punchy (+10%)</option>
-                                    <option value="+15%">Fast (+15%)</option>
-                                    <option value="+20%">Hyper Viral (+20%)</option>
-                                </select>
+                        <div class="form-group" style="margin-top: 14px;">
+                            <div class="slider-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <label for="voiceSpeedSlider" style="display: flex; align-items: center; gap: 8px; font-weight: 600; color: #e0e4f0;">
+                                    <span>Voice Pacing / Speed</span>
+                                    <span id="voiceSpeedBadge" style="font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3);">0.85x • Natural & Authoritative</span>
+                                </label>
+                                <span id="voiceSpeedValue" style="font-weight: 700; color: #00e6ff; font-size: 14px;">0.85x</span>
                             </div>
+                            <input type="range" id="voiceSpeedSlider" min="0.70" max="1.25" step="0.05" value="0.85" class="form-slider" style="margin-bottom: 10px; width: 100%;">
+                            
+                            <!-- Quick Preset Pill Buttons -->
+                            <div class="speed-presets-row" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
+                                <button type="button" class="btn-speed-preset" data-speed="0.75" title="Dramatic slow pace (125 WPM)" style="padding: 5px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #cbd5e1; cursor: pointer; text-align: center;">0.75x Slow</button>
+                                <button type="button" class="btn-speed-preset" data-speed="0.80" title="Relaxed storytelling pace (140 WPM)" style="padding: 5px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #cbd5e1; cursor: pointer; text-align: center;">0.80x Relaxed</button>
+                                <button type="button" class="btn-speed-preset active-speed-preset" data-speed="0.85" title="Natural commanding pace (150 WPM) - Recommended" style="padding: 5px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; border: 1px solid #00e6ff; background: rgba(0, 230, 255, 0.15); color: #00e6ff; cursor: pointer; text-align: center;">0.85x Natural</button>
+                                <button type="button" class="btn-speed-preset" data-speed="0.90" title="Steady conversational pace (160 WPM)" style="padding: 5px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #cbd5e1; cursor: pointer; text-align: center;">0.90x Steady</button>
+                                <button type="button" class="btn-speed-preset" data-speed="0.95" title="Brisk energetic pace (166 WPM)" style="padding: 5px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #cbd5e1; cursor: pointer; text-align: center;">0.95x Brisk</button>
+                                <button type="button" class="btn-speed-preset" data-speed="1.00" title="Standard fast YouTube pace (171 WPM)" style="padding: 5px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #cbd5e1; cursor: pointer; text-align: center;">1.00x Fast</button>
+                                <button type="button" class="btn-speed-preset" data-speed="1.05" title="Punchy retention pace" style="padding: 5px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #cbd5e1; cursor: pointer; text-align: center;">1.05x Punchy</button>
+                                <button type="button" class="btn-speed-preset" data-speed="1.10" title="Rapid high-energy pace" style="padding: 5px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #cbd5e1; cursor: pointer; text-align: center;">1.10x Rapid</button>
+                            </div>
+                            <!-- Synced legacy select for programmatic access -->
+                            <select id="speedSelect" class="form-select" style="display: none;">
+                                <option value="0.75">0.75x</option>
+                                <option value="0.80">0.80x</option>
+                                <option value="0.85" selected>0.85x</option>
+                                <option value="0.90">0.90x</option>
+                                <option value="0.95">0.95x</option>
+                                <option value="1.00">1.00x</option>
+                                <option value="1.05">1.05x</option>
+                                <option value="1.10">1.10x</option>
+                                <option value="+0%">Normal (1.0x)</option>
+                                <option value="+10%">Punchy (+10%)</option>
+                            </select>
                         </div>
                         <audio id="voiceAudioPreview" class="hidden-audio" controls></audio>
                     </div>
