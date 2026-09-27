@@ -17,48 +17,49 @@ from engine.config import (
 )
 from engine.whisper_client import align_words_for_audio
 
-# Curated list of high-retention viral voices (4 Kokoro Local AI voices + 1 Christopher Neural voice)
+# Curated list of high-retention viral voices (100% Free, Studio Broadcast Quality, Zero Humming)
 VOICES = {
-    # Local Zero-Cost Neural Voices (Kokoro TTS)
-    "kokoro:am_adam": {
-        "name": "Kokoro Adam (Motivational Authority - Local AI)",
+    # 💼 Motivational & Finance Topics (Deep, commanding, ElevenLabs-grade authority)
+    "en-US-BrianMultilingualNeural": {
+        "name": "Brian (Motivational & Finance - Deep 1% Mindset)",
         "gender": "Male",
         "lang": "en-US",
-        "vibe": "Deep, Commanding, 1% Mindset",
-        "default_speed": 0.85,
-        "recommended_pace": "0.85x (Deep & Authoritative)"
+        "vibe": "Deep, commanding, wealth building, alpha power",
+        "default_speed": 0.90,
+        "recommended_pace": "0.90x (Commanding & Resonant)"
     },
-    "kokoro:am_onyx": {
-        "name": "Kokoro Onyx (Motivational Resonant - Local AI)",
+    "en-US-AndrewMultilingualNeural": {
+        "name": "Andrew (Motivational & Finance - Charismatic Wealth Mentor)",
         "gender": "Male",
         "lang": "en-US",
-        "vibe": "Gritty, Powerful, Discipline",
-        "default_speed": 0.85,
-        "recommended_pace": "0.85x (Resonant & Powerful)"
+        "vibe": "High-status, engaging, financial wisdom, confident",
+        "default_speed": 0.92,
+        "recommended_pace": "0.92x (Smooth & Engaging)"
     },
-    "kokoro:am_michael": {
-        "name": "Kokoro Michael (True-Crime Mystery - Local AI)",
-        "gender": "Male",
-        "lang": "en-US",
-        "vibe": "Investigative, Chilling, Unsolved",
-        "default_speed": 0.88,
-        "recommended_pace": "0.88x (Investigative & Chilling)"
-    },
-    "kokoro:bm_george": {
-        "name": "Kokoro George (British Suspense - Local AI)",
+    # 🔍 Mysterious Events & Unsolved Enigmas (Dark, chilling, investigative)
+    "en-GB-RyanNeural": {
+        "name": "Ryan (Mysterious Events - Dark True Crime & British Suspense)",
         "gender": "Male",
         "lang": "en-GB",
-        "vibe": "Atmospheric, Classy, Historical",
-        "default_speed": 0.86,
-        "recommended_pace": "0.86x (Atmospheric Suspense)"
+        "vibe": "Chilling, investigative, solemn, documentary grit",
+        "default_speed": 0.88,
+        "recommended_pace": "0.88x (Dark & Gripping)"
     },
-    # Ultra-Fast Built-in Neural Voice (Free & Instant)
-    "en-US-ChristopherNeural": {
-        "name": "Christopher (US - Deep & Authoritative / MrBeast style)",
+    "en-US-GuyNeural": {
+        "name": "Guy (Mysterious Events - Cinematic Mystery & Unsolved Files)",
         "gender": "Male",
         "lang": "en-US",
-        "vibe": "Storytelling, Facts, Mysteries",
-        "default_speed": 1.0,
+        "vibe": "Atmospheric, deep American narrator, dark revelations",
+        "default_speed": 0.88,
+        "recommended_pace": "0.88x (Cinematic Suspense)"
+    },
+    # 🚀 Viral Storytelling (High-retention, punchy facts)
+    "en-US-ChristopherNeural": {
+        "name": "Christopher (Viral Storytelling - High-CTR Facts & Hooks)",
+        "gender": "Male",
+        "lang": "en-US",
+        "vibe": "Fast-paced, punchy, curiosity-driven",
+        "default_speed": 1.00,
         "recommended_pace": "1.00x (Standard Punchy)"
     }
 }
@@ -224,26 +225,33 @@ def generate_openai_speech(
 
 def resolve_voice_speeds(voice: str, rate: Any) -> Tuple[float, str]:
     """
-    Resolves speed for Kokoro (absolute float multiplier) and Edge-TTS (rate string e.g. '-15%', '+0%').
+    Resolves speed for voices into Edge-TTS rate string (e.g. '-10%', '-15%', '+0%') and float multiplier.
     Provides calibrated natural baselines for each voice:
-    - Adam & Onyx: 0.85 (deep, commanding, authoritative, not rushed)
-    - Michael: 0.88 (suspenseful, true-crime documentary)
-    - George: 0.86 (atmospheric British narrator)
-    - Christopher: 1.00 (standard Edge-TTS tempo)
+    - Brian: 0.90 (-10%) deep commanding authority for wealth/motivation
+    - Andrew: 0.92 (-8%) charismatic engaging finance mentor
+    - Ryan: 0.88 (-12%) dark, chilling true-crime suspense
+    - Guy: 0.88 (-12%) atmospheric cinematic mystery narrator
+    - Christopher: 1.00 (+0%) viral high-CTR storytelling
     """
     v = (voice or "").lower()
-    if "adam" in v or "onyx" in v:
-        base_speed = 0.85
-    elif "michael" in v:
+    if "brian" in v:
+        base_speed = 0.90
+    elif "andrew" in v:
+        base_speed = 0.92
+    elif "ryan" in v:
         base_speed = 0.88
-    elif "george" in v:
-        base_speed = 0.86
+    elif "guy" in v:
+        base_speed = 0.88
+    elif "adam" in v or "onyx" in v:
+        base_speed = 0.90
+    elif "michael" in v or "george" in v:
+        base_speed = 0.88
     else:
         base_speed = 1.00
 
     if not rate or str(rate).strip() in ("", "default"):
         kokoro_spd = base_speed
-        edge_pct = 0
+        edge_pct = int(round((base_speed - 1.0) * 100))
     else:
         s = str(rate).strip().lower().rstrip("x")
         # Direct float e.g. "0.85", "0.75", "0.90", "1.00"
@@ -257,12 +265,13 @@ def resolve_voice_speeds(voice: str, rate: Any) -> Tuple[float, str]:
                 pct = float(m.group(1))
                 if pct == 0:
                     kokoro_spd = base_speed
+                    edge_pct = int(round((base_speed - 1.0) * 100))
                 else:
                     kokoro_spd = max(0.65, min(1.35, round(base_speed * (1.0 + pct / 100.0), 2)))
-                edge_pct = int(round(pct))
+                    edge_pct = int(round(pct))
             else:
                 kokoro_spd = base_speed
-                edge_pct = 0
+                edge_pct = int(round((base_speed - 1.0) * 100))
 
     edge_rate = f"{edge_pct:+d}%"
     return kokoro_spd, edge_rate
@@ -290,43 +299,19 @@ async def generate_speech_with_words(
     req_provider = (provider or get_tts_provider()).lower()
     kokoro_speed, edge_rate_str = resolve_voice_speeds(voice, rate)
 
-    # 0. Kokoro Local AI Route (Zero Cloud Cost)
-    if (
-        req_provider == "kokoro"
-        or voice.startswith("kokoro:")
-        or any(k in voice.lower() for k in ("am_adam", "am_onyx", "am_michael", "bm_george", "adam", "onyx", "michael", "george", "kokoro"))
-    ):
-        try:
-            import tts_engine
-            kokoro_voice = voice.replace("kokoro:", "")
-            channel = "mystery" if any(k in kokoro_voice for k in ("george", "michael")) else "motivational"
-            voice_type = "alternative" if any(k in kokoro_voice for k in ("onyx", "george")) else "primary"
+    # Map any legacy voice names to clean studio neural voices
+    if voice.startswith("kokoro:") or "kokoro" in voice.lower():
+        v_sub = voice.replace("kokoro:", "").lower()
+        if "adam" in v_sub or "onyx" in v_sub:
+            voice = "en-US-BrianMultilingualNeural"
+        elif "michael" in v_sub:
+            voice = "en-US-GuyNeural"
+        elif "george" in v_sub:
+            voice = "en-GB-RyanNeural"
+        else:
+            voice = "en-US-ChristopherNeural"
 
-            engine = tts_engine.KokoroTTSEngine.get_instance()
-            out_p, dur = engine.synthesize(
-                text=clean_text,
-                output_path=output_audio_path,
-                voice=kokoro_voice,
-                channel=channel,
-                voice_type=voice_type,
-                speed_override=kokoro_speed
-            )
-            if os.path.exists(output_audio_path) and os.path.getsize(output_audio_path) > 500:
-                words = []
-                try:
-                    from subtitles import extract_word_timestamps
-                    words = extract_word_timestamps(output_audio_path, script_text=clean_text)
-                except Exception as w_err:
-                    print(f"[TTS] Word extraction warning: {w_err}")
-                if not words:
-                    from subtitles import align_words_duration_fallback
-                    words = align_words_duration_fallback(output_audio_path, script_text=clean_text)
-                return output_audio_path, words, dur
-        except Exception as e:
-            print(f"[TTS] Kokoro synthesis error: {e}. Falling back to next available provider...")
-
-
-    # 1. ElevenLabs Premium Route
+    # 1. ElevenLabs Premium Route (if configured)
     if req_provider == "elevenlabs" or voice.startswith("elevenlabs:"):
         el_key = get_elevenlabs_api_key()
         if el_key:
@@ -341,7 +326,7 @@ async def generate_speech_with_words(
                 return output_audio_path, words, dur
             print("[TTS] ElevenLabs synthesis failed, falling back to next provider...")
 
-    # 2. OpenAI TTS-HD Route
+    # 2. OpenAI TTS-HD Route (if configured)
     if req_provider in ("openai", "elevenlabs") or voice.startswith("openai:"):
         oa_key = get_openai_api_key()
         if oa_key:
@@ -352,10 +337,19 @@ async def generate_speech_with_words(
                 return output_audio_path, words, dur
             print("[TTS] OpenAI TTS synthesis failed, falling back to Edge-TTS...")
 
-    # 3. Edge-TTS Route (Fast, zero-cost, native WordBoundaries)
+    # 3. Studio Neural Edge-TTS Route (100% Free, Zero Humming, Native WordBoundaries)
     edge_voice = voice
     if edge_voice.startswith("openai:") or edge_voice.startswith("elevenlabs:") or (edge_voice not in VOICES and "Neural" not in edge_voice):
-        edge_voice = "en-US-ChristopherNeural"
+        if "brian" in edge_voice.lower() or "adam" in edge_voice.lower() or "onyx" in edge_voice.lower():
+            edge_voice = "en-US-BrianMultilingualNeural"
+        elif "andrew" in edge_voice.lower():
+            edge_voice = "en-US-AndrewMultilingualNeural"
+        elif "ryan" in edge_voice.lower() or "george" in edge_voice.lower():
+            edge_voice = "en-GB-RyanNeural"
+        elif "guy" in edge_voice.lower() or "michael" in edge_voice.lower():
+            edge_voice = "en-US-GuyNeural"
+        else:
+            edge_voice = "en-US-ChristopherNeural"
 
     last_error = None
     

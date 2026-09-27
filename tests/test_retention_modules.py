@@ -107,21 +107,21 @@ class TestRetentionModules(unittest.TestCase):
         self.assertEqual(len(myst), 2)
 
     def test_08_curated_voices_count_and_selection(self):
-        """Voice Curation: Exactly 5 curated high-retention voices are registered."""
+        """Voice Curation: Exactly 5 curated broadcast-quality voices are registered."""
         from engine.tts import VOICES
         self.assertEqual(len(VOICES), 5)
         expected_voices = {
-            "kokoro:am_adam",
-            "kokoro:am_onyx",
-            "kokoro:am_michael",
-            "kokoro:bm_george",
+            "en-US-BrianMultilingualNeural",
+            "en-US-AndrewMultilingualNeural",
+            "en-GB-RyanNeural",
+            "en-US-GuyNeural",
             "en-US-ChristopherNeural"
         }
         self.assertEqual(set(VOICES.keys()), expected_voices)
-        # Verify legacy cloud and other voices are strictly removed
+        # Verify legacy buzzing and cloud paid voices are removed
         self.assertNotIn("openai:onyx", VOICES)
         self.assertNotIn("elevenlabs:adam", VOICES)
-        self.assertNotIn("en-US-GuyNeural", VOICES)
+        self.assertNotIn("kokoro:am_adam", VOICES)
         self.assertNotIn("hi-IN-MadhurNeural", VOICES)
 
     def test_09_download_visuals_zip_endpoint(self):

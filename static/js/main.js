@@ -519,11 +519,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     const DEFAULT_VOICE_SPEEDS = {
-        "kokoro:am_adam": 0.85,
-        "kokoro:am_onyx": 0.85,
+        "en-US-BrianMultilingualNeural": 0.90,
+        "en-US-AndrewMultilingualNeural": 0.92,
+        "en-GB-RyanNeural": 0.88,
+        "en-US-GuyNeural": 0.88,
+        "en-US-ChristopherNeural": 1.00,
+        // Legacy compatibility
+        "kokoro:am_adam": 0.90,
+        "kokoro:am_onyx": 0.90,
         "kokoro:am_michael": 0.88,
-        "kokoro:bm_george": 0.86,
-        "en-US-ChristopherNeural": 1.00
+        "kokoro:bm_george": 0.88
     };
 
     let userVoiceSpeeds = {};
@@ -1175,7 +1180,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 ? cfg.voices
                 : Object.entries(cfg.voices).map(([id, info]) => ({ id, ...info }));
 
-            const savedVoice = localStorage.getItem("yt_selected_voice") || "kokoro:am_adam";
+            const savedVoice = localStorage.getItem("yt_selected_voice") || "en-US-BrianMultilingualNeural";
 
             voiceList.forEach((v) => {
                 const opt = document.createElement("option");

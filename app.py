@@ -186,7 +186,7 @@ class CreateProjectRequest(BaseModel):
 
 class VoicePreviewRequest(BaseModel):
     text: str = "Welcome to the ultimate YouTube Shorts Creator!"
-    voice: str = "kokoro:am_adam"
+    voice: str = "en-US-BrianMultilingualNeural"
     voice_rate: Optional[str] = None
     rate: Optional[str] = None
 
@@ -320,55 +320,38 @@ def get_config():
 
 @app.post("/api/preview_voice")
 async def preview_voice(req: VoicePreviewRequest):
-    """Generates an ultra-fast (<0.3s) audio preview for the selected voice and pace."""
+    """Generates an ultra-fast (<0.8s) broadcast-quality audio preview for the selected voice and pace."""
     preview_id = str(uuid.uuid4())[:8]
     output_path = f"outputs/preview_{preview_id}.mp3"
     os.makedirs("outputs", exist_ok=True)
 
-    voice_val = (req.voice or "kokoro:am_adam").strip()
-    rate_val = req.rate or req.voice_rate or "0.85"
+    voice_val = (req.voice or "en-US-BrianMultilingualNeural").strip()
+    rate_val = req.rate or req.voice_rate or "0.90"
 
     raw_text = req.text.strip() if req.text else ""
-    sample_text = raw_text[:140] if raw_text else "Welcome to viral YouTube Shorts Creator!"
+    sample_text = raw_text[:160] if raw_text else "Welcome to viral YouTube Shorts Creator!"
     
-    from engine.tts import clean_text_for_tts, resolve_voice_speeds
+    from engine.tts import clean_text_for_tts, resolve_voice_speeds, VOICES
     clean_sample = clean_text_for_tts(sample_text) or "Welcome to YouTube Shorts!"
     kokoro_speed, edge_rate_str = resolve_voice_speeds(voice_val, rate_val)
 
-    # 1. Kokoro Local AI Route (Direct ultra-fast 200ms CPU synthesis, zero Whisper overhead)
-    if (
-        voice_val.startswith("kokoro:")
-        or any(k in voice_val.lower() for k in ("am_adam", "am_onyx", "am_michael", "bm_george", "adam", "onyx", "michael", "george", "kokoro"))
-    ):
-        try:
-            import tts_engine
-            kokoro_voice = voice_val.replace("kokoro:", "").strip()
-            channel = "mystery" if any(k in kokoro_voice for k in ("george", "michael")) else "motivational"
-            voice_type = "alternative" if any(k in kokoro_voice for k in ("onyx", "george")) else "primary"
+    # Clean voice resolution (maps any legacy or short names to exact neural voice ID)
+    edge_voice = voice_val
+    if edge_voice not in VOICES and "Neural" not in edge_voice:
+        v_low = edge_voice.lower()
+        if "brian" in v_low or "adam" in v_low or "onyx" in v_low:
+            edge_voice = "en-US-BrianMultilingualNeural"
+        elif "andrew" in v_low:
+            edge_voice = "en-US-AndrewMultilingualNeural"
+        elif "ryan" in v_low or "george" in v_low:
+            edge_voice = "en-GB-RyanNeural"
+        elif "guy" in v_low or "michael" in v_low:
+            edge_voice = "en-US-GuyNeural"
+        else:
+            edge_voice = "en-US-ChristopherNeural"
 
-            engine = tts_engine.KokoroTTSEngine.get_instance()
-            engine.synthesize(
-                text=clean_sample,
-                output_path=output_path,
-                voice=kokoro_voice,
-                channel=channel,
-                voice_type=voice_type,
-                speed_override=kokoro_speed
-            )
-            if os.path.exists(output_path) and os.path.getsize(output_path) > 500:
-                return {
-                    "audio_url": f"/outputs/preview_{preview_id}.mp3",
-                    "voice": voice_val,
-                    "speed": kokoro_speed
-                }
-        except Exception as e:
-            logger.error(f"[Preview] Kokoro voice preview error: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Kokoro voice synthesis failed: {e}")
-
-    # 2. Edge-TTS Route (Christopher or other Edge neural voices)
     try:
         import edge_tts
-        edge_voice = voice_val if "Neural" in voice_val else "en-US-ChristopherNeural"
         comm = edge_tts.Communicate(
             text=clean_sample,
             voice=edge_voice,
@@ -382,7 +365,7 @@ async def preview_voice(req: VoicePreviewRequest):
                 "speed": edge_rate_str
             }
     except Exception as e:
-        logger.error(f"[Preview] Edge-TTS error: {e}", exc_info=True)
+        logger.error(f"[Preview] Studio voice preview error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Voice preview failed: {e}")
 
     raise HTTPException(status_code=500, detail="Voice audition generation failed.")
