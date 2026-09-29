@@ -53,7 +53,14 @@ export function createSceneCard(scene, index, totalScenes, callbacks = {}) {
     } else if (scene.status === "queued") {
         statusBadge.textContent = "⏳ Queued";
     } else if (scene.status === "ready") {
-        statusBadge.textContent = "✅ Ready";
+        if (scene.source_tier === "pexels" || scene.media_type === "video") {
+            statusBadge.textContent = "🎬 Video (Pexels)";
+            statusBadge.style.background = "rgba(0, 230, 255, 0.15)";
+            statusBadge.style.color = "#00e6ff";
+            statusBadge.style.borderColor = "rgba(0, 230, 255, 0.4)";
+        } else {
+            statusBadge.textContent = "✅ Ready";
+        }
     } else if (scene.status === "failed") {
         const isQuota = scene.fail_reason === "flux_quota_exhausted";
         const isRate = scene.fail_reason === "flux_rate_limited";

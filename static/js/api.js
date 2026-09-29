@@ -163,14 +163,15 @@ export const api = {
     },
 
     // Project Operations
-    async createProject(script, start = "auto", manualDelimiter = false) {
+    async createProject(script, start = "auto", manualDelimiter = false, visualSource = "video") {
         return await request("/api/projects", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 script,
                 start,
-                manual_delimiter: manualDelimiter
+                manual_delimiter: manualDelimiter,
+                visual_source: visualSource
             })
         });
     },
@@ -195,14 +196,16 @@ export const api = {
         });
     },
 
-    async editMeta(projectId, sceneId = null, motion = null, styleLock = null) {
+    async editMeta(projectId, sceneId = null, motion = null, styleLock = null, transitionStyle = null, visualSource = null) {
         return await request(`/api/projects/${projectId}/edit_meta`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 segment_id: sceneId,
                 motion,
-                style_lock: styleLock
+                style_lock: styleLock,
+                transition_style: transitionStyle,
+                visual_source: visualSource
             })
         });
     },

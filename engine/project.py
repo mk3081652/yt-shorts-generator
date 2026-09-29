@@ -18,6 +18,7 @@ from PIL import Image
 from engine.beats import create_story_beats
 from engine.director import plan_scenes_with_director, compile_prompt, validate_image_with_vision_qa
 from engine.flux import generate as generate_flux
+from engine.stock_video import fetch_broll_for_scene, CACHE_DIR as STOCK_CACHE_DIR
 from engine.llm import generate_content
 from engine.config import get_gemini_api_key
 
@@ -28,6 +29,7 @@ PREVIEWS_DIR = os.path.abspath("outputs/ai_previews")
 os.makedirs(PROJECTS_DIR, exist_ok=True)
 os.makedirs(CUSTOM_MEDIA_DIR, exist_ok=True)
 os.makedirs(PREVIEWS_DIR, exist_ok=True)
+os.makedirs(STOCK_CACHE_DIR, exist_ok=True)
 
 # Background generation worker pool (max 2 workers)
 _GEN_EXECUTOR = ThreadPoolExecutor(max_workers=2)
@@ -118,6 +120,7 @@ class Project:
     style_lock: str = ""
     start_mode: str = "auto"    # "auto" | "manual"
     transition_style: str = "crossfade"  # "crossfade" | "zoom-punch" | "none"
+    visual_source: str = "video"         # "video" (Pexels) | "flux" (AI art)
     scenes: List[Scene] = field(default_factory=list)
     timeline: Optional[Dict[str, Any]] = None
     total_duration: float = 0.0
@@ -137,6 +140,7 @@ class Project:
             "start_mode": self.start_mode,
             "mode": self.start_mode,  # Compatibility alias
             "transition_style": self.transition_style,
+            "visual_source": self.visual_source,
             "scenes": [s.to_dict() for s in self.scenes],
             "segments": [s.to_dict() for s in self.scenes],  # Compatibility alias
             "timeline": self.timeline,
@@ -157,6 +161,7 @@ class Project:
         script = data.get("script") or data.get("script_text") or ""
         mode = data.get("start_mode") or data.get("mode") or "auto"
         transition_style = data.get("transition_style", "crossfade")
+        visual_source = data.get("visual_source", "video")
 
         p = cls(
             id=p_id,
@@ -164,6 +169,7 @@ class Project:
             style_lock=data.get("style_lock", ""),
             start_mode=mode,
             transition_style=transition_style,
+            visual_source=visual_source,
             scenes=scenes,
             timeline=data.get("timeline"),
             total_duration=float(data.get("total_duration", 0.0)),
@@ -188,6 +194,7 @@ class Project:
         snap = {
             "script": self.script,
             "style_lock": self.style_lock,
+            "visual_source": self.visual_source,
             "scenes": [s.to_dict() for s in self.scenes],
             "total_duration": self.total_duration
         }
@@ -257,6 +264,7 @@ def create_project(
     script: str,
     start: str = "auto",
     manual_delimiter: bool = False,
+    visual_source: str = "video",
     api_key: Optional[str] = None
 ) -> Project:
     """Creates a new Project, runs the Director, and queues generation if mode=auto."""
@@ -298,6 +306,7 @@ def create_project(
         script=script.strip(),
         style_lock="",
         start_mode=start,
+        visual_source=visual_source,
         scenes=scenes,
         total_duration=total_dur
     )
@@ -310,7 +319,7 @@ def create_project(
 
 
 def queue_project_generation(project_id: str) -> None:
-    """Queues FLUX generation for all empty/queued scenes in background."""
+    """Queues generation (Pexels b-roll or FLUX) for all empty/queued scenes in background."""
     project = load_project(project_id)
     if not project:
         return
@@ -337,31 +346,56 @@ def queue_project_generation(project_id: str) -> None:
             sc.status = "generating"
             save_project(proj)
 
-            out_name = f"{pid}_{sc.id}.jpg"
-            out_path = os.path.join(PREVIEWS_DIR, out_name)
+            visual_src = getattr(proj, "visual_source", "video")
+            media_assigned = False
 
-            ok, reason = generate_flux(sc.image_prompt, out_path)
+            # 1. If visual_source is video (or hybrid), try Pexels b-roll first
+            if visual_src in ("video", "hybrid"):
+                try:
+                    broll = fetch_broll_for_scene(
+                        scene_id=sc.id,
+                        scene_text=sc.text,
+                        topic=proj.script[:120]
+                    )
+                    if broll and broll.get("media_path") and os.path.exists(broll["media_path"]):
+                        fname = os.path.basename(broll["media_path"])
+                        sc.media_url = f"/outputs/stock_videos/{fname}"
+                        sc.media_path = broll["media_path"]
+                        sc.media_type = "video"
+                        sc.source_tier = "pexels"
+                        sc.fail_reason = None
+                        sc.status = "ready"
+                        media_assigned = True
+                except Exception as broll_err:
+                    print(f"[StockVideo] Worker error for scene {sc.id}: {broll_err}")
 
-            if pid in _CANCELLED_PROJECTS:
-                break
+            # 2. If not assigned (or if visual_source is flux), generate via FLUX
+            if not media_assigned:
+                out_name = f"{pid}_{sc.id}.jpg"
+                out_path = os.path.join(PREVIEWS_DIR, out_name)
 
-            if ok and os.path.exists(out_path):
-                sc.status = "ready"
-                sc.media_url = f"/outputs/ai_previews/{out_name}"
-                sc.media_path = out_path
-                sc.media_type = "image"
-                sc.source_tier = "flux"
-                sc.fail_reason = None
+                ok, reason = generate_flux(sc.image_prompt, out_path)
 
-                # Optional Vision QA
-                score, note = validate_image_with_vision_qa(out_path, sc.text)
-                if score is not None:
-                    sc.qa_score = score
-                    sc.qa_note = note
-            else:
-                sc.status = "failed"
-                sc.source_tier = "flux_failed"
-                sc.fail_reason = reason
+                if pid in _CANCELLED_PROJECTS:
+                    break
+
+                if ok and os.path.exists(out_path):
+                    sc.status = "ready"
+                    sc.media_url = f"/outputs/ai_previews/{out_name}"
+                    sc.media_path = out_path
+                    sc.media_type = "image"
+                    sc.source_tier = "flux"
+                    sc.fail_reason = None
+
+                    # Optional Vision QA
+                    score, note = validate_image_with_vision_qa(out_path, sc.text)
+                    if score is not None:
+                        sc.qa_score = score
+                        sc.qa_note = note
+                else:
+                    sc.status = "failed"
+                    sc.source_tier = "flux_failed"
+                    sc.fail_reason = reason
 
             save_project(proj)
 
@@ -413,7 +447,8 @@ def edit_meta(
     motion: Optional[str] = None,
     hold_previous: Optional[bool] = None,
     style_lock: Optional[str] = None,
-    transition_style: Optional[str] = None
+    transition_style: Optional[str] = None,
+    visual_source: Optional[str] = None
 ) -> Tuple[Optional[Project], Optional[str], int]:
     project = load_project(project_id)
     if not project:
@@ -426,6 +461,9 @@ def edit_meta(
 
     if transition_style is not None:
         project.transition_style = transition_style.strip()
+
+    if visual_source is not None:
+        project.visual_source = visual_source.strip()
 
     if scene_id:
         target = next((s for s in project.scenes if s.id == scene_id), None)
@@ -852,7 +890,7 @@ def clear_media(project_id: str, scene_id: str) -> Tuple[Optional[Project], Opti
 
 
 def generate_scene_media(project_id: str, scene_id: str, api_key: Optional[str] = None) -> Tuple[Optional[Project], Optional[str], int]:
-    """Generates media for a single scene via FLUX. Fails if scene is manual (LOCKED)."""
+    """Generates media for a single scene via Stock Video (Pexels) or FLUX. Fails if scene is manual (LOCKED)."""
     project = load_project(project_id)
     if not project:
         return None, "Project not found", 404
@@ -867,22 +905,45 @@ def generate_scene_media(project_id: str, scene_id: str, api_key: Optional[str] 
     target.status = "generating"
     save_project(project)
 
-    out_name = f"{project_id}_{target.id}.jpg"
-    out_path = os.path.join(PREVIEWS_DIR, out_name)
+    visual_src = getattr(project, "visual_source", "video")
+    media_assigned = False
 
-    ok, reason = generate_flux(target.image_prompt, out_path, force=True)
+    if visual_src in ("video", "hybrid"):
+        try:
+            broll = fetch_broll_for_scene(
+                scene_id=target.id,
+                scene_text=target.text,
+                topic=project.script[:120]
+            )
+            if broll and broll.get("media_path") and os.path.exists(broll["media_path"]):
+                fname = os.path.basename(broll["media_path"])
+                target.status = "ready"
+                target.media_url = f"/outputs/stock_videos/{fname}"
+                target.media_path = broll["media_path"]
+                target.media_type = "video"
+                target.source_tier = "pexels"
+                target.fail_reason = None
+                media_assigned = True
+        except Exception as broll_err:
+            print(f"[StockVideo] Single scene error for {target.id}: {broll_err}")
 
-    if ok and os.path.exists(out_path):
-        target.status = "ready"
-        target.media_url = f"/outputs/ai_previews/{out_name}"
-        target.media_path = out_path
-        target.media_type = "image"
-        target.source_tier = "flux"
-        target.fail_reason = None
-    else:
-        target.status = "failed"
-        target.source_tier = "flux_failed"
-        target.fail_reason = reason
+    if not media_assigned:
+        out_name = f"{project_id}_{target.id}.jpg"
+        out_path = os.path.join(PREVIEWS_DIR, out_name)
+
+        ok, reason = generate_flux(target.image_prompt, out_path, force=True)
+
+        if ok and os.path.exists(out_path):
+            target.status = "ready"
+            target.media_url = f"/outputs/ai_previews/{out_name}"
+            target.media_path = out_path
+            target.media_type = "image"
+            target.source_tier = "flux"
+            target.fail_reason = None
+        else:
+            target.status = "failed"
+            target.source_tier = "flux_failed"
+            target.fail_reason = reason
 
     save_project(project)
     return project, None, 200
@@ -978,6 +1039,7 @@ def undo_project(project_id: str) -> Tuple[Optional[Project], Optional[str], int
     current_snap = {
         "script": project.script,
         "style_lock": project.style_lock,
+        "visual_source": project.visual_source,
         "scenes": [s.to_dict() for s in project.scenes],
         "total_duration": project.total_duration
     }
@@ -986,6 +1048,7 @@ def undo_project(project_id: str) -> Tuple[Optional[Project], Optional[str], int
     prev_snap = project.history.pop()
     project.script = prev_snap["script"]
     project.style_lock = prev_snap["style_lock"]
+    project.visual_source = prev_snap.get("visual_source", getattr(project, "visual_source", "video"))
     project.scenes = [Scene.from_dict(s) for s in prev_snap["scenes"]]
     project.total_duration = prev_snap["total_duration"]
     save_project(project)
@@ -1000,6 +1063,7 @@ def redo_project(project_id: str) -> Tuple[Optional[Project], Optional[str], int
     current_snap = {
         "script": project.script,
         "style_lock": project.style_lock,
+        "visual_source": project.visual_source,
         "scenes": [s.to_dict() for s in project.scenes],
         "total_duration": project.total_duration
     }
@@ -1008,6 +1072,7 @@ def redo_project(project_id: str) -> Tuple[Optional[Project], Optional[str], int
     next_snap = project.future.pop()
     project.script = next_snap["script"]
     project.style_lock = next_snap["style_lock"]
+    project.visual_source = next_snap.get("visual_source", getattr(project, "visual_source", "video"))
     project.scenes = [Scene.from_dict(s) for s in next_snap["scenes"]]
     project.total_duration = next_snap["total_duration"]
     save_project(project)

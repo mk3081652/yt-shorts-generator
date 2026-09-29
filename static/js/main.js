@@ -653,8 +653,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         toStep2Btn.textContent = "Planning Storyboard...";
         showToast("Director is analyzing script & planning visual beats...", "info");
 
+        const visualSource = document.getElementById("visualSourceSelect")?.value || "video";
+
         try {
-            const proj = await api.createProject(script, state.mode, false);
+            const proj = await api.createProject(script, state.mode, false, visualSource);
             state.setProject(proj);
             goToStep(2);
             showToast("Storyboard planned successfully!", "success");
@@ -674,13 +676,16 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (projectPollTimer) clearInterval(projectPollTimer);
         hasNotifiedFinished = false;
 
+        const curSource = document.getElementById("step2VisualSource")?.value || document.getElementById("visualSourceSelect")?.value || "video";
+        const isVid = (curSource === "video");
+
         // Show progress card immediately
         if (storyboardProgressCard) {
             storyboardProgressCard.classList.remove("hidden");
             if (storyboardProgressPct) storyboardProgressPct.textContent = "0%";
             if (storyboardProgressBar) storyboardProgressBar.style.width = "5%";
-            if (storyboardProgressStatus) storyboardProgressStatus.textContent = "Rendering Visuals via FLUX...";
-            if (storyboardProgressStep) storyboardProgressStep.textContent = "Generating 9:16 images in background...";
+            if (storyboardProgressStatus) storyboardProgressStatus.textContent = isVid ? "Fetching Cinematic B-Roll Clips (Pexels)..." : "Rendering Visuals via FLUX...";
+            if (storyboardProgressStep) storyboardProgressStep.textContent = isVid ? "Downloading portrait 1080p clips..." : "Generating 9:16 images in background...";
         }
 
         projectPollTimer = setInterval(async () => {
@@ -697,9 +702,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                         const finishedCount = readyCount + failedCount;
                         const total = Math.max(1, proj.scenes.length);
                         const pct = Math.min(95, Math.round(15 + (finishedCount / total) * 80));
+                        const isVideoSrc = (proj.visual_source === "video");
                         if (storyboardProgressPct) storyboardProgressPct.textContent = `${pct}%`;
                         if (storyboardProgressBar) storyboardProgressBar.style.width = `${pct}%`;
-                        if (storyboardProgressStatus) storyboardProgressStatus.textContent = `Generating Images (${readyCount}/${total})...`;
+                        if (storyboardProgressStatus) storyboardProgressStatus.textContent = isVideoSrc ? `Fetching Video Clips (${readyCount}/${total})...` : `Generating Images (${readyCount}/${total})...`;
                         if (storyboardProgressStep) storyboardProgressStep.textContent = `Completed ${finishedCount} of ${total} scenes...`;
                     } else {
                         storyboardProgressCard.classList.add("hidden");
@@ -715,13 +721,14 @@ document.addEventListener("DOMContentLoaded", async () => {
                             const notCfg = proj.scenes.some(s => s.fail_reason === "flux_not_configured");
 
                             if (quotaFailed) {
-                                showToast("⚠️ Cloudflare daily limit (10,000 neurons) reached. See card tooltips or drop your own media.", "warning", 8000);
+                                showToast("⚠️ Cloudflare daily limit reached. Stock video b-roll can be used with 0 quota limit!", "warning", 8000);
                             } else if (rateFailed) {
-                                showToast("⚠️ Cloudflare rate limit active. Please wait for cooldown or drop media manually.", "warning", 6000);
+                                showToast("⚠️ Cloudflare rate limit active. Please wait or use Cinematic Video Clips.", "warning", 6000);
                             } else if (notCfg) {
-                                showToast("⚠️ Cloudflare credentials not configured in .env. Drop media manually into scenes.", "warning", 6000);
+                                showToast("⚠️ FLUX credentials not configured. Using high-retention video clips instead.", "info", 6000);
                             } else if (readyCount > 0) {
-                                showToast(`✨ Generated ${readyCount}/${total} visuals with FLUX!`, "success", 4000);
+                                const isVideoSrc = (proj.visual_source === "video");
+                                showToast(`✨ Loaded ${readyCount}/${total} ${isVideoSrc ? "cinematic video clips" : "visuals"} successfully!`, "success", 4000);
                             }
                         }
                     }
@@ -758,6 +765,42 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
+    const visualSourceSelect = document.getElementById("visualSourceSelect");
+    const step2VisualSource = document.getElementById("step2VisualSource");
+
+    if (visualSourceSelect) {
+        visualSourceSelect.addEventListener("change", (e) => {
+            const val = e.target.value;
+            if (step2VisualSource) step2VisualSource.value = val;
+            if (state.project && state.project.id) {
+                api.editMeta(state.project.id, null, null, null, null, val).catch(() => {});
+            }
+        });
+    }
+
+    if (step2VisualSource) {
+        step2VisualSource.addEventListener("change", async (e) => {
+            const val = e.target.value;
+            if (visualSourceSelect) visualSourceSelect.value = val;
+            if (state.project && state.project.id) {
+                try {
+                    const updated = await api.editMeta(state.project.id, null, null, null, null, val);
+                    if (updated) state.setProject(updated);
+                    showToast(`Visual engine switched to: ${val === 'video' ? '🎬 Stock Video (Pexels)' : '🎨 AI Art (FLUX)'}`, "info");
+                } catch (err) {
+                    console.warn("Failed to update visual source:", err);
+                }
+            }
+        });
+    }
+
+    state.on("project_updated", (proj) => {
+        if (proj && proj.visual_source) {
+            if (visualSourceSelect && visualSourceSelect.value !== proj.visual_source) visualSourceSelect.value = proj.visual_source;
+            if (step2VisualSource && step2VisualSource.value !== proj.visual_source) step2VisualSource.value = proj.visual_source;
+        }
+    });
+
     if (generateAllScenesBtn) {
         generateAllScenesBtn.addEventListener("click", async () => {
             const script = scriptInput.value.trim();
@@ -770,13 +813,16 @@ document.addEventListener("DOMContentLoaded", async () => {
             generateAllScenesBtn.textContent = "⚡ Generating...";
             showToast("Director is generating scene visuals...", "info");
 
+            const visualSource = step2VisualSource?.value || visualSourceSelect?.value || "video";
+
             try {
                 if (state.project && state.project.id) {
+                    await api.editMeta(state.project.id, null, null, null, null, visualSource);
                     await api.generateMissingMedia(state.project.id);
                     showToast("Visual generation started!", "success");
                     startProjectPolling(state.project.id);
                 } else {
-                    const proj = await api.createProject(script, "auto", false);
+                    const proj = await api.createProject(script, "auto", false, visualSource);
                     state.setProject(proj);
                     showToast("Visual generation started!", "success");
                     startProjectPolling(proj.id);
@@ -1769,8 +1815,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                     oneClickPublishBtn.classList.add("btn-loading");
                 }
                 showToast("Analyzing script & planning storyboard...", "info");
+                const visualSource = document.getElementById("visualSourceSelect")?.value || "video";
                 try {
-                    currentProj = await api.createProject(script, "manual", false);
+                    currentProj = await api.createProject(script, "manual", false, visualSource);
                     state.setProject(currentProj);
                 } catch (err) {
                     showToast(`Failed to plan storyboard: ${err.message}`, "error");

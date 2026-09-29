@@ -121,6 +121,7 @@ os.makedirs("outputs", exist_ok=True)
 os.makedirs("outputs/projects", exist_ok=True)
 os.makedirs("outputs/custom_scenes", exist_ok=True)
 os.makedirs("outputs/ai_previews", exist_ok=True)
+os.makedirs("outputs/stock_videos", exist_ok=True)
 os.makedirs("assets/bgm", exist_ok=True)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -182,6 +183,7 @@ class CreateProjectRequest(BaseModel):
     script: str
     start: Optional[str] = "auto"
     manual_delimiter: bool = False
+    visual_source: Optional[str] = "video"
 
 
 class VoicePreviewRequest(BaseModel):
@@ -267,6 +269,7 @@ class EditMetaRequest(BaseModel):
     motion: Optional[str] = None
     style_lock: Optional[str] = None
     transition_style: Optional[str] = None
+    visual_source: Optional[str] = None
 
 
 class SuggestPromptsRequest(BaseModel):
@@ -422,7 +425,7 @@ STRICT RULES — READ EVERY ONE OR THE SCRIPT WILL FAIL:
    - BAD: "In 2003, a Boeing 727 vanished from an airport in Africa."
    - GOOD: "Two men stole a 150-foot commercial jet, cut all the lights, and vanished off radar forever."
 
-2. PACING: Write SHORT, punchy clauses — 4 to 7 words max per sentence. Vary sentence length for dramatic rhythm. Every sentence must create tension or reveal a new detail.
+2. PACING & SENTENCE STRUCTURE: Write complete, natural, punchy sentences (10 to 18 words per sentence). Each sentence must express a complete, captivating narrative thought with a clear subject and action. NEVER write broken 3-to-5 word fragments that sound awkward or robotic. Vary sentence rhythm naturally.
 
 3. THE PERFECT LOOP: The FINAL sentence must seamlessly transition DIRECTLY back into sentence #1 so the Short loops endlessly without the viewer realizing it ended. Do NOT say "Thanks for watching", "Like and subscribe", "Follow for more", or any call-to-action. These trigger immediate swipe-away.
 
@@ -474,6 +477,7 @@ def api_create_project(req: CreateProjectRequest):
             script=cleaned,
             start=req.start or "auto",
             manual_delimiter=req.manual_delimiter,
+            visual_source=req.visual_source or "video",
             api_key=os.environ.get("GEMINI_API_KEY", None)
         )
         return proj.to_dict()
@@ -523,7 +527,8 @@ def api_project_edit_meta(id: str, req: EditMetaRequest):
         scene_id=req.segment_id,
         motion=req.motion,
         style_lock=req.style_lock,
-        transition_style=req.transition_style
+        transition_style=req.transition_style,
+        visual_source=req.visual_source
     )
     if err:
         raise HTTPException(status_code=code, detail=err)

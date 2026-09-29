@@ -177,3 +177,9 @@ def get_youtube_token_path() -> str:
     return os.path.join(root_dir, "token.json")
 
 
+def get_pexels_api_key() -> str:
+    """Returns Pexels API key from environment for free stock video b-roll."""
+    return os.environ.get("PEXELS_API_KEY", "").strip()
+
+
+

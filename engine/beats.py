@@ -55,14 +55,14 @@ def create_story_beats(
         return []
 
     word_threshold = 7 if rapid_mode else 22
-    max_merged_len = 8 if rapid_mode else 16
+    max_merged_len = 8 if rapid_mode else 24
     effective_min_dur = 1.8 if rapid_mode else min_dur
 
     # 1. If explicit '|||' delimiters exist, split on them directly
     if '|||' in clean_script:
         raw_parts = [p.strip() for p in clean_script.split('|||') if p.strip()]
     else:
-        # 2. Split line by line, then sentence by sentence, then clause by clause
+        # 2. Split line by line, then sentence by sentence, preserving meaningful grammar
         raw_parts = []
         for line in clean_script.splitlines():
             line_clean = line.strip()
@@ -76,7 +76,8 @@ def create_story_beats(
                 r'(?<!\bProf)(?<!\bGen)(?<!\bCol)(?<!\bLt)(?<!\bSt)(?<!\bvs)'
                 r'(?<!\betc)(?<!\be\.g)(?<!\bi\.e)(?<!\bU\.S)(?<!\b[A-Z])'
             )
-            sent_chunks = re.split(abbrev_lookbehind + r'([.!?]+(?:\s+|$)|:(?:\s+|$))', line_clean)
+            # Split only on actual sentence terminators (. ! ?)
+            sent_chunks = re.split(abbrev_lookbehind + r'([.!?]+(?:\s+|$))', line_clean)
             line_sents = []
             i = 0
             while i < len(sent_chunks):
@@ -84,17 +85,19 @@ def create_story_beats(
                 if i + 1 < len(sent_chunks):
                     delim = sent_chunks[i + 1].strip()
                     if delim:
-                        s = s + delim
+                        s = f"{s} {delim}" if not s.endswith(('.', '!', '?')) else s
                     i += 2
                 else:
                     i += 1
                 if s:
+                    # Clean any trailing punctuation space
+                    s = re.sub(r'\s+([.!?])', r'\1', s)
                     line_sents.append(s)
 
             if not line_sents:
                 line_sents = [line_clean]
 
-            # Refine any sentence into visual clauses only when appropriate
+            # Refine sentences into beats
             for sent in line_sents:
                 s_words = sent.split()
 
@@ -107,7 +110,7 @@ def create_story_beats(
 
                 if len(s_words) > word_threshold:
                     if rapid_mode:
-                        # Rapid mode: split at major clauses or rhythmic ~6 word chunks
+                        # Rapid mode: split at rhythmic clauses or ~6 word chunks
                         clause_parts = re.split(
                             r'(?:(?<=[,;—\-])\s+|\s+(?=(?:and|but|while|as|where|yet|before|after|with|when|so|because|that|which|beneath|revealed|hidden|containing|towards)\b))',
                             sent,
@@ -122,29 +125,18 @@ def create_story_beats(
                             for c_idx in range(0, len(words_in_sent), chunk_step):
                                 raw_parts.append(" ".join(words_in_sent[c_idx:c_idx + chunk_step]))
                     else:
-                        # Standard mode: split ONLY at major punctuation (semicolon, em-dash) or major conjunction clause
-                        clause_parts = re.split(r'(?<=[;—])\s+', sent)
-                        if len(clause_parts) > 1 and all(len(cp.split()) >= 4 for cp in clause_parts):
-                            raw_parts.extend(cp.strip() for cp in clause_parts if cp.strip())
-                            continue
-
-                        # Split at major conjunction clause with punctuation (e.g. ", but ", ", while ", ", however ")
-                        clause_parts = re.split(
-                            r'(?<=[,;—\-])\s+(?=(?:but|while|as|where|yet|before|after|when|because|although|however)\b)',
-                            sent,
-                            flags=re.IGNORECASE
-                        )
-                        if len(clause_parts) > 1 and all(len(cp.split()) >= 5 for cp in clause_parts):
-                            raw_parts.extend(cp.strip() for cp in clause_parts if cp.strip())
-                            continue
-
-                        # If sentence is very long (> 24 words), split on comma if both sides are substantial (>= 6 words)
-                        if len(s_words) > 24:
-                            comma_parts = re.split(r'(?<=,)\s+', sent)
-                            if len(comma_parts) > 1 and all(len(cp.split()) >= 6 for cp in comma_parts):
-                                raw_parts.extend(cp.strip() for cp in comma_parts if cp.strip())
+                        # Standard mode: Keep complete, meaningful sentences (10-18 words).
+                        # Only split truly long sentences (> 22 words) at strong clause markers (; , but , while)
+                        if any(p in sent for p in [';', '—', ', but ', ', while ', ', however ', ', yet ']):
+                            clause_parts = re.split(
+                                r'(?<=[;—])\s+|(?<=,)\s+(?=(?:but|while|however|yet|whereas)\b)',
+                                sent,
+                                flags=re.IGNORECASE
+                            )
+                            clause_parts = [cp.strip() for cp in clause_parts if cp.strip()]
+                            if len(clause_parts) > 1 and all(len(cp.split()) >= 6 for cp in clause_parts):
+                                raw_parts.extend(clause_parts)
                                 continue
-
                         raw_parts.append(sent)
                 else:
                     raw_parts.append(sent)
@@ -153,7 +145,7 @@ def create_story_beats(
     if not combined_beats:
         combined_beats = [clean_script]
 
-    # Combine adjacent tiny beats (< 3 words) if combined <= max_merged_len
+    # Combine tiny orphaned fragments with adjacent segments
     merged_beats: List[str] = []
     curr_beat = ""
     for b in combined_beats:
@@ -165,13 +157,20 @@ def create_story_beats(
         else:
             curr_len = len(curr_beat.split())
             b_len = len(b_clean.split())
-            if curr_len < 3 and (curr_len + b_len) <= max_merged_len:
-                curr_beat = f"{curr_beat} {b_clean}"
-            elif b_len < 2 and (curr_len + b_len) <= max_merged_len:
-                curr_beat = f"{curr_beat} {b_clean}"
+            if rapid_mode:
+                if (curr_len < 3 or b_len < 2) and (curr_len + b_len) <= max_merged_len:
+                    curr_beat = f"{curr_beat} {b_clean}"
+                else:
+                    merged_beats.append(curr_beat)
+                    curr_beat = b_clean
             else:
-                merged_beats.append(curr_beat)
-                curr_beat = b_clean
+                # In standard mode, preserve clean clause endings (comma, semicolon, ellipsis)
+                is_clause_end = curr_beat.rstrip().endswith((',', ';', '—', '…', '...'))
+                if (curr_len < 3 or (b_len < 3 and not is_clause_end)) and (curr_len + b_len) <= max_merged_len:
+                    curr_beat = f"{curr_beat} {b_clean}"
+                else:
+                    merged_beats.append(curr_beat)
+                    curr_beat = b_clean
     if curr_beat:
         merged_beats.append(curr_beat)
 
