@@ -274,7 +274,7 @@ def render_shorts_video(
         project = load_project(p_id) if p_id else None
 
         if project:
-            if not script_text.strip() and project.script:
+            if project.script:
                 script_text = project.script
             if not preview_scenes:
                 preview_scenes = [s.to_dict() for s in project.scenes]

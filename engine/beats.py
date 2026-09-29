@@ -4,7 +4,7 @@ Preserves script words 100% verbatim. Used by both Auto and Manual modes.
 """
 
 import re
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 STOP_WORDS = {
     'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with',
@@ -26,6 +26,102 @@ def clean_words(text: str) -> List[str]:
     return [w for w in clean.split() if w not in STOP_WORDS and len(w) > 2]
 
 
+# Regex for explicit scene markers: e.g. "Scene 1:", "Scene 1 -", "[Scene 1]", "Shot 1:", "Beat 1:", "1.", "1)"
+SCENE_MARKER_REGEX = re.compile(
+    r'^\s*(?:\[?\s*(?:scene|shot|beat|part)\s*#?\s*\d+\s*\]?|\d+[\.\)])\s*[:\-\.—]?\s*(.*)$',
+    re.IGNORECASE
+)
+
+# Regex to clean prefix labels from individual scenes so spoken voiceover & subtitles stay clean
+CLEAN_PREFIX_REGEX = re.compile(
+    r'^\s*(?:\[?\s*(?:scene|shot|beat|part)\s*#?\s*\d+\s*\]?|\d+[\.\)])\s*[:\-\.—]?\s*|^\s*(?:Voiceover|Narrator|Script|Hook):\s*',
+    re.IGNORECASE
+)
+
+
+def extract_explicit_user_scenes(script_text: str) -> Optional[List[str]]:
+    """
+    Detects if the user explicitly structured their script into scenes:
+    1. Explicit '|||' delimiters (e.g. Scene 1 ||| Scene 2)
+    2. Explicit scene markers (e.g. 'Scene 1: ...', 'Scene 2: ...', 'Shot 1: ...', 'Beat 1: ...', '[Scene 1] ...', '1. ...')
+       - Extracts clean spoken narration for each scene, stripping the 'Scene X:' prefix so TTS and subtitles stay clean.
+    3. Blank line / paragraph breaks ('\\n\\s*\\n+')
+       - Each paragraph block separated by an empty line / space represents an intentional scene.
+    4. Line-by-line formatting ('each scene sentence in next')
+       - Multiple non-empty lines where each line represents an intentional scene.
+
+    Returns a list of clean scene strings if explicit structure is detected, else None.
+    """
+    clean_script = script_text.strip()
+    if not clean_script:
+        return None
+
+    # 1. Explicit '|||' delimiters
+    if '|||' in clean_script:
+        parts = [CLEAN_PREFIX_REGEX.sub('', p).strip() for p in clean_script.split('|||') if p.strip()]
+        if parts:
+            return parts
+
+    lines = [ln.strip() for ln in clean_script.splitlines() if ln.strip()]
+
+    # 2. Explicit scene markers (Scene 1:, Scene 2:, Shot 1:, Beat 1:, 1. etc.)
+    matched_indices = []
+    for idx, ln in enumerate(lines):
+        m = SCENE_MARKER_REGEX.match(ln)
+        if m:
+            matched_indices.append((idx, m.group(1).strip()))
+
+    if len(matched_indices) >= 2 or (len(matched_indices) == 1 and len(lines) <= 2):
+        scenes: List[str] = []
+        current_scene_lines: List[str] = []
+
+        for ln in lines:
+            m = SCENE_MARKER_REGEX.match(ln)
+            if m:
+                if current_scene_lines:
+                    sc_txt = " ".join(current_scene_lines).strip()
+                    if sc_txt:
+                        scenes.append(sc_txt)
+                content = m.group(1).strip()
+                current_scene_lines = [content] if content else []
+            else:
+                current_scene_lines.append(ln)
+
+        if current_scene_lines:
+            sc_txt = " ".join(current_scene_lines).strip()
+            if sc_txt:
+                scenes.append(sc_txt)
+
+        if scenes:
+            return scenes
+
+    # 3. Paragraph separation: empty line / space between paragraphs (\n\s*\n+)
+    paragraphs = [p.strip() for p in re.split(r'\n\s*\n+', clean_script) if p.strip()]
+    if len(paragraphs) >= 2:
+        scenes = []
+        for p in paragraphs:
+            # Flatten internal single-newlines within a paragraph into spaces
+            p_flat = " ".join(line.strip() for line in p.splitlines() if line.strip())
+            p_clean = CLEAN_PREFIX_REGEX.sub('', p_flat).strip()
+            if p_clean:
+                scenes.append(p_clean)
+        if len(scenes) >= 2:
+            return scenes
+
+    # 4. Line-by-line formatting: each non-empty line on its own line
+    # If there are 2 or more lines, and every line has at least 3 words:
+    if len(lines) >= 2 and all(len(ln.split()) >= 3 for ln in lines):
+        scenes = []
+        for ln in lines:
+            ln_clean = CLEAN_PREFIX_REGEX.sub('', ln).strip()
+            if ln_clean:
+                scenes.append(ln_clean)
+        if len(scenes) >= 2:
+            return scenes
+
+    return None
+
+
 def create_story_beats(
     script_text: str,
     total_duration: float,
@@ -36,12 +132,15 @@ def create_story_beats(
     """
     Intelligent narrative story-beat segmentation:
     - ONE SEGMENT = ONE CLEAR VISUAL IDEA (~3.0s to 5.5s, or ~2.0s to 3.2s in rapid_mode).
-    - Splits on:
+    - Honors explicit user scene breaks:
       1. Explicit delimiters '|||'
-      2. Line breaks (\\n+)
-      3. Sentence boundaries (. ! ?)
-      4. Colons followed by space or newline
-      5. Clause boundaries for long sentences (> 14 words, or > 7 words in rapid_mode)
+      2. Explicit scene markers (Scene 1:, Scene 2:, Shot 1:, Beat 1:, 1. etc.)
+      3. Blank line / space paragraph breaks (\\n\\s*\\n+)
+      4. Line-by-line scene formatting
+    - If continuous prose, intelligently splits on:
+      * Sentence boundaries (. ! ?)
+      * Colons followed by space or newline
+      * Clause boundaries for long sentences (> 22 words, or > 7 words in rapid_mode)
     - 100% Verbatim script preservation: Concatenation of all beats equals the exact original words.
     - Durations proportional to word count, clamped to min_dur.
     """
@@ -54,9 +153,27 @@ def create_story_beats(
     if total_words == 0:
         return []
 
+    effective_min_dur = 1.8 if rapid_mode else min_dur
+
+    # 0. Check for explicit user scene structure
+    explicit_scenes = extract_explicit_user_scenes(clean_script)
+    if explicit_scenes:
+        total_explicit_words = sum(len(s.split()) for s in explicit_scenes)
+        beats: List[Tuple[str, float]] = []
+        for s in explicit_scenes:
+            b_cnt = len(s.split())
+            ratio = b_cnt / max(1, total_explicit_words)
+            dur = max(effective_min_dur, round(ratio * total_duration, 2))
+            beats.append((s, dur))
+
+        sum_dur = sum(d for _, d in beats)
+        if sum_dur > 0:
+            beats = [(t, max(effective_min_dur, round((d / sum_dur) * total_duration, 2))) for t, d in beats]
+
+        return beats
+
     word_threshold = 7 if rapid_mode else 22
     max_merged_len = 8 if rapid_mode else 24
-    effective_min_dur = 1.8 if rapid_mode else min_dur
 
     # 1. If explicit '|||' delimiters exist, split on them directly
     if '|||' in clean_script:

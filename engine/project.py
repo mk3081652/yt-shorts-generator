@@ -302,13 +302,21 @@ def create_project(
     words = script.strip().split()
     total_dur = max(3.0, round(len(words) / 2.7, 2))
 
-    # 1. Break into verbatim story beats
+    # 1. Break into verbatim story beats (honoring user scene breaks & markers)
     beats = create_story_beats(script, total_dur)
     if not beats:
         beats = [(script.strip(), total_dur)]
 
+    # Clean narration text for TTS voiceover & project script
+    clean_narration = " ".join(t for t, _ in beats).strip() or script.strip()
+    words = clean_narration.split()
+    total_dur = max(3.0, round(len(words) / 2.7, 2))
+    sum_dur = sum(d for _, d in beats)
+    if sum_dur > 0:
+        beats = [(t, max(1.8, round((d / sum_dur) * total_dur, 2))) for t, d in beats]
+
     # 2. Plan storyboard with director
-    plan_dict, is_basic = plan_scenes_with_director(script, beats, api_key=api_key)
+    plan_dict, is_basic = plan_scenes_with_director(clean_narration, beats, api_key=api_key)
 
     scenes = []
     for s_dict in plan_dict.get("scenes", []):
@@ -344,7 +352,7 @@ def create_project(
 
     project = Project(
         id=p_id,
-        script=script.strip(),
+        script=clean_narration,
         style_lock="",
         start_mode=start,
         visual_source=visual_source,
