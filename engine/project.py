@@ -12,7 +12,7 @@ import zipfile
 from io import BytesIO
 from dataclasses import dataclass, field, asdict
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Set
 from PIL import Image
 
 from engine.beats import create_story_beats
@@ -56,6 +56,7 @@ class Scene:
     duration: float = 3.0
     hook_text: Optional[str] = None
     high_impact_words: List[str] = field(default_factory=list)
+    broll_keywords: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
@@ -109,7 +110,8 @@ class Scene:
             entities=data.get("entities", []),
             duration=float(data.get("duration", 3.0)),
             hook_text=data.get("hook_text"),
-            high_impact_words=list(data.get("high_impact_words") or [])
+            high_impact_words=list(data.get("high_impact_words") or []),
+            broll_keywords=list(data.get("broll_keywords") or [])
         )
 
 
@@ -292,7 +294,8 @@ def create_project(
             media_type="blank",
             hold_previous=bool(s_dict.get("hold_previous", False)),
             entities=s_dict.get("entities", []),
-            duration=float(s_dict.get("duration", 3.0))
+            duration=float(s_dict.get("duration", 3.0)),
+            broll_keywords=list(s_dict.get("broll_keywords") or [])
         )
         scenes.append(sc)
 
@@ -337,6 +340,14 @@ def queue_project_generation(project_id: str) -> None:
         if not proj:
             return
 
+        used_video_ids: Set[str] = set()
+        for s in proj.scenes:
+            if s.media_path and s.media_type == "video":
+                base = os.path.basename(s.media_path)
+                match = re.search(r'_(\d+)\.mp4$', base)
+                if match:
+                    used_video_ids.add(match.group(1))
+
         for sc in proj.scenes:
             if pid in _CANCELLED_PROJECTS:
                 break
@@ -355,7 +366,11 @@ def queue_project_generation(project_id: str) -> None:
                     broll = fetch_broll_for_scene(
                         scene_id=sc.id,
                         scene_text=sc.text,
-                        topic=proj.script[:120]
+                        image_prompt=sc.image_prompt,
+                        video_prompt=sc.video_prompt,
+                        topic=proj.script[:120],
+                        broll_keywords=getattr(sc, "broll_keywords", []),
+                        used_video_ids=used_video_ids
                     )
                     if broll and broll.get("media_path") and os.path.exists(broll["media_path"]):
                         fname = os.path.basename(broll["media_path"])
@@ -366,6 +381,8 @@ def queue_project_generation(project_id: str) -> None:
                         sc.fail_reason = None
                         sc.status = "ready"
                         media_assigned = True
+                        if broll.get("video_id"):
+                            used_video_ids.add(str(broll["video_id"]))
                 except Exception as broll_err:
                     print(f"[StockVideo] Worker error for scene {sc.id}: {broll_err}")
 
@@ -910,10 +927,23 @@ def generate_scene_media(project_id: str, scene_id: str, api_key: Optional[str] 
 
     if visual_src in ("video", "hybrid"):
         try:
+            used_video_ids: Set[str] = set()
+            for s in project.scenes:
+                if s.id != target.id and s.media_path and s.media_type == "video":
+                    base = os.path.basename(s.media_path)
+                    match = re.search(r'_(\d+)\.mp4$', base)
+                    if match:
+                        used_video_ids.add(match.group(1))
+
             broll = fetch_broll_for_scene(
                 scene_id=target.id,
                 scene_text=target.text,
-                topic=project.script[:120]
+                image_prompt=target.image_prompt,
+                video_prompt=target.video_prompt,
+                topic=project.script[:120],
+                broll_keywords=getattr(target, "broll_keywords", []),
+                used_video_ids=used_video_ids,
+                api_key=api_key
             )
             if broll and broll.get("media_path") and os.path.exists(broll["media_path"]):
                 fname = os.path.basename(broll["media_path"])

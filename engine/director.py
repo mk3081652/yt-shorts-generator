@@ -29,6 +29,7 @@ STEP 2, SHOT LIST. For each beat answer: "What does the viewer literally SEE whi
 - Vary shot and camera across scenes; keep entities identical across scenes by referencing their ids.
 - Nothing in the image may be readable text, logos, watermarks, captions or UI.
 - Describe only what is visible. Do not describe sound, feelings or backstory.
+- broll_keywords: exactly 3 concise, concrete 2-to-3 word search terms for stock video footage (e.g. ["airplane cockpit night", "cockpit control panel", "lightning storm clouds"]). Must describe literal physical objects, vehicles, places, or actions in this scene, NOT abstract metaphors.
 
 Return JSON only:
 {
@@ -44,6 +45,7 @@ Return JSON only:
    "entities": ["e1"],
    "camera_motion": "push in | pull out | pan right | pan left | tilt up | static",
    "video_prompt": "1-2 sentences: camera move + subject motion for image-to-video tools",
+   "broll_keywords": ["2-3 word stock footage search term 1", "search term 2", "search term 3"],
    "is_abstract": false,
    "hold_previous": false
  }]
@@ -271,6 +273,23 @@ Plan the storyboard following the system instructions. Return valid JSON only.""
                     s["camera_motion"] = "push in"
                 if not s.get("video_prompt"):
                     s["video_prompt"] = f"{s.get('camera_motion', 'push in').capitalize()} camera movement on {s.get('subject', text)[:80]}"
+                
+                # Ensure broll_keywords are available for Pexels search
+                kws = s.get("broll_keywords")
+                if not kws or not isinstance(kws, list):
+                    kws = []
+                    sub = s.get("subject", "").strip()
+                    act = s.get("action", "").strip()
+                    setg = s.get("setting", "").strip()
+                    if sub and setg:
+                        kws.append(f"{sub} {setg}"[:30])
+                    if sub and act:
+                        kws.append(f"{sub} {act}"[:30])
+                    elif sub:
+                        kws.append(sub[:30])
+                    if setg:
+                        kws.append(setg[:30])
+                s["broll_keywords"] = [k.strip() for k in kws if isinstance(k, str) and k.strip()]
                 final_scenes.append(s)
 
             return {
