@@ -16,20 +16,50 @@ from engine.config import (
 from engine.llm import generate_content
 
 
-DIRECTOR_SYSTEM_PROMPT = """You are a film director storyboarding a vertical (9:16) YouTube Short from its narration.
+DIRECTOR_SYSTEM_PROMPT = """You are an elite film director, cinematographer, and visual director storyboarding a vertical (9:16) YouTube Short from its narration.
 You receive the full script and a numbered list of beats (the exact spoken lines).
 
 STEP 1, READ THE WHOLE SCRIPT. Decide: genre, tone, era, one-sentence visual style shared by every scene, and up to 5 recurring entities (people, creatures, objects, places). Give each entity a fixed, concrete visual description (age, clothing, colours, materials, distinguishing marks, scale). These descriptions will be copied verbatim into every scene that features the entity.
 
-STEP 2, SHOT LIST. For each beat answer: "What does the viewer literally SEE while hearing this line?" Rules:
-- Show something concrete and filmable: a specific subject doing a specific action in a specific place. Never keywords, never a mood board.
-- If the line is abstract, a hook, or a question, use a concrete visual metaphor tied to the script's subject, or set hold_previous=true. Never invent an unrelated new subject.
-- A statistic or number becomes a concrete visual (scale, crowd, comparison), never text in the image.
-- "You" lines become a POV shot.
-- Vary shot and camera across scenes; keep entities identical across scenes by referencing their ids.
-- Nothing in the image may be readable text, logos, watermarks, captions or UI.
-- Describe only what is visible. Do not describe sound, feelings or backstory.
-- broll_keywords: exactly 3 concise, concrete 2-to-3 word search terms for stock video footage (e.g. ["airplane cockpit night", "cockpit control panel", "lightning storm clouds"]). Must describe literal physical objects, vehicles, places, or actions in this scene, NOT abstract metaphors.
+STEP 2, CINEMATIC VISUAL STORYBOARD. For each beat, answer: "What does the viewer literally SEE while hearing this line?"
+The individual scene is the primary source of truth. The overall script/topic only provides context.
+CRITICAL RULES:
+- SEMANTIC ACCURACY OVER TOPIC KEYWORDS:
+  * "The pilot noticed something strange on the instruments display" -> Pilot inside cockpit looking at flight instruments at night. (NEVER generic exterior airplane in clouds!)
+  * "The ship entered the storm and was never seen again" -> Ship battling dark stormy ocean waves. (NEVER generic calm ocean without ship!)
+  * "Investigators discovered a classified document hidden inside the archive" -> Hands opening classified archive document with red stamps under desk lamp.
+  * "At 2:17 AM, the signal suddenly disappeared" -> Control room monitor screen flatlining or blinking red alert.
+  * "The company lost 40% of its value in three days" -> Financial stock market charts falling red, busy trading floor screens.
+  * "Roman soldiers marched toward the city" -> Roman legionaries marching in armor formation.
+  * "She sat alone by the window waiting for an answer" -> Solitary woman sitting by window in moody room looking outside.
+- UNIVERSAL VISUAL TYPES (classify each scene):
+  * "literal": Concrete object, person, vehicle, or action.
+  * "conceptual": Financial trends, economic events, invisible phenomena translated into concrete visuals (charts, screens, activity).
+  * "historical": Ancient or period events depicted via representative reenactment footage.
+  * "abstract": Emotions or uncertainty translated into physical moments (waiting, empty hallway, silhouette at window).
+  * "data": Documents, screens, computer monitors, blueprints, maps, electronic displays.
+  * "location": Specific atmospheric environment, landscape, or facility.
+  * "person": Specific character, profession, or human reaction.
+  * "object": Specific machine, device, artifact, or tool.
+- VISUAL PRIORITY:
+  * "high": Hook scene (first 3s), major reveal, shocking surprise, key turning point, dramatic climax.
+  * "medium": Supporting story beats, essential context, action progression.
+  * "low": Bridging sentences, brief commentary, quiet transitions.
+- VISUAL STRATEGY:
+  * "pexels": Realistic modern real-world footage expected to exist in stock video libraries.
+  * "flux": Highly fantastical, hyper-specific historical, surreal, or sci-fi visuals where realistic stock video does not exist.
+  * "hold": If narration is continuous commentary and continuing previous visual is stronger than switching to filler.
+- SHOT VARIETY & PACING:
+  * Vary shot types intentionally: wide / establishing -> medium subject -> close-up detail -> POV -> low-angle -> over-shoulder.
+  * Never repeat the exact same framing for 3 consecutive scenes.
+- SEARCH QUERIES:
+  * Generate 3 to 6 distinct, concrete 2-to-4 word search queries for stock video footage describing LITERAL filmable physical subjects/actions/places.
+  * Avoid vague fluff ("mystery", "story", "important", "dramatic") unless paired with a concrete noun ("dramatic storm clouds").
+- MUST SHOW & SHOULD AVOID:
+  * must_show: 2-3 essential visual elements that MUST be visible.
+  * should_avoid: 1-2 generic or misleading visuals that would ruin semantic accuracy.
+- CONTINUITY GROUP:
+  * Group scenes sharing the same continuous scene setting (e.g. "cockpit_night", "ocean_storm", "archive_room", "trading_floor").
 
 Return JSON only:
 {
@@ -42,10 +72,25 @@ Return JSON only:
    "setting": "where, time of day",
    "shot": "wide | medium | close-up | macro | low-angle | over-shoulder | POV | aerial",
    "lighting": "short phrase",
-   "entities": ["e1"],
+   "mood": "tense | urgent | mysterious | energetic | sombre | triumphant",
+   "visual_type": "literal | conceptual | historical | abstract | data | location | person | object",
+   "visual_priority": "high | medium | low",
+   "visual_strategy": "pexels | flux | hold",
+   "continuity_group": "string label for scene setting block",
+   "shot_scale": "close-up | medium | wide | extreme_close_up | establishing | pov | detail",
+   "motion_intensity": "low | medium | high",
+   "must_show": ["key element 1", "key element 2"],
+   "should_avoid": ["unwanted generic element 1"],
+   "search_queries": [
+     "concrete query 1",
+     "concrete query 2",
+     "concrete query 3",
+     "concrete query 4"
+   ],
+   "broll_keywords": ["2-3 word search 1", "search 2", "search 3"],
    "camera_motion": "push in | pull out | pan right | pan left | tilt up | static",
    "video_prompt": "1-2 sentences: camera move + subject motion for image-to-video tools",
-   "broll_keywords": ["2-3 word stock footage search term 1", "search term 2", "search term 3"],
+   "entities": ["e1"],
    "is_abstract": false,
    "hold_previous": false
  }]
@@ -148,6 +193,8 @@ def basic_mode_plan(beats: List[Tuple[str, float]], style_lock: str = "") -> Dic
         shot = shots_cycle[idx % len(shots_cycle)]
         motion = motions_cycle[idx % len(motions_cycle)]
         cleaned_text = re.sub(r'[\r\n\t]+', ' ', text).strip()
+        words = [w for w in re.sub(r'[^a-zA-Z0-9\s]', ' ', cleaned_text).split() if len(w) > 2]
+        fallback_query = " ".join(words[:3]) if words else "cinematic atmospheric scene"
 
         scene_dict = {
             "beat": idx,
@@ -156,6 +203,17 @@ def basic_mode_plan(beats: List[Tuple[str, float]], style_lock: str = "") -> Dic
             "setting": "",
             "shot": shot,
             "lighting": "dramatic cinematic lighting",
+            "mood": "tense" if idx == 0 else "cinematic",
+            "visual_type": "literal",
+            "visual_priority": "high" if idx == 0 else ("medium" if idx < len(beats) - 1 else "high"),
+            "visual_strategy": "pexels",
+            "continuity_group": f"group_{idx // 3}",
+            "shot_scale": shot,
+            "motion_intensity": "medium",
+            "must_show": [fallback_query],
+            "should_avoid": [],
+            "search_queries": [fallback_query, f"{fallback_query} cinematic", f"{fallback_query} vertical"],
+            "broll_keywords": [fallback_query, f"{fallback_query} cinematic", f"{fallback_query} vertical"],
             "entities": [],
             "camera_motion": motion,
             "video_prompt": f"{motion.capitalize()} camera movement framing {cleaned_text[:80]}",
@@ -273,23 +331,62 @@ Plan the storyboard following the system instructions. Return valid JSON only.""
                     s["camera_motion"] = "push in"
                 if not s.get("video_prompt"):
                     s["video_prompt"] = f"{s.get('camera_motion', 'push in').capitalize()} camera movement on {s.get('subject', text)[:80]}"
-                
-                # Ensure broll_keywords are available for Pexels search
-                kws = s.get("broll_keywords")
-                if not kws or not isinstance(kws, list):
-                    kws = []
+
+                # Parse and normalize extended visual fields
+                v_type = str(s.get("visual_type") or "literal").lower()
+                valid_types = {"literal", "conceptual", "historical", "abstract", "data", "location", "person", "object"}
+                s["visual_type"] = v_type if v_type in valid_types else "literal"
+
+                v_prio = str(s.get("visual_priority") or ("high" if i == 0 else "medium")).lower()
+                valid_prios = {"high", "medium", "low"}
+                s["visual_priority"] = v_prio if v_prio in valid_prios else ("high" if i == 0 else "medium")
+
+                v_strat = str(s.get("visual_strategy") or "pexels").lower()
+                valid_strats = {"pexels", "flux", "hold"}
+                s["visual_strategy"] = v_strat if v_strat in valid_strats else "pexels"
+
+                s["continuity_group"] = str(s.get("continuity_group") or f"group_{i // 3}").strip()
+                s["shot_scale"] = str(s.get("shot_scale") or s.get("shot") or "medium").strip()
+                s["motion_intensity"] = str(s.get("motion_intensity") or "medium").strip()
+                s["mood"] = str(s.get("mood") or "cinematic").strip()
+
+                # must_show list
+                m_show = s.get("must_show")
+                if not isinstance(m_show, list) or not m_show:
+                    m_show = []
+                    if s.get("subject"):
+                        m_show.append(s["subject"].strip()[:40])
+                    if s.get("setting"):
+                        m_show.append(s["setting"].strip()[:40])
+                s["must_show"] = [str(x).strip() for x in m_show if str(x).strip()]
+
+                # should_avoid list
+                s_avoid = s.get("should_avoid")
+                if not isinstance(s_avoid, list):
+                    s_avoid = []
+                s["should_avoid"] = [str(x).strip() for x in s_avoid if str(x).strip()]
+
+                # search_queries list (3-6 queries)
+                queries = s.get("search_queries")
+                if not isinstance(queries, list) or not queries:
+                    queries = s.get("broll_keywords") or []
+                if not isinstance(queries, list) or not queries:
+                    queries = []
                     sub = s.get("subject", "").strip()
                     act = s.get("action", "").strip()
                     setg = s.get("setting", "").strip()
                     if sub and setg:
-                        kws.append(f"{sub} {setg}"[:30])
+                        queries.append(f"{sub} {setg}"[:35])
                     if sub and act:
-                        kws.append(f"{sub} {act}"[:30])
-                    elif sub:
-                        kws.append(sub[:30])
+                        queries.append(f"{sub} {act}"[:35])
+                    if sub:
+                        queries.append(sub[:30])
                     if setg:
-                        kws.append(setg[:30])
-                s["broll_keywords"] = [k.strip() for k in kws if isinstance(k, str) and k.strip()]
+                        queries.append(setg[:30])
+                clean_queries = [str(q).strip() for q in queries if str(q).strip()]
+                s["search_queries"] = clean_queries
+                s["broll_keywords"] = clean_queries[:3]
+
                 final_scenes.append(s)
 
             return {

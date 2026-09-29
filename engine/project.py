@@ -57,6 +57,20 @@ class Scene:
     hook_text: Optional[str] = None
     high_impact_words: List[str] = field(default_factory=list)
     broll_keywords: List[str] = field(default_factory=list)
+    visual_type: str = "literal"
+    visual_priority: str = "medium"
+    must_show: List[str] = field(default_factory=list)
+    should_avoid: List[str] = field(default_factory=list)
+    search_queries: List[str] = field(default_factory=list)
+    visual_strategy: str = "pexels"
+    continuity_group: str = ""
+    shot_scale: str = "medium"
+    motion_intensity: str = "medium"
+    mood: str = "cinematic"
+    selected_query: Optional[str] = None
+    selected_reason: Optional[str] = None
+    candidate_count: int = 0
+    ai_ranking_score: Optional[int] = None
 
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
@@ -111,7 +125,21 @@ class Scene:
             duration=float(data.get("duration", 3.0)),
             hook_text=data.get("hook_text"),
             high_impact_words=list(data.get("high_impact_words") or []),
-            broll_keywords=list(data.get("broll_keywords") or [])
+            broll_keywords=list(data.get("broll_keywords") or []),
+            visual_type=str(data.get("visual_type") or "literal"),
+            visual_priority=str(data.get("visual_priority") or "medium"),
+            must_show=list(data.get("must_show") or []),
+            should_avoid=list(data.get("should_avoid") or []),
+            search_queries=list(data.get("search_queries") or []),
+            visual_strategy=str(data.get("visual_strategy") or "pexels"),
+            continuity_group=str(data.get("continuity_group") or ""),
+            shot_scale=str(data.get("shot_scale") or "medium"),
+            motion_intensity=str(data.get("motion_intensity") or "medium"),
+            mood=str(data.get("mood") or "cinematic"),
+            selected_query=data.get("selected_query"),
+            selected_reason=data.get("selected_reason"),
+            candidate_count=int(data.get("candidate_count", 0)),
+            ai_ranking_score=data.get("ai_ranking_score")
         )
 
 
@@ -295,7 +323,17 @@ def create_project(
             hold_previous=bool(s_dict.get("hold_previous", False)),
             entities=s_dict.get("entities", []),
             duration=float(s_dict.get("duration", 3.0)),
-            broll_keywords=list(s_dict.get("broll_keywords") or [])
+            broll_keywords=list(s_dict.get("broll_keywords") or []),
+            visual_type=str(s_dict.get("visual_type") or "literal"),
+            visual_priority=str(s_dict.get("visual_priority") or "medium"),
+            must_show=list(s_dict.get("must_show") or []),
+            should_avoid=list(s_dict.get("should_avoid") or []),
+            search_queries=list(s_dict.get("search_queries") or []),
+            visual_strategy=str(s_dict.get("visual_strategy") or "pexels"),
+            continuity_group=str(s_dict.get("continuity_group") or ""),
+            shot_scale=str(s_dict.get("shot_scale") or "medium"),
+            motion_intensity=str(s_dict.get("motion_intensity") or "medium"),
+            mood=str(s_dict.get("mood") or "cinematic")
         )
         scenes.append(sc)
 
@@ -357,19 +395,46 @@ def queue_project_generation(project_id: str) -> None:
             sc.status = "generating"
             save_project(proj)
 
+            # 0. Check hold_previous / hold strategy
+            curr_idx = next((i for i, s in enumerate(proj.scenes) if s.id == sc.id), 0)
+            if curr_idx > 0 and (sc.hold_previous or getattr(sc, "visual_strategy", "") == "hold"):
+                prev_ready = next((p for p in reversed(proj.scenes[:curr_idx]) if p.status in ("ready", "manual") and p.media_path and os.path.exists(p.media_path)), None)
+                if prev_ready:
+                    sc.media_url = prev_ready.media_url
+                    sc.media_path = prev_ready.media_path
+                    sc.media_type = prev_ready.media_type
+                    sc.source_tier = prev_ready.source_tier
+                    sc.selected_reason = f"Reused visual from scene {prev_ready.id[:6]} for story continuity"
+                    sc.status = "ready"
+                    sc.fail_reason = None
+                    save_project(proj)
+                    continue
+
             visual_src = getattr(proj, "visual_source", "video")
+            strat = getattr(sc, "visual_strategy", "pexels")
             media_assigned = False
 
-            # 1. If visual_source is video (or hybrid), try Pexels b-roll first
-            if visual_src in ("video", "hybrid"):
+            # 1. If visual_source is video (or hybrid) and scene strategy allows pexels, try Pexels b-roll
+            if visual_src in ("video", "hybrid") and strat != "flux":
                 try:
                     broll = fetch_broll_for_scene(
                         scene_id=sc.id,
                         scene_text=sc.text,
                         image_prompt=sc.image_prompt,
                         video_prompt=sc.video_prompt,
-                        topic=proj.script[:120],
+                        subject=getattr(sc, "subject", ""),
+                        action=getattr(sc, "action", ""),
+                        setting=getattr(sc, "setting", ""),
+                        shot=getattr(sc, "shot_scale", "") or getattr(sc, "motion", ""),
+                        mood=getattr(sc, "mood", "cinematic"),
+                        visual_type=getattr(sc, "visual_type", "literal"),
+                        visual_priority=getattr(sc, "visual_priority", "medium"),
+                        must_show=getattr(sc, "must_show", []),
+                        should_avoid=getattr(sc, "should_avoid", []),
+                        search_queries=getattr(sc, "search_queries", []),
                         broll_keywords=getattr(sc, "broll_keywords", []),
+                        continuity_group=getattr(sc, "continuity_group", ""),
+                        topic=proj.script[:120],
                         used_video_ids=used_video_ids
                     )
                     if broll and broll.get("media_path") and os.path.exists(broll["media_path"]):
@@ -379,6 +444,10 @@ def queue_project_generation(project_id: str) -> None:
                         sc.media_type = "video"
                         sc.source_tier = "pexels"
                         sc.fail_reason = None
+                        sc.selected_query = broll.get("query")
+                        sc.selected_reason = broll.get("reason")
+                        sc.candidate_count = broll.get("candidate_count", 1)
+                        sc.ai_ranking_score = broll.get("ai_score")
                         sc.status = "ready"
                         media_assigned = True
                         if broll.get("video_id"):
@@ -386,7 +455,7 @@ def queue_project_generation(project_id: str) -> None:
                 except Exception as broll_err:
                     print(f"[StockVideo] Worker error for scene {sc.id}: {broll_err}")
 
-            # 2. If not assigned (or if visual_source is flux), generate via FLUX
+            # 2. If not assigned (or if visual_source is flux / strategy flux), generate via FLUX
             if not media_assigned:
                 out_name = f"{pid}_{sc.id}.jpg"
                 out_path = os.path.join(PREVIEWS_DIR, out_name)
@@ -922,10 +991,26 @@ def generate_scene_media(project_id: str, scene_id: str, api_key: Optional[str] 
     target.status = "generating"
     save_project(project)
 
+    # 0. Check hold_previous / hold strategy
+    curr_idx = next((i for i, s in enumerate(project.scenes) if s.id == target.id), 0)
+    if curr_idx > 0 and (target.hold_previous or getattr(target, "visual_strategy", "") == "hold"):
+        prev_ready = next((p for p in reversed(project.scenes[:curr_idx]) if p.status in ("ready", "manual") and p.media_path and os.path.exists(p.media_path)), None)
+        if prev_ready:
+            target.media_url = prev_ready.media_url
+            target.media_path = prev_ready.media_path
+            target.media_type = prev_ready.media_type
+            target.source_tier = prev_ready.source_tier
+            target.selected_reason = f"Reused visual from scene {prev_ready.id[:6]} for story continuity"
+            target.status = "ready"
+            target.fail_reason = None
+            save_project(project)
+            return project, None, 200
+
     visual_src = getattr(project, "visual_source", "video")
+    strat = getattr(target, "visual_strategy", "pexels")
     media_assigned = False
 
-    if visual_src in ("video", "hybrid"):
+    if visual_src in ("video", "hybrid") and strat != "flux":
         try:
             used_video_ids: Set[str] = set()
             for s in project.scenes:
@@ -935,13 +1020,31 @@ def generate_scene_media(project_id: str, scene_id: str, api_key: Optional[str] 
                     if match:
                         used_video_ids.add(match.group(1))
 
+            # Regeneration support: if target already has an existing video, exclude it to force variation!
+            if target.media_path and target.media_type == "video":
+                base = os.path.basename(target.media_path)
+                match = re.search(r'_(\d+)\.mp4$', base)
+                if match:
+                    used_video_ids.add(match.group(1))
+
             broll = fetch_broll_for_scene(
                 scene_id=target.id,
                 scene_text=target.text,
                 image_prompt=target.image_prompt,
                 video_prompt=target.video_prompt,
-                topic=project.script[:120],
+                subject=getattr(target, "subject", ""),
+                action=getattr(target, "action", ""),
+                setting=getattr(target, "setting", ""),
+                shot=getattr(target, "shot_scale", "") or getattr(target, "motion", ""),
+                mood=getattr(target, "mood", "cinematic"),
+                visual_type=getattr(target, "visual_type", "literal"),
+                visual_priority=getattr(target, "visual_priority", "medium"),
+                must_show=getattr(target, "must_show", []),
+                should_avoid=getattr(target, "should_avoid", []),
+                search_queries=getattr(target, "search_queries", []),
                 broll_keywords=getattr(target, "broll_keywords", []),
+                continuity_group=getattr(target, "continuity_group", ""),
+                topic=project.script[:120],
                 used_video_ids=used_video_ids,
                 api_key=api_key
             )
@@ -953,6 +1056,10 @@ def generate_scene_media(project_id: str, scene_id: str, api_key: Optional[str] 
                 target.media_type = "video"
                 target.source_tier = "pexels"
                 target.fail_reason = None
+                target.selected_query = broll.get("query")
+                target.selected_reason = broll.get("reason")
+                target.candidate_count = broll.get("candidate_count", 1)
+                target.ai_ranking_score = broll.get("ai_score")
                 media_assigned = True
         except Exception as broll_err:
             print(f"[StockVideo] Single scene error for {target.id}: {broll_err}")
