@@ -72,34 +72,29 @@
                 <!-- STEP 1: Script & AI Voiceover -->
                 <div class="step-panel" id="stepPanel1">
                     
-                    <!-- 🚀 1-Click Paste & Publish to YouTube Card (Master Hero Card) -->
-                    <div class="card youtube-publish-card" id="oneClickPublishCard" style="border: 2px solid #ff334b; background: linear-gradient(135deg, rgba(255, 51, 75, 0.12) 0%, rgba(20, 20, 35, 0.98) 100%); margin-bottom: 24px; box-shadow: 0 8px 32px rgba(255, 0, 51, 0.25);">
-                        <div class="card-header" style="align-items: center; margin-bottom: 8px;">
+                    <!-- 📝 Script & Directing Card -->
+                    <div class="card" id="scriptInputCard" style="border: 1px solid rgba(255, 255, 255, 0.12); background: linear-gradient(135deg, rgba(16, 20, 34, 0.98) 0%, rgba(13, 17, 28, 0.98) 100%); margin-bottom: 16px;">
+                        <div class="card-header" style="align-items: center; margin-bottom: 10px;">
                             <div class="card-title">
-                                <span class="icon">🚀</span>
-                                <h3 style="color: #ffffff; font-weight: 700; font-size: 18px;">1-Click Paste & Publish to YouTube</h3>
+                                <span class="icon">📝</span>
+                                <h3 style="color: #ffffff; font-weight: 700; font-size: 17px;">Spoken Script & Directing</h3>
                             </div>
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <select id="ytChannelSelect" class="form-select compact-select" style="max-width: 190px; padding: 5px 10px; font-size: 12px; font-weight: 600; background: rgba(10, 15, 30, 0.95); border: 1px solid rgba(0, 230, 118, 0.4); color: #00e676; border-radius: 16px; cursor: pointer;">
-                                    <option value="">Loading Channels...</option>
-                                </select>
-                                <button type="button" id="manageChannelsBtn" class="btn-secondary btn-sm" style="padding: 5px 10px; font-size: 11px; border-radius: 16px; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.2); color: #e0e4f0; cursor: pointer; white-space: nowrap;" title="Manage YouTube Channels (Add, Switch, Import)">
-                                    ⚙️ Channels
-                                </button>
-                            </div>
+                            <button type="button" id="loopScriptBtn" class="btn-secondary btn-sm" style="padding: 5px 12px; font-size: 11.5px; font-weight: 600; border-radius: 14px; background: rgba(0, 230, 255, 0.12); border: 1px solid rgba(0, 230, 255, 0.45); color: #00e6ff; cursor: pointer; transition: all 0.2s;" title="Seamlessly bridges the final sentence back into the opening hook sentence to drive >100% retention">
+                                🔁 1-Click Infinity Loop
+                            </button>
                         </div>
 
-                        <p style="font-size: 13px; color: #b4b9cc; margin: 0 0 14px 0; line-height: 1.45;">
-                            Paste your spoken script below. The engine auto-directs <strong>18–22 rapid visual cuts</strong> (~2.8s/cut), burns kinetic animated captions, adds sidechain audio ducking, and uploads directly to your selected YouTube channel with YPP monetization compliance!
+                        <p style="font-size: 12.5px; color: #94a3b8; margin: 0 0 12px 0; line-height: 1.45;">
+                            Paste your spoken script below. The engine auto-plans rapid visual beats, aligns voiceover with kinetic captions, and mixes cinematic audio. 100% of your exact words are preserved.
                         </p>
 
                         <!-- Main Script Textarea -->
                         <div class="textarea-wrapper" style="margin-bottom: 8px;">
-                            <textarea id="scriptInput" rows="7" style="width: 100%; min-height: 160px; font-size: 14px; line-height: 1.55; padding: 14px; border-radius: 8px; background: rgba(10, 12, 22, 0.85); border: 1px solid rgba(255, 51, 75, 0.35); color: #ffffff; resize: vertical; box-sizing: border-box;" placeholder="Paste your spoken script here...&#10;&#10;Example: For centuries, historians claimed the Great Sphinx of Giza was carved for Khafre. But in 1989, a seismic radar survey revealed something that shocked the archaeological world: a massive artificial subterranean chamber hidden 40 feet below the paws!&#10;&#10;Tip: The sweet spot is 120-150 words (50-60s). 100% of your exact words are preserved verbatim!"></textarea>
+                            <textarea id="scriptInput" rows="6" style="width: 100%; min-height: 140px; font-size: 14px; line-height: 1.55; padding: 12px 14px; border-radius: 8px; background: rgba(10, 12, 22, 0.85); border: 1px solid rgba(255, 255, 255, 0.12); color: #ffffff; resize: vertical; box-sizing: border-box;" placeholder="Paste your spoken script here...&#10;&#10;Example: For centuries, historians claimed the Great Sphinx of Giza was carved for Khafre. But in 1989, a seismic radar survey revealed something that shocked the archaeological world: a massive artificial subterranean chamber hidden 40 feet below the paws!&#10;&#10;Tip: The sweet spot is 120-150 words (50-60s)."></textarea>
                         </div>
 
-                        <!-- Script Word Count & Duration Stats + Infinity Loop Action -->
-                        <div class="script-stats" style="margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                        <!-- Script Stats & Word Count Row -->
+                        <div class="script-stats" style="margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
                             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                                 <div class="stat-badge">
                                     <span>Words:</span>
@@ -114,13 +109,28 @@
                                     <strong id="pacingText">Short & Punchy</strong>
                                 </div>
                             </div>
-                            <button type="button" id="loopScriptBtn" class="btn-secondary btn-sm" style="padding: 5px 12px; font-size: 12px; font-weight: 600; border-radius: 14px; background: rgba(0, 230, 255, 0.12); border: 1px solid rgba(0, 230, 255, 0.45); color: #00e6ff; cursor: pointer; transition: all 0.2s;" title="Seamlessly bridges the final sentence back into the opening hook sentence to drive >100% retention">
-                                🔁 1-Click Infinity Loop
-                            </button>
                         </div>
 
-                        <!-- Retention & Anti-Swipe Boosters Row -->
-                        <div style="display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 14px; padding: 10px 14px; background: rgba(0, 0, 0, 0.35); border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.1);">
+                        <!-- Visual Engine & Cuts Pacing (Side-by-Side 2 Columns) -->
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-bottom: 12px;">
+                            <div class="form-group" style="margin: 0;">
+                                <label for="visualSourceSelect" style="font-size: 11.5px; font-weight: 600; color: #00e6ff; margin-bottom: 4px; display: block;">Visual Media Engine</label>
+                                <select id="visualSourceSelect" class="form-select compact-select" style="padding: 8px 12px; width: 100%; border: 1px solid rgba(0, 230, 255, 0.45); background: rgba(10, 16, 32, 0.95); color: #00e6ff; font-weight: 600;">
+                                    <option value="video" selected>🎬 Cinematic Video (Pexels HD)</option>
+                                    <option value="flux">🎨 AI Generated Art (FLUX.1)</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin: 0;">
+                                <label for="ytPacingMode" style="font-size: 11.5px; font-weight: 600; color: #e0e4f0; margin-bottom: 4px; display: block;">Visual Cuts Pacing</label>
+                                <select id="ytPacingMode" class="form-select compact-select" style="padding: 8px 12px; width: 100%;">
+                                    <option value="rapid" selected>⚡ Ultra Fast (18-22 cuts, ~2.8s each)</option>
+                                    <option value="standard">Standard Pacing</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Retention & Anti-Swipe Boosters Inline Bar -->
+                        <div style="display: flex; flex-wrap: wrap; gap: 14px; padding: 10px 14px; background: rgba(0, 0, 0, 0.35); border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.08);">
                             <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #e0e4f0; cursor: pointer;" title="Injects cinematic whooshes and sub-bass impacts on camera cuts to prevent monotone boredom drop-offs">
                                 <input type="checkbox" id="ytEnableSfx" checked style="accent-color: #00e676; cursor: pointer;">
                                 <span>🎵 Transition SFX (Whooshes)</span>
@@ -134,114 +144,69 @@
                                 <span>⚠️ Top Hook Banner (Scene 1)</span>
                             </label>
                         </div>
-
-                        <!-- Publishing Options Row -->
-                        <div class="form-row" style="margin-bottom: 16px; gap: 12px; flex-wrap: wrap;">
-                            <div class="form-group flex-1" style="min-width: 140px;">
-                                <label for="ytPrivacySelect" style="font-size: 12px; font-weight: 600; color: #e0e4f0;">Upload Privacy</label>
-                                <select id="ytPrivacySelect" class="form-select compact-select" style="padding: 8px 12px; width: 100%;">
-                                    <option value="public" selected>Public (Immediate Live)</option>
-                                    <option value="unlisted">Unlisted (Review First)</option>
-                                    <option value="private">Private</option>
-                                </select>
-                            </div>
-                            <div class="form-group flex-1" style="min-width: 160px;">
-                                <label for="ytResolutionSelect" style="font-size: 12px; font-weight: 600; color: #e0e4f0;">Render Speed & Res</label>
-                                <select id="ytResolutionSelect" class="form-select compact-select" style="padding: 8px 12px; width: 100%;">
-                                    <option value="720p" selected>⚡ Turbo 720p HD (3x Faster)</option>
-                                    <option value="1080p">1080p Full HD</option>
-                                </select>
-                            </div>
-                            <div class="form-group flex-1" style="min-width: 170px;">
-                                <label for="visualSourceSelect" style="font-size: 12px; font-weight: 600; color: #00e6ff;">Visual Media Engine</label>
-                                <select id="visualSourceSelect" class="form-select compact-select" style="padding: 8px 12px; width: 100%; border: 1px solid rgba(0, 230, 255, 0.45); background: rgba(10, 16, 32, 0.95); color: #00e6ff; font-weight: 600;">
-                                    <option value="video" selected>🎬 Cinematic Video (Pexels HD)</option>
-                                    <option value="flux">🎨 AI Generated Art (FLUX.1)</option>
-                                </select>
-                            </div>
-                            <div class="form-group flex-1" style="min-width: 160px;">
-                                <label for="ytPacingMode" style="font-size: 12px; font-weight: 600; color: #e0e4f0;">Visual Cuts Pacing</label>
-                                <select id="ytPacingMode" class="form-select compact-select" style="padding: 8px 12px; width: 100%;">
-                                    <option value="rapid" selected>⚡ Ultra Fast (18-22 cuts, ~2.8s each)</option>
-                                    <option value="standard">Standard Pacing</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <!-- Glowing Master Publish Button -->
-                        <button type="button" id="oneClickPublishBtn" class="btn-master" style="background: linear-gradient(135deg, #ff0033 0%, #ff4b2b 100%); box-shadow: 0 4px 22px rgba(255, 0, 51, 0.5); width: 100%; font-size: 16px; font-weight: 700; padding: 15px 20px; letter-spacing: 0.6px; border-radius: 8px; border: none; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;">
-                            <span class="btn-icon" style="font-size: 18px;">🚀</span>
-                            <span class="btn-text">PUBLISH YT SHORT ON YOUTUBE</span>
-                        </button>
                     </div>
 
-                    <!-- Voice Selection Card -->
-                    <div class="card">
-                        <div class="card-header">
-                            <div class="card-title">
-                                <span class="icon">🎙️</span>
-                                <h3>AI Voiceover & Speed</h3>
-                            </div>
-                            <button id="previewVoiceBtn" class="btn-secondary btn-sm" title="Listen to Voice">
-                                🔊 Audition Voice
-                            </button>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="voiceSelect">Neural Voice</label>
-                            <select id="voiceSelect" class="form-select"></select>
-                        </div>
-
-                        <div class="form-group" style="margin-top: 14px;">
-                            <div class="slider-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                                <label for="voiceSpeedSlider" style="display: flex; align-items: center; gap: 8px; font-weight: 600; color: #e0e4f0;">
-                                    <span>Voice Pacing / Speed</span>
-                                    <span id="voiceSpeedBadge" style="font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3);">0.85x • Natural & Authoritative</span>
-                                </label>
-                                <span id="voiceSpeedValue" style="font-weight: 700; color: #00e6ff; font-size: 14px;">0.85x</span>
-                            </div>
-                            <input type="range" id="voiceSpeedSlider" min="0.70" max="1.25" step="0.05" value="0.85" class="form-slider" style="margin-bottom: 10px; width: 100%;">
-                            
-                            <!-- Quick Preset Pill Buttons -->
-                            <div class="speed-presets-row" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
-                                <button type="button" class="btn-speed-preset" data-speed="0.75" title="Dramatic slow pace (125 WPM)" style="padding: 5px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #cbd5e1; cursor: pointer; text-align: center;">0.75x Slow</button>
-                                <button type="button" class="btn-speed-preset" data-speed="0.80" title="Relaxed storytelling pace (140 WPM)" style="padding: 5px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #cbd5e1; cursor: pointer; text-align: center;">0.80x Relaxed</button>
-                                <button type="button" class="btn-speed-preset active-speed-preset" data-speed="0.85" title="Natural commanding pace (150 WPM) - Recommended" style="padding: 5px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; border: 1px solid #00e6ff; background: rgba(0, 230, 255, 0.15); color: #00e6ff; cursor: pointer; text-align: center;">0.85x Natural</button>
-                                <button type="button" class="btn-speed-preset" data-speed="0.90" title="Steady conversational pace (160 WPM)" style="padding: 5px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #cbd5e1; cursor: pointer; text-align: center;">0.90x Steady</button>
-                                <button type="button" class="btn-speed-preset" data-speed="0.95" title="Brisk energetic pace (166 WPM)" style="padding: 5px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #cbd5e1; cursor: pointer; text-align: center;">0.95x Brisk</button>
-                                <button type="button" class="btn-speed-preset" data-speed="1.00" title="Standard fast YouTube pace (171 WPM)" style="padding: 5px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #cbd5e1; cursor: pointer; text-align: center;">1.00x Fast</button>
-                                <button type="button" class="btn-speed-preset" data-speed="1.05" title="Punchy retention pace" style="padding: 5px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #cbd5e1; cursor: pointer; text-align: center;">1.05x Punchy</button>
-                                <button type="button" class="btn-speed-preset" data-speed="1.10" title="Rapid high-energy pace" style="padding: 5px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #cbd5e1; cursor: pointer; text-align: center;">1.10x Rapid</button>
-                            </div>
-                            <!-- Synced legacy select for programmatic access -->
-                            <select id="speedSelect" class="form-select" style="display: none;">
-                                <option value="0.75">0.75x</option>
-                                <option value="0.80">0.80x</option>
-                                <option value="0.85" selected>0.85x</option>
-                                <option value="0.90">0.90x</option>
-                                <option value="0.95">0.95x</option>
-                                <option value="1.00">1.00x</option>
-                                <option value="1.05">1.05x</option>
-                                <option value="1.10">1.10x</option>
-                                <option value="+0%">Normal (1.0x)</option>
-                                <option value="+10%">Punchy (+10%)</option>
-                            </select>
-                        </div>
-                        <audio id="voiceAudioPreview" class="hidden-audio" controls></audio>
-                    </div>
-
-                    <!-- 🎙️ Dedicated Voiceover Audio Studio Card (Generate Separately) -->
-                    <div class="card voiceover-studio-card" id="voiceoverStudioCard" style="border: 1px solid rgba(0, 230, 255, 0.35); background: linear-gradient(135deg, rgba(10, 20, 40, 0.95) 0%, rgba(13, 17, 28, 0.98) 100%); margin-top: 16px;">
-                        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <!-- 🎙️ Unified Voiceover Audio Studio Card (Combines Voice + Speed + Synthesizer + Segments) -->
+                    <div class="card voiceover-studio-card" id="voiceoverStudioCard" style="border: 1px solid rgba(0, 230, 255, 0.35); background: linear-gradient(135deg, rgba(10, 20, 40, 0.95) 0%, rgba(13, 17, 28, 0.98) 100%); margin-bottom: 16px;">
+                        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                             <div class="card-title">
                                 <span class="icon">🎙️</span>
                                 <h3 style="color: #00e6ff; font-size: 16px; font-weight: 700;">Voiceover Audio Studio</h3>
                             </div>
-                            <span class="tag-pill" style="font-size: 11px; padding: 2px 8px; background: rgba(0, 230, 255, 0.15); border: 1px solid rgba(0, 230, 255, 0.4); color: #00e6ff;">Audio First Workflow</span>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span class="tag-pill" style="font-size: 11px; padding: 3px 8px; background: rgba(0, 230, 255, 0.12); border: 1px solid rgba(0, 230, 255, 0.35); color: #00e6ff; border-radius: 4px;">Audio First Workflow</span>
+                                <button type="button" id="previewVoiceBtn" class="btn-secondary btn-sm" style="padding: 4px 10px; font-size: 11.5px; border-radius: 4px; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.2); color: #fff; cursor: pointer;" title="Audition a short sample of this voice">
+                                    🔊 Audition Voice
+                                </button>
+                            </div>
                         </div>
-                        <p style="font-size: 12.5px; color: #b4b9cc; margin: 0 0 12px 0; line-height: 1.45;">
-                            Synthesize your voiceover separately to inspect exact spoken timings before picking visuals. You can listen to each line's timing or open directly in the <strong>CapCut Timeline Editor</strong>!
-                        </p>
+
+                        <!-- Voice Selection & Speed Control Row (Side-by-Side 2 Columns) -->
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin-bottom: 12px;">
+                            <div class="form-group" style="margin: 0;">
+                                <label for="voiceSelect" style="font-size: 11.5px; font-weight: 600; color: #e0e4f0; margin-bottom: 4px; display: block;">Neural Voice</label>
+                                <select id="voiceSelect" class="form-select" style="width: 100%;"></select>
+                            </div>
+                            <div class="form-group" style="margin: 0;">
+                                <div class="slider-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                    <label for="voiceSpeedSlider" style="display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; color: #e0e4f0;">
+                                        <span>Voice Pacing:</span>
+                                        <span id="voiceSpeedBadge" style="font-size: 10.5px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3);">0.85x • Natural</span>
+                                    </label>
+                                    <span id="voiceSpeedValue" style="font-weight: 700; color: #00e6ff; font-size: 13px;">0.85x</span>
+                                </div>
+                                <input type="range" id="voiceSpeedSlider" min="0.70" max="1.25" step="0.05" value="0.85" class="form-slider" style="width: 100%; margin: 4px 0 0 0;">
+                            </div>
+                        </div>
+
+                        <!-- Quick Speed Preset Buttons (Clean responsive grid) -->
+                        <div class="speed-presets-row" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 6px; margin-bottom: 14px;">
+                            <button type="button" class="btn-speed-preset" data-speed="0.75" style="padding: 4px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #cbd5e1; cursor: pointer; text-align: center;">0.75x Slow</button>
+                            <button type="button" class="btn-speed-preset" data-speed="0.80" style="padding: 4px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #cbd5e1; cursor: pointer; text-align: center;">0.80x Relaxed</button>
+                            <button type="button" class="btn-speed-preset active-speed-preset" data-speed="0.85" style="padding: 4px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; border: 1px solid #00e6ff; background: rgba(0, 230, 255, 0.15); color: #00e6ff; cursor: pointer; text-align: center;">0.85x Natural</button>
+                            <button type="button" class="btn-speed-preset" data-speed="0.90" style="padding: 4px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #cbd5e1; cursor: pointer; text-align: center;">0.90x Steady</button>
+                            <button type="button" class="btn-speed-preset" data-speed="0.95" style="padding: 4px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #cbd5e1; cursor: pointer; text-align: center;">0.95x Brisk</button>
+                            <button type="button" class="btn-speed-preset" data-speed="1.00" style="padding: 4px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #cbd5e1; cursor: pointer; text-align: center;">1.00x Fast</button>
+                            <button type="button" class="btn-speed-preset" data-speed="1.05" style="padding: 4px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #cbd5e1; cursor: pointer; text-align: center;">1.05x Punchy</button>
+                            <button type="button" class="btn-speed-preset" data-speed="1.10" style="padding: 4px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #cbd5e1; cursor: pointer; text-align: center;">1.10x Rapid</button>
+                        </div>
+
+                        <!-- Hidden compatibility elements -->
+                        <select id="speedSelect" class="form-select" style="display: none;">
+                            <option value="0.75">0.75x</option>
+                            <option value="0.80">0.80x</option>
+                            <option value="0.85" selected>0.85x</option>
+                            <option value="0.90">0.90x</option>
+                            <option value="0.95">0.95x</option>
+                            <option value="1.00">1.00x</option>
+                            <option value="1.05">1.05x</option>
+                            <option value="1.10">1.10x</option>
+                            <option value="+0%">Normal (1.0x)</option>
+                            <option value="+10%">Punchy (+10%)</option>
+                        </select>
+                        <audio id="voiceAudioPreview" class="hidden-audio" controls></audio>
+
+                        <!-- Studio Action Buttons -->
                         <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 8px;">
                             <button type="button" id="generateVoiceoverBtn" class="btn-master" style="flex: 1; min-width: 220px; background: linear-gradient(135deg, #00b4d8 0%, #0077b6 100%); border: none; font-size: 13.5px; font-weight: 700; padding: 10px 16px; border-radius: 6px; cursor: pointer; color: #fff; display: flex; align-items: center; justify-content: center; gap: 8px;">
                                 <span>🎙️ Synthesize Voiceover & Timings</span>
@@ -281,14 +246,59 @@
                         </div>
                     </div>
 
-                    <!-- Step 1 Navigation Footer -->
-                    <div class="step-nav-footer">
-                        <div></div>
-                        <button class="btn-google-next" id="toStep2Btn">
-                            Continue to Visual Storyboard ➔
-                        </button>
+                    <!-- 🚀 Production, YouTube Channel & Navigation Master Card -->
+                    <div class="card master-dispatch-card" id="oneClickPublishCard" style="border: 2px solid rgba(255, 51, 75, 0.35); background: linear-gradient(135deg, rgba(255, 51, 75, 0.08) 0%, rgba(20, 20, 35, 0.98) 100%); margin-bottom: 14px; box-shadow: 0 6px 25px rgba(255, 0, 51, 0.15);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <span style="font-size: 20px;">🚀</span>
+                                <div>
+                                    <h4 style="margin: 0; font-size: 15px; font-weight: 700; color: #fff;">Produce, Review & Publish</h4>
+                                    <p style="margin: 2px 0 0 0; font-size: 12px; color: #94a3b8;">Review in Storyboard / CapCut Timeline, or 1-Click Publish instantly to YouTube</p>
+                                </div>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                <select id="ytChannelSelect" class="form-select compact-select" style="max-width: 190px; padding: 5px 10px; font-size: 12px; font-weight: 600; background: rgba(10, 15, 30, 0.95); border: 1px solid rgba(0, 230, 118, 0.4); color: #00e676; border-radius: 16px; cursor: pointer;">
+                                    <option value="">Loading Channels...</option>
+                                </select>
+                                <button type="button" id="manageChannelsBtn" class="btn-secondary btn-sm" style="padding: 5px 10px; font-size: 11px; border-radius: 16px; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.2); color: #e0e4f0; cursor: pointer; white-space: nowrap;" title="Manage YouTube Channels (Add, Switch, Import)">
+                                    ⚙️ Channels
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Publishing Options Row (Privacy & Resolution side-by-side) -->
+                        <div class="form-row" style="margin-bottom: 14px; gap: 12px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+                            <div class="form-group" style="margin: 0;">
+                                <label for="ytPrivacySelect" style="font-size: 11.5px; font-weight: 600; color: #e0e4f0; margin-bottom: 4px; display: block;">Upload Privacy</label>
+                                <select id="ytPrivacySelect" class="form-select compact-select" style="padding: 8px 12px; width: 100%;">
+                                    <option value="public" selected>Public (Immediate Live)</option>
+                                    <option value="unlisted">Unlisted (Review First)</option>
+                                    <option value="private">Private</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin: 0;">
+                                <label for="ytResolutionSelect" style="font-size: 11.5px; font-weight: 600; color: #e0e4f0; margin-bottom: 4px; display: block;">Render Speed & Res</label>
+                                <select id="ytResolutionSelect" class="form-select compact-select" style="padding: 8px 12px; width: 100%;">
+                                    <option value="720p" selected>⚡ Turbo 720p HD (3x Faster)</option>
+                                    <option value="1080p">1080p Full HD</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Dual Action Paths: 1-Click Publish VS Continue to Visual Storyboard / CapCut Timeline -->
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px;">
+                            <button type="button" id="oneClickPublishBtn" class="btn-master" style="background: linear-gradient(135deg, #ff0033 0%, #ff4b2b 100%); box-shadow: 0 4px 18px rgba(255, 0, 51, 0.45); font-size: 14px; font-weight: 700; padding: 12px 18px; letter-spacing: 0.5px; border-radius: 8px; border: none; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                                <span class="btn-icon" style="font-size: 16px;">🚀</span>
+                                <span class="btn-text">1-CLICK PUBLISH TO YOUTUBE</span>
+                            </button>
+
+                            <button class="btn-google-next" id="toStep2Btn" style="font-size: 14px; font-weight: 700; padding: 12px 18px; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%); color: #fff; border: none; cursor: pointer; box-shadow: 0 4px 18px rgba(124, 58, 237, 0.35);">
+                                <span>Continue to Visual Storyboard ➔</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
+
 
                 <!-- STEP 2: Visual Storyboard & Scene Editor -->
                 <div class="step-panel hidden" id="stepPanel2">
