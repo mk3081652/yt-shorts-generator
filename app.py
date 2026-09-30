@@ -56,6 +56,11 @@ from engine.project import (
     redo_project,
     edit_scene_duration,
     assign_stock_video_to_scene,
+    auto_sync_timeline,
+    split_scene_at_playhead,
+    smart_match_all_visuals,
+    apply_color_filter,
+    reorder_scene,
     Project,
     Scene
 )
@@ -310,6 +315,29 @@ class AssignStockVideoRequest(BaseModel):
     segment_id: str
     video_id: str
     download_url: str
+
+
+class AutoSyncRequest(BaseModel):
+    mode: Optional[str] = "voice_lock"
+    max_cut_dur: Optional[float] = 2.8
+
+
+class SplitAtPlayheadRequest(BaseModel):
+    segment_id: str
+    playhead_time: float
+
+
+class SmartMatchAllRequest(BaseModel):
+    force_all: Optional[bool] = False
+
+
+class SetColorFilterRequest(BaseModel):
+    color_filter: str
+
+
+class ReorderSceneRequest(BaseModel):
+    segment_id: str
+    direction: str  # "left" | "right"
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -1008,6 +1036,54 @@ def api_project_assign_stock_video(id: str, req: AssignStockVideoRequest):
     return proj.to_dict()
 
 
+@app.post("/api/projects/{id}/auto_sync")
+def api_project_auto_sync(id: str, req: AutoSyncRequest):
+    """Auto-syncs visual scene durations with voiceover timestamps and viral retention rules."""
+    validate_session_id(id)
+    proj, err, code = auto_sync_timeline(id, mode=req.mode or "voice_lock", max_cut_dur=req.max_cut_dur or 2.8)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return proj.to_dict()
+
+
+@app.post("/api/projects/{id}/split_at_playhead")
+def api_project_split_at_playhead(id: str, req: SplitAtPlayheadRequest):
+    """Splits a scene right where the playhead needle is positioned on the CapCut timeline."""
+    validate_session_id(id)
+    proj, err, code = split_scene_at_playhead(id, req.segment_id, req.playhead_time)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return proj.to_dict()
+
+
+@app.post("/api/projects/{id}/smart_match_all")
+def api_project_smart_match_all(id: str, req: SmartMatchAllRequest):
+    """1-Click AI B-Roll Match: Auto-searches and assigns Pexels vertical videos for all scenes."""
+    validate_session_id(id)
+    proj, err, code = smart_match_all_visuals(id, force_all=bool(req.force_all))
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return proj.to_dict()
+
+
+@app.post("/api/projects/{id}/set_color_filter")
+def api_project_set_color_filter(id: str, req: SetColorFilterRequest):
+    """Sets cinematic LUT / color grade preset for video playback and rendering."""
+    validate_session_id(id)
+    proj, err, code = apply_color_filter(id, req.color_filter)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return proj.to_dict()
+
+
+@app.post("/api/projects/{id}/reorder_scene")
+def api_project_reorder_scene(id: str, req: ReorderSceneRequest):
+    """Shifts a scene earlier ('left') or later ('right') in the timeline."""
+    validate_session_id(id)
+    proj, err, code = reorder_scene(id, req.segment_id, req.direction)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return proj.to_dict()
 
 
 @app.post("/api/auto/generate")
@@ -1086,6 +1162,7 @@ def run_render_task(job_id: str, req: RenderRequest):
             custom_audio_path=getattr(req, "custom_audio_path", None),
             tts_provider=getattr(req, "tts_provider", None),
             motion_texture=getattr(req, "motion_texture", None),
+            color_filter=getattr(req, "color_filter", None) or (load_project(req.project_id).color_filter if req.project_id and load_project(req.project_id) else "none"),
             resolution=getattr(req, "resolution", "720p") or "720p"
         )
         script_for_meta = req.script or ""
@@ -1353,6 +1430,7 @@ def run_youtube_publish_task(job_id: str, req: YouTubePublishRequest):
             transition_style="crossfade",
             enable_sfx=getattr(req, "enable_sfx", True),
             enable_progress_bar=getattr(req, "enable_progress_bar", True),
+            color_filter=getattr(proj, "color_filter", "none"),
             resolution=target_res,
             hook_text=f"⚠️ {metadata.get('title', '').split('#')[0].strip().upper()[:40]}" if metadata.get('title') else None
         )

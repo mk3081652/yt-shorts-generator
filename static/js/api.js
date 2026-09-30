@@ -445,6 +445,47 @@ export const api = {
         });
     },
 
+    async autoSync(projectId, mode = "voice_lock", maxCutDur = 2.8) {
+        return await request(`/api/projects/${projectId}/auto_sync`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mode, max_cut_dur: maxCutDur })
+        });
+    },
+
+    async splitAtPlayhead(projectId, sceneId, playheadTime) {
+        return await request(`/api/projects/${projectId}/split_at_playhead`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ segment_id: sceneId, playhead_time: playheadTime })
+        });
+    },
+
+    async smartMatchAll(projectId, forceAll = false) {
+        return await request(`/api/projects/${projectId}/smart_match_all`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ force_all: forceAll })
+        });
+    },
+
+    async setColorFilter(projectId, colorFilter) {
+        return await request(`/api/projects/${projectId}/set_color_filter`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ color_filter: colorFilter })
+        });
+    },
+
+    async reorderScene(projectId, sceneId, direction) {
+        return await request(`/api/projects/${projectId}/reorder_scene`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ segment_id: sceneId, direction })
+        });
+    },
+
+
 
     // Final Short Render & Job Polling
     async generateShort(payload) {

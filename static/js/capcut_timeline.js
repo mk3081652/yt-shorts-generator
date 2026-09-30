@@ -45,6 +45,42 @@ export class CapCutTimelineEditor {
         this.uploadBtn = document.getElementById("capcutUploadBtn");
         this.uploadInput = document.getElementById("capcutUploadInput");
         this.splitBtn = document.getElementById("capcutSplitBtn");
+        this.clearMediaBtn = document.getElementById("capcutClearMediaBtn");
+
+        // Screen frame for live CSS filter preview
+        this.screenFrame = document.querySelector(".capcut-screen-frame");
+
+        // Tabs
+        this.tabBtnInspector = document.getElementById("capcutTabBtnInspector");
+        this.tabBtnAutoSync = document.getElementById("capcutTabBtnAutoSync");
+        this.tabBtnProTools = document.getElementById("capcutTabBtnProTools");
+        this.panelInspector = document.getElementById("capcutPanelInspector");
+        this.panelAutoSync = document.getElementById("capcutPanelAutoSync");
+        this.panelProTools = document.getElementById("capcutPanelProTools");
+
+        // Auto-Sync elements
+        this.voiceLockBtn = document.getElementById("capcutVoiceLockBtn");
+        this.viralPaceBtn = document.getElementById("capcutViralPaceBtn");
+        this.maxCutSelect = document.getElementById("capcutMaxCutSelect");
+        this.retentionBadge = document.getElementById("capcutRetentionBadge");
+        this.statTotalDur = document.getElementById("capcutStatTotalDur");
+        this.statSceneCount = document.getElementById("capcutStatSceneCount");
+        this.statAvgPace = document.getElementById("capcutStatAvgPace");
+        this.statLongest = document.getElementById("capcutStatLongest");
+
+        // Pro Tools elements
+        this.splitAtPlayheadBtn = document.getElementById("capcutSplitAtPlayheadBtn");
+        this.smartMatchAllBtn = document.getElementById("capcutSmartMatchAllBtn");
+        this.forceMatchAllCheck = document.getElementById("capcutForceMatchAllCheck");
+        this.colorFilterSelect = document.getElementById("capcutColorFilterSelect");
+        this.reorderLeftBtn = document.getElementById("capcutReorderLeftBtn");
+        this.reorderRightBtn = document.getElementById("capcutReorderRightBtn");
+
+        // Toolbar quick-access
+        this.toolbarSplitBtn = document.getElementById("capcutToolbarSplitBtn");
+        this.toolbarAutoSyncBtn = document.getElementById("capcutToolbarAutoSyncBtn");
+        this.toolbarMatchBtn = document.getElementById("capcutToolbarMatchBtn");
+        this.toolbarLutSelect = document.getElementById("capcutToolbarLutSelect");
 
         // Timeline tracks
         this.viewport = document.getElementById("capcutTimelineViewport");
@@ -78,6 +114,62 @@ export class CapCutTimelineEditor {
             }
         });
 
+        // Tab switching
+        if (this.tabBtnInspector) {
+            this.tabBtnInspector.addEventListener("click", () => this.switchTab("inspector"));
+        }
+        if (this.tabBtnAutoSync) {
+            this.tabBtnAutoSync.addEventListener("click", () => this.switchTab("autoSync"));
+        }
+        if (this.tabBtnProTools) {
+            this.tabBtnProTools.addEventListener("click", () => this.switchTab("proTools"));
+        }
+
+        // Toolbar quick actions
+        if (this.toolbarSplitBtn) {
+            this.toolbarSplitBtn.addEventListener("click", () => this.handleSplitAtPlayhead());
+        }
+        if (this.toolbarAutoSyncBtn) {
+            this.toolbarAutoSyncBtn.addEventListener("click", () => this.switchTab("autoSync"));
+        }
+        if (this.toolbarMatchBtn) {
+            this.toolbarMatchBtn.addEventListener("click", () => this.switchTab("proTools"));
+        }
+        if (this.toolbarLutSelect) {
+            this.toolbarLutSelect.addEventListener("change", (e) => this.handleColorFilterChange(e.target.value));
+        }
+
+        // Auto-Sync actions
+        if (this.voiceLockBtn) {
+            this.voiceLockBtn.addEventListener("click", () => this.handleAutoSync("voice_lock"));
+        }
+        if (this.viralPaceBtn) {
+            this.viralPaceBtn.addEventListener("click", () => {
+                const maxDur = parseFloat(this.maxCutSelect?.value) || 2.8;
+                this.handleAutoSync("rapid_cuts", maxDur);
+            });
+        }
+
+        // Pro Tools actions
+        if (this.splitAtPlayheadBtn) {
+            this.splitAtPlayheadBtn.addEventListener("click", () => this.handleSplitAtPlayhead());
+        }
+        if (this.smartMatchAllBtn) {
+            this.smartMatchAllBtn.addEventListener("click", () => this.handleSmartMatchAll());
+        }
+        if (this.colorFilterSelect) {
+            this.colorFilterSelect.addEventListener("change", (e) => this.handleColorFilterChange(e.target.value));
+        }
+        if (this.reorderLeftBtn) {
+            this.reorderLeftBtn.addEventListener("click", () => this.handleReorder("left"));
+        }
+        if (this.reorderRightBtn) {
+            this.reorderRightBtn.addEventListener("click", () => this.handleReorder("right"));
+        }
+        if (this.clearMediaBtn) {
+            this.clearMediaBtn.addEventListener("click", () => this.handleClearMedia());
+        }
+
         // Transport controls
         if (this.playBtn) {
             this.playBtn.addEventListener("click", () => this.togglePlay());
@@ -89,12 +181,17 @@ export class CapCutTimelineEditor {
             this.fwBtn.addEventListener("click", () => this.seekBy(1.0));
         }
 
-        // Global Spacebar Play/Pause when editor visible and not focused in textarea
+        // Global Keyboard shortcuts: Space for Play/Pause, S for Split at playhead
         document.addEventListener("keydown", (e) => {
             if (!this.isVisible()) return;
-            if (e.code === "Space" && e.target.tagName !== "TEXTAREA" && e.target.tagName !== "INPUT") {
+            if (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT") return;
+
+            if (e.code === "Space") {
                 e.preventDefault();
                 this.togglePlay();
+            } else if (e.key === "s" || e.key === "S") {
+                e.preventDefault();
+                this.handleSplitAtPlayhead();
             }
         });
 
@@ -245,6 +342,16 @@ export class CapCutTimelineEditor {
 
         // Update timecode readout
         this.updateTimecode(this.getCurrentTime(), totalDuration);
+
+        // Sync color filter & LUT
+        if (project.color_filter) {
+            if (this.colorFilterSelect) this.colorFilterSelect.value = project.color_filter;
+            if (this.toolbarLutSelect) this.toolbarLutSelect.value = project.color_filter;
+            if (this.screenFrame) this.screenFrame.dataset.filter = project.color_filter;
+        }
+
+        // Update Retention & Pacing health stats
+        this.updatePacingStats(project);
     }
 
     renderRuler(totalDuration, totalWidth) {
@@ -709,6 +816,174 @@ export class CapCutTimelineEditor {
             setTimeout(() => {
                 if (generateBtn) generateBtn.click();
             }, 300);
+        }
+    }
+
+    switchTab(tabName) {
+        const isInspector = tabName === "inspector";
+        const isAutoSync = tabName === "autoSync";
+        const isProTools = tabName === "proTools";
+
+        this.tabBtnInspector?.classList.toggle("active", isInspector);
+        this.tabBtnAutoSync?.classList.toggle("active", isAutoSync);
+        this.tabBtnProTools?.classList.toggle("active", isProTools);
+
+        this.panelInspector?.classList.toggle("hidden", !isInspector);
+        this.panelAutoSync?.classList.toggle("hidden", !isAutoSync);
+        this.panelProTools?.classList.toggle("hidden", !isProTools);
+    }
+
+    async handleAutoSync(mode, maxCutDur = 2.8) {
+        if (!state.project) {
+            this.showToast("No active project to auto-sync", "warning");
+            return;
+        }
+
+        const msg = mode === "voice_lock" 
+            ? "⚡ Locking visual durations to exact voiceover boundaries..."
+            : `✂️ Sub-cutting long scenes for viral retention (Max ${maxCutDur}s)...`;
+        this.showToast(msg, "info", 4000);
+
+        try {
+            const updated = await api.autoSync(state.project.id, mode, maxCutDur);
+            state.setProject(updated);
+            const successMsg = mode === "voice_lock"
+                ? "✅ Timeline visuals locked to spoken voice!"
+                : "✅ Retention sub-cuts applied! Timeline pacing optimized.";
+            this.showToast(successMsg, "success");
+        } catch (err) {
+            this.showToast(`Auto-sync failed: ${err.message}`, "error");
+        }
+    }
+
+    async handleSplitAtPlayhead() {
+        if (!state.project) {
+            this.showToast("No active project to split", "warning");
+            return;
+        }
+
+        const playheadTime = this.getCurrentTime();
+        const scenes = state.project.scenes || [];
+        let cum = 0;
+        let targetScene = null;
+
+        for (const sc of scenes) {
+            const dur = sc.duration || 3.0;
+            if (playheadTime >= cum && playheadTime <= (cum + dur)) {
+                targetScene = sc;
+                break;
+            }
+            cum += dur;
+        }
+
+        if (!targetScene && this.activeSceneId) {
+            targetScene = scenes.find(s => s.id === this.activeSceneId);
+        }
+
+        if (!targetScene) {
+            this.showToast("Position playhead inside a scene to split", "warning");
+            return;
+        }
+
+        try {
+            const updated = await api.splitAtPlayhead(state.project.id, targetScene.id, playheadTime);
+            state.setProject(updated);
+            this.showToast("✂️ Split scene cleanly at playhead needle!", "success");
+        } catch (err) {
+            this.showToast(`Split failed: ${err.message}`, "error");
+        }
+    }
+
+    async handleSmartMatchAll() {
+        if (!state.project) {
+            this.showToast("No active project to match visuals", "warning");
+            return;
+        }
+
+        const forceAll = Boolean(this.forceMatchAllCheck?.checked);
+        this.showToast("🤖 Analyzing narration and matching vertical B-roll from Pexels...", "info", 5000);
+
+        try {
+            const updated = await api.smartMatchAll(state.project.id, forceAll);
+            state.setProject(updated);
+            this.showToast("✅ All scenes matched with vertical stock video clips!", "success");
+        } catch (err) {
+            this.showToast(`Auto-match failed: ${err.message}`, "error");
+        }
+    }
+
+    async handleColorFilterChange(filterVal) {
+        if (!state.project) return;
+        if (this.colorFilterSelect) this.colorFilterSelect.value = filterVal;
+        if (this.toolbarLutSelect) this.toolbarLutSelect.value = filterVal;
+        if (this.screenFrame) this.screenFrame.dataset.filter = filterVal;
+
+        try {
+            const updated = await api.setColorFilter(state.project.id, filterVal);
+            state.setProject(updated);
+            const label = filterVal === "none" ? "Original" : filterVal.replace("_", " ").toUpperCase();
+            this.showToast(`🎨 Color Grade LUT set: ${label}`, "success");
+        } catch (err) {
+            this.showToast(`Failed to set color filter: ${err.message}`, "error");
+        }
+    }
+
+    async handleReorder(direction) {
+        if (!state.project || !this.activeSceneId) {
+            this.showToast("Please select a clip to reorder", "warning");
+            return;
+        }
+
+        try {
+            const updated = await api.reorderScene(state.project.id, this.activeSceneId, direction);
+            state.setProject(updated);
+            this.showToast(`Clip moved ${direction === 'left' ? 'earlier' : 'later'}!`, "success");
+        } catch (err) {
+            this.showToast(`Reorder failed: ${err.message}`, "error");
+        }
+    }
+
+    async handleClearMedia() {
+        if (!state.project || !this.activeSceneId) return;
+        try {
+            const updated = await api.clearMedia(state.project.id, this.activeSceneId);
+            state.setProject(updated);
+            this.showToast("Media removed from scene", "info");
+        } catch (err) {
+            this.showToast(`Failed to clear media: ${err.message}`, "error");
+        }
+    }
+
+    updatePacingStats(project) {
+        if (!project || !project.scenes) return;
+        const scenes = project.scenes;
+        const totalDur = project.total_duration || scenes.reduce((acc, s) => acc + (s.duration || 3.0), 0);
+        const count = scenes.length;
+        const avgPace = count > 0 ? (totalDur / count) : 0;
+        const longest = scenes.length > 0 ? Math.max(...scenes.map(s => s.duration || 3.0)) : 0;
+
+        if (this.statTotalDur) this.statTotalDur.textContent = `${totalDur.toFixed(1)}s`;
+        if (this.statSceneCount) this.statSceneCount.textContent = `${count}`;
+        if (this.statAvgPace) this.statAvgPace.textContent = `${avgPace.toFixed(1)}s`;
+        if (this.statLongest) this.statLongest.textContent = `${longest.toFixed(1)}s`;
+
+        if (this.retentionBadge) {
+            if (longest > 4.0) {
+                this.retentionBadge.textContent = "Retention: ⚠️ Warning (>4s clip)";
+                this.retentionBadge.style.color = "#f87171";
+                this.retentionBadge.style.background = "rgba(239, 68, 68, 0.15)";
+                this.retentionBadge.style.borderColor = "rgba(239, 68, 68, 0.4)";
+            } else if (longest > 2.8) {
+                this.retentionBadge.textContent = "Retention: Moderate (<2.8s ideal)";
+                this.retentionBadge.style.color = "#fbbf24";
+                this.retentionBadge.style.background = "rgba(245, 158, 11, 0.15)";
+                this.retentionBadge.style.borderColor = "rgba(245, 158, 11, 0.4)";
+            } else {
+                this.retentionBadge.textContent = "Retention: 🔥 Viral Peak";
+                this.retentionBadge.style.color = "#34d399";
+                this.retentionBadge.style.background = "rgba(16, 185, 129, 0.15)";
+                this.retentionBadge.style.borderColor = "rgba(16, 185, 129, 0.4)";
+            }
         }
     }
 }

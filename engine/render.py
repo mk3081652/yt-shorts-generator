@@ -454,10 +454,22 @@ def render_shorts_video(
         ]
 
         motion_texture = kwargs.get("motion_texture")
+        color_filter = kwargs.get("color_filter") or "none"
+        filter_lut_map = {
+            "viral_punch": "eq=contrast=1.18:brightness=0.02:saturation=1.28",
+            "moody_noir": "eq=contrast=1.22:brightness=-0.04:saturation=0.85",
+            "teal_orange": "colorbalance=rs=0.12:gs=-0.05:bs=-0.1:rm=-0.05:gm=0.05:bm=0.15",
+            "warm_film": "colorbalance=rs=0.15:gs=0.06:bs=-0.08:rm=0.05:gm=0.02:bm=-0.03",
+            "cyberpunk": "eq=contrast=1.25:saturation=1.45,colorbalance=bs=0.15:bm=0.1:rs=0.1"
+        }
+        lut_filter = filter_lut_map.get(color_filter, "")
+
+        filter_parts = ["[0:v]format=yuv420p"]
+        if lut_filter:
+            filter_parts.append(lut_filter)
         if motion_texture == "film_grain":
-            video_filter_in = "[0:v]format=yuv420p,noise=alls=8:allf=t+u"
-        else:
-            video_filter_in = "[0:v]format=yuv420p"
+            filter_parts.append("noise=alls=8:allf=t+u")
+        video_filter_in = ",".join(filter_parts)
 
         enable_progress_bar = kwargs.get("enable_progress_bar", True)
         if enable_progress_bar:

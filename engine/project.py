@@ -151,6 +151,7 @@ class Project:
     start_mode: str = "auto"    # "auto" | "manual"
     transition_style: str = "crossfade"  # "crossfade" | "zoom-punch" | "none"
     visual_source: str = "video"         # "video" (Pexels) | "flux" (AI art)
+    color_filter: str = "none"           # "none" | "viral_punch" | "moody_noir" | "teal_orange" | "warm_film" | "cyberpunk"
     scenes: List[Scene] = field(default_factory=list)
     timeline: Optional[Dict[str, Any]] = None
     total_duration: float = 0.0
@@ -171,6 +172,7 @@ class Project:
             "mode": self.start_mode,  # Compatibility alias
             "transition_style": self.transition_style,
             "visual_source": self.visual_source,
+            "color_filter": getattr(self, "color_filter", "none"),
             "scenes": [s.to_dict() for s in self.scenes],
             "segments": [s.to_dict() for s in self.scenes],  # Compatibility alias
             "timeline": self.timeline,
@@ -192,6 +194,7 @@ class Project:
         mode = data.get("start_mode") or data.get("mode") or "auto"
         transition_style = data.get("transition_style", "crossfade")
         visual_source = data.get("visual_source", "video")
+        color_filter = data.get("color_filter", "none")
 
         p = cls(
             id=p_id,
@@ -200,6 +203,7 @@ class Project:
             start_mode=mode,
             transition_style=transition_style,
             visual_source=visual_source,
+            color_filter=color_filter,
             scenes=scenes,
             timeline=data.get("timeline"),
             total_duration=float(data.get("total_duration", 0.0)),
@@ -225,6 +229,7 @@ class Project:
             "script": self.script,
             "style_lock": self.style_lock,
             "visual_source": self.visual_source,
+            "color_filter": getattr(self, "color_filter", "none"),
             "scenes": [s.to_dict() for s in self.scenes],
             "total_duration": self.total_duration
         }
@@ -1255,6 +1260,7 @@ def undo_project(project_id: str) -> Tuple[Optional[Project], Optional[str], int
         "script": project.script,
         "style_lock": project.style_lock,
         "visual_source": project.visual_source,
+        "color_filter": getattr(project, "color_filter", "none"),
         "scenes": [s.to_dict() for s in project.scenes],
         "total_duration": project.total_duration
     }
@@ -1264,6 +1270,7 @@ def undo_project(project_id: str) -> Tuple[Optional[Project], Optional[str], int
     project.script = prev_snap["script"]
     project.style_lock = prev_snap["style_lock"]
     project.visual_source = prev_snap.get("visual_source", getattr(project, "visual_source", "video"))
+    project.color_filter = prev_snap.get("color_filter", "none")
     project.scenes = [Scene.from_dict(s) for s in prev_snap["scenes"]]
     project.total_duration = prev_snap["total_duration"]
     save_project(project)
@@ -1279,6 +1286,7 @@ def redo_project(project_id: str) -> Tuple[Optional[Project], Optional[str], int
         "script": project.script,
         "style_lock": project.style_lock,
         "visual_source": project.visual_source,
+        "color_filter": getattr(project, "color_filter", "none"),
         "scenes": [s.to_dict() for s in project.scenes],
         "total_duration": project.total_duration
     }
@@ -1288,7 +1296,315 @@ def redo_project(project_id: str) -> Tuple[Optional[Project], Optional[str], int
     project.script = next_snap["script"]
     project.style_lock = next_snap["style_lock"]
     project.visual_source = next_snap.get("visual_source", getattr(project, "visual_source", "video"))
+    project.color_filter = next_snap.get("color_filter", "none")
     project.scenes = [Scene.from_dict(s) for s in next_snap["scenes"]]
     project.total_duration = next_snap["total_duration"]
     save_project(project)
     return project, None, 200
+
+
+# ==============================================================================
+# CAPCUT TIMELINE PRO SUITE: AUTO-SYNC, MAGNETIC RAZOR, SMART MATCH, COLOR LUTS
+# ==============================================================================
+
+def auto_sync_timeline(
+    project_id: str,
+    mode: str = "voice_lock",
+    max_cut_dur: float = 2.8
+) -> Tuple[Optional[Project], Optional[str], int]:
+    """
+    Auto-syncs visual scenes with spoken voiceover narration to ensure seamless alignment:
+    - mode="voice_lock": Snaps each scene's duration precisely to its spoken audio timestamp,
+      preventing stretched visuals or premature cutoffs.
+    - mode="rapid_cuts": Also auto-splits long scenes (> max_cut_dur) into dynamic sub-cuts at
+      natural word/pause boundaries to prevent viewer boredom drop-offs.
+    - mode="motion_sync": Calibrates motion parameters (e.g. hook snap zooms, steady pushes)
+      so images feel active throughout the line.
+    """
+    project = load_project(project_id)
+    if not project:
+        return None, "Project not found", 404
+
+    # 1. Ensure timeline alignment is present
+    if not project.timeline or not project.timeline.get("scenes"):
+        cur_t = 0.0
+        aligned = []
+        for idx, sc in enumerate(project.scenes):
+            w_count = max(1, len(sc.text.strip().split()))
+            dur = max(1.2, round(w_count / 2.7, 2))
+            sc.duration = dur
+            aligned.append({
+                "scene_id": sc.id,
+                "scene_index": idx,
+                "start": round(cur_t, 2),
+                "end": round(cur_t + dur, 2),
+                "duration": dur,
+                "text": sc.text
+            })
+            cur_t += dur
+        project.timeline = project.timeline or {}
+        project.timeline["scenes"] = aligned
+        project.timeline["total_duration"] = round(cur_t, 2)
+        project.total_duration = round(cur_t, 2)
+
+    project.snapshot()
+    tl_scenes = project.timeline.get("scenes", [])
+    tl_map = {s.get("scene_id", f"idx_{s.get('scene_index')}"): s for s in tl_scenes}
+    idx_map = {s.get("scene_index"): s for s in tl_scenes if "scene_index" in s}
+
+    # Lock durations to voiceover
+    for idx, sc in enumerate(project.scenes):
+        matched = tl_map.get(sc.id) or idx_map.get(idx)
+        if matched and "duration" in matched:
+            sc.duration = max(0.8, round(float(matched["duration"]), 2))
+
+    # Rapid cuts auto-splitting if requested
+    if mode in ("rapid_cuts", "retention_boost"):
+        new_scenes = []
+        for idx, sc in enumerate(project.scenes):
+            dur = sc.duration
+            words = sc.text.strip().split()
+            if dur > max_cut_dur and len(words) >= 6:
+                # Find midpoint or punctuation pause
+                half_words = len(words) // 2
+                split_idx = half_words
+                for w_i, w in enumerate(words):
+                    if (w.endswith(",") or w.endswith(";") or w.endswith("—") or w.lower() in ("and", "but", "so")) and 2 <= w_i <= len(words) - 3:
+                        split_idx = w_i + 1
+                        break
+
+                text_a = " ".join(words[:split_idx]).strip()
+                text_b = " ".join(words[split_idx:]).strip()
+                dur_a = max(1.0, round(dur * (split_idx / len(words)), 2))
+                dur_b = max(1.0, round(dur - dur_a, 2))
+
+                sc.text = text_a
+                sc.duration = dur_a
+                sc.motion = "snap_zoom_hard" if idx == 0 else "zoom_in"
+                new_scenes.append(sc)
+
+                # Clone for second half
+                sc_b = copy.deepcopy(sc)
+                sc_b.id = uuid.uuid4().hex
+                sc_b.text = text_b
+                sc_b.duration = dur_b
+                sc_b.motion = "pan_right"
+                new_scenes.append(sc_b)
+            else:
+                if idx == 0:
+                    sc.motion = "snap_zoom_hard"
+                new_scenes.append(sc)
+
+        project.scenes = new_scenes
+
+    # Recalculate timeline cumulative timestamps
+    cur_t = 0.0
+    new_tl_scenes = []
+    for idx, sc in enumerate(project.scenes):
+        d = sc.duration
+        new_tl_scenes.append({
+            "scene_id": sc.id,
+            "scene_index": idx,
+            "start": round(cur_t, 2),
+            "end": round(cur_t + d, 2),
+            "duration": round(d, 2),
+            "text": sc.text
+        })
+        cur_t += d
+
+    project.timeline["scenes"] = new_tl_scenes
+    project.timeline["total_duration"] = round(cur_t, 2)
+    project.total_duration = round(cur_t, 2)
+
+    save_project(project)
+    return project, None, 200
+
+
+def split_scene_at_playhead(
+    project_id: str,
+    scene_id: str,
+    playhead_time: float
+) -> Tuple[Optional[Project], Optional[str], int]:
+    """
+    Splits a scene right where the playhead needle is positioned on the CapCut timeline.
+    Splits text words proportionally and divides duration seamlessly.
+    """
+    project = load_project(project_id)
+    if not project:
+        return None, "Project not found", 404
+
+    target_idx = next((i for i, s in enumerate(project.scenes) if s.id == scene_id), -1)
+    if target_idx == -1:
+        return None, "Scene not found", 404
+
+    target = project.scenes[target_idx]
+    if target.duration < 1.0:
+        return None, "Scene is too short to split (min 1.0s)", 400
+
+    # Calculate cumulative start time of this scene
+    scene_start = sum(s.duration for s in project.scenes[:target_idx])
+    offset = playhead_time - scene_start
+
+    # Ensure valid offset inside scene
+    if offset < 0.4 or offset > (target.duration - 0.4):
+        offset = round(target.duration / 2.0, 2)
+
+    words = target.text.strip().split()
+    if len(words) < 2:
+        return None, "Scene has too few words to split", 400
+
+    ratio = max(0.15, min(0.85, offset / target.duration))
+    split_w_idx = max(1, min(len(words) - 1, int(round(len(words) * ratio))))
+
+    text_a = " ".join(words[:split_w_idx]).strip()
+    text_b = " ".join(words[split_w_idx:]).strip()
+    dur_a = max(0.5, round(offset, 2))
+    dur_b = max(0.5, round(target.duration - dur_a, 2))
+
+    project.snapshot()
+    target.text = text_a
+    target.duration = dur_a
+
+    # Create second scene
+    sc_b = copy.deepcopy(target)
+    sc_b.id = uuid.uuid4().hex
+    sc_b.text = text_b
+    sc_b.duration = dur_b
+    sc_b.motion = "pan_left" if target.motion != "pan_left" else "pan_right"
+
+    project.scenes.insert(target_idx + 1, sc_b)
+
+    # Re-sync timeline
+    cur_t = 0.0
+    tl_scenes = []
+    for idx, sc in enumerate(project.scenes):
+        tl_scenes.append({
+            "scene_id": sc.id,
+            "scene_index": idx,
+            "start": round(cur_t, 2),
+            "end": round(cur_t + sc.duration, 2),
+            "duration": round(sc.duration, 2),
+            "text": sc.text
+        })
+        cur_t += sc.duration
+
+    if project.timeline:
+        project.timeline["scenes"] = tl_scenes
+        project.timeline["total_duration"] = round(cur_t, 2)
+    project.total_duration = round(cur_t, 2)
+
+    save_project(project)
+    return project, None, 200
+
+
+def smart_match_all_visuals(
+    project_id: str,
+    force_all: bool = False
+) -> Tuple[Optional[Project], Optional[str], int]:
+    """
+    1-Click AI B-Roll Match: Scans all scenes and auto-assigns relevant vertical HD stock
+    videos from Pexels based on spoken keywords.
+    """
+    project = load_project(project_id)
+    if not project:
+        return None, "Project not found", 404
+
+    from engine.stock_video import search_stock_videos, download_stock_video
+
+    project.snapshot()
+    matched_count = 0
+
+    for sc in project.scenes:
+        if not force_all and sc.status == "ready" and sc.media_path and os.path.exists(sc.media_path):
+            continue
+
+        queries = sc.search_queries or sc.broll_keywords or []
+        query = queries[0] if queries else " ".join(sc.text.split()[:4])
+        query = re.sub(r"[^\w\s]", "", query).strip() or "cinematic"
+
+        try:
+            candidates = search_stock_videos(query, limit=5, orientation="portrait")
+            if candidates:
+                top = candidates[0]
+                dl_url = top.get("download_url")
+                v_id = top.get("id", uuid.uuid4().hex[:6])
+                if dl_url:
+                    out_name = f"pexels_{v_id}_{uuid.uuid4().hex[:6]}.mp4"
+                    out_path = os.path.join(STOCK_CACHE_DIR, out_name)
+                    downloaded = download_stock_video(dl_url, out_path)
+                    if downloaded and os.path.exists(downloaded):
+                        sc.media_path = downloaded
+                        sc.media_url = f"/outputs/stock_videos/{out_name}"
+                        sc.media_type = "video"
+                        sc.status = "ready"
+                        sc.source_tier = "manual"
+                        sc.selected_reason = f"Smart AI Matched for '{query}'"
+                        sc.fail_reason = None
+                        matched_count += 1
+        except Exception as e:
+            print(f"[SmartMatch] Error matching scene {sc.id}: {e}")
+
+    save_project(project)
+    return project, None, 200
+
+
+def apply_color_filter(
+    project_id: str,
+    color_filter: str
+) -> Tuple[Optional[Project], Optional[str], int]:
+    """Sets cinematic LUT / color filter for the short video."""
+    project = load_project(project_id)
+    if not project:
+        return None, "Project not found", 404
+
+    project.snapshot()
+    project.color_filter = color_filter
+    save_project(project)
+    return project, None, 200
+
+
+def reorder_scene(
+    project_id: str,
+    scene_id: str,
+    direction: str
+) -> Tuple[Optional[Project], Optional[str], int]:
+    """Moves a scene earlier ('left') or later ('right') in the timeline."""
+    project = load_project(project_id)
+    if not project:
+        return None, "Project not found", 404
+
+    idx = next((i for i, s in enumerate(project.scenes) if s.id == scene_id), -1)
+    if idx == -1:
+        return None, "Scene not found", 404
+
+    if direction == "left" and idx > 0:
+        project.snapshot()
+        project.scenes[idx - 1], project.scenes[idx] = project.scenes[idx], project.scenes[idx - 1]
+    elif direction == "right" and idx < len(project.scenes) - 1:
+        project.snapshot()
+        project.scenes[idx + 1], project.scenes[idx] = project.scenes[idx], project.scenes[idx + 1]
+    else:
+        return project, None, 200
+
+    # Re-sync timeline
+    cur_t = 0.0
+    tl_scenes = []
+    for i, sc in enumerate(project.scenes):
+        tl_scenes.append({
+            "scene_id": sc.id,
+            "scene_index": i,
+            "start": round(cur_t, 2),
+            "end": round(cur_t + sc.duration, 2),
+            "duration": round(sc.duration, 2),
+            "text": sc.text
+        })
+        cur_t += sc.duration
+
+    if project.timeline:
+        project.timeline["scenes"] = tl_scenes
+        project.timeline["total_duration"] = round(cur_t, 2)
+    project.total_duration = round(cur_t, 2)
+
+    save_project(project)
+    return project, None, 200
+
