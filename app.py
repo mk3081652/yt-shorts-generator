@@ -54,9 +54,12 @@ from engine.project import (
     export_prompts as export_project_prompts,
     undo_project,
     redo_project,
+    edit_scene_duration,
+    assign_stock_video_to_scene,
     Project,
     Scene
 )
+from engine.stock_video import search_pexels_videos
 from engine.timeline import prepare_voice_timeline as prepare_project_voice_timeline
 from engine.youtube_uploader import (
     check_auth_status,
@@ -283,6 +286,30 @@ class SegmentActionRequest(BaseModel):
 class PrepareVoiceRequest(BaseModel):
     voice: Optional[str] = "en-US-ChristopherNeural"
     rate: Optional[str] = "+10%"
+
+
+class GenerateVoiceoverRequest(BaseModel):
+    script: str
+    voice: Optional[str] = "en-US-ChristopherNeural"
+    rate: Optional[str] = "0.85"
+    project_id: Optional[str] = None
+
+
+class EditDurationRequest(BaseModel):
+    segment_id: str
+    duration: float
+
+
+class StockSearchRequest(BaseModel):
+    query: str
+    limit: Optional[int] = 12
+    orientation: Optional[str] = "portrait"
+
+
+class AssignStockVideoRequest(BaseModel):
+    segment_id: str
+    video_id: str
+    download_url: str
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -871,11 +898,115 @@ def api_project_redo(id: str):
 async def api_project_prepare_voice(id: str, req: Optional[PrepareVoiceRequest] = None):
     validate_session_id(id)
     v = req.voice if req and req.voice else "en-US-ChristopherNeural"
-    r = req.rate if req and req.rate else "+10%"
+    raw_rate = req.rate if req and req.rate else "+10%"
+    r = format_edge_tts_rate(raw_rate)
     proj, err, code = await prepare_project_voice_timeline(id, voice=v, rate=r)
     if err:
         raise HTTPException(status_code=code, detail=err)
     return proj.to_dict()
+
+
+def format_edge_tts_rate(rate_str: Optional[str]) -> str:
+    """Normalizes speed rate like '0.85', '0.85x', '+10%', or '-15%' to Edge TTS format."""
+    if not rate_str:
+        return "+0%"
+    r = str(rate_str).strip().rstrip("x")
+    if r.endswith("%"):
+        return r
+    try:
+        val = float(r)
+        pct = int(round((val - 1.0) * 100))
+        return f"+{pct}%" if pct >= 0 else f"{pct}%"
+    except (ValueError, TypeError):
+        return "+0%"
+
+
+@app.post("/api/voiceover/generate_standalone")
+async def api_generate_voiceover_standalone(req: GenerateVoiceoverRequest):
+    """
+    Generates standalone voiceover audio with exact segment word boundaries and durations.
+    Allows creators to audition voiceover and inspect exact spoken line timings before visual matching.
+    """
+    cleaned = sanitize_spoken_script(req.script)
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="Script cannot be empty.")
+
+    p_id = req.project_id
+    if p_id:
+        proj = load_project(p_id)
+        if not proj:
+            p_id = None
+
+    if not p_id:
+        try:
+            proj = create_project(
+                script=cleaned,
+                start="manual",
+                visual_source="video",
+                api_key=os.environ.get("GEMINI_API_KEY", None)
+            )
+            p_id = proj.id
+        except Exception as e:
+            log_and_raise_safe(e, "Failed to initialize project for voiceover", status_code=500)
+
+    v = req.voice or "en-US-ChristopherNeural"
+    r_tts = format_edge_tts_rate(req.rate)
+
+    proj, err, code = await prepare_project_voice_timeline(p_id, voice=v, rate=r_tts)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+
+    tl = proj.timeline or {}
+    return {
+        "success": True,
+        "project": proj.to_dict(),
+        "project_id": proj.id,
+        "audio_url": tl.get("audio_url"),
+        "total_duration": tl.get("total_duration", proj.total_duration),
+        "voice": v,
+        "rate": req.rate,
+        "segments": tl.get("scenes", [])
+    }
+
+
+@app.post("/api/projects/{id}/edit_duration")
+def api_project_edit_duration(id: str, req: EditDurationRequest):
+    """Edits the duration of an individual scene and syncs cumulative timeline timestamps."""
+    validate_session_id(id)
+    proj, err, code = edit_scene_duration(id, req.segment_id, req.duration)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return proj.to_dict()
+
+
+@app.post("/api/stock/search")
+def api_stock_search(req: StockSearchRequest):
+    """Searches Pexels Video API for vertical stock video clips matching search query."""
+    q = (req.query or "").strip()
+    if not q:
+        raise HTTPException(status_code=400, detail="Search query cannot be empty.")
+
+    results = search_pexels_videos(
+        query=q,
+        orientation=req.orientation or "portrait",
+        limit=req.limit or 12
+    )
+    return {
+        "query": q,
+        "count": len(results),
+        "results": results
+    }
+
+
+@app.post("/api/projects/{id}/assign_stock_video")
+def api_project_assign_stock_video(id: str, req: AssignStockVideoRequest):
+    """Downloads a chosen stock video from Pexels and assigns it directly to a scene."""
+    validate_session_id(id)
+    proj, err, code = assign_stock_video_to_scene(id, req.segment_id, req.video_id, req.download_url)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return proj.to_dict()
+
 
 
 

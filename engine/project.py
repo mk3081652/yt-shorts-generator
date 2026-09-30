@@ -18,7 +18,7 @@ from PIL import Image
 from engine.beats import create_story_beats
 from engine.director import plan_scenes_with_director, compile_prompt, validate_image_with_vision_qa
 from engine.flux import generate as generate_flux
-from engine.stock_video import fetch_broll_for_scene, CACHE_DIR as STOCK_CACHE_DIR
+from engine.stock_video import fetch_broll_for_scene, CACHE_DIR as STOCK_CACHE_DIR, download_stock_video
 from engine.llm import generate_content
 from engine.config import get_gemini_api_key
 
@@ -530,6 +530,76 @@ def edit_scene_prompt(project_id: str, scene_id: str, new_prompt: str, kind: str
         target.video_prompt = new_prompt.strip()
     else:
         target.image_prompt = new_prompt.strip()
+
+    save_project(project)
+    return project, None, 200
+
+
+def edit_scene_duration(
+    project_id: str,
+    scene_id: str,
+    new_duration: float
+) -> Tuple[Optional[Project], Optional[str], int]:
+    """Updates an individual scene duration, syncs timeline timestamps and total duration."""
+    project = load_project(project_id)
+    if not project:
+        return None, "Project not found", 404
+
+    target = next((s for s in project.scenes if s.id == scene_id), None)
+    if not target:
+        return None, "Scene not found", 404
+
+    dur = max(0.5, round(float(new_duration), 2))
+    project.snapshot()
+    target.duration = dur
+
+    # Update timeline scenes if present
+    if project.timeline and "scenes" in project.timeline:
+        cur_t = 0.0
+        for s_info in project.timeline["scenes"]:
+            sc_ref = next((s for s in project.scenes if s.id == s_info.get("scene_id")), None)
+            d = sc_ref.duration if sc_ref else float(s_info.get("duration", 3.0))
+            s_info["start"] = round(cur_t, 2)
+            s_info["end"] = round(cur_t + d, 2)
+            s_info["duration"] = round(d, 2)
+            cur_t += d
+        project.timeline["total_duration"] = round(cur_t, 2)
+
+    project.total_duration = round(sum(s.duration for s in project.scenes), 2)
+    save_project(project)
+    return project, None, 200
+
+
+def assign_stock_video_to_scene(
+    project_id: str,
+    scene_id: str,
+    video_id: str,
+    download_url: str
+) -> Tuple[Optional[Project], Optional[str], int]:
+    """Downloads a chosen stock video from Pexels and assigns it directly to the target scene."""
+    project = load_project(project_id)
+    if not project:
+        return None, "Project not found", 404
+
+    target = next((s for s in project.scenes if s.id == scene_id), None)
+    if not target:
+        return None, "Scene not found", 404
+
+    out_name = f"pexels_{video_id}_{uuid.uuid4().hex[:6]}.mp4"
+    out_path = os.path.join(STOCK_CACHE_DIR, out_name)
+
+    downloaded = download_stock_video(download_url, out_path)
+    if not downloaded or not os.path.exists(downloaded):
+        return None, "Failed to download stock video from Pexels", 500
+
+    project.snapshot()
+    target.media_path = downloaded
+    target.media_url = f"/outputs/stock_videos/{out_name}"
+    target.media_type = "video"
+    target.status = "ready"
+    target.source_tier = "manual"
+    target.selected_reason = f"Manually assigned Pexels video (ID {video_id})"
+    target.fail_reason = None
 
     save_project(project)
     return project, None, 200

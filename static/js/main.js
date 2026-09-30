@@ -5,6 +5,7 @@
 import { api } from "./api.js";
 import { state } from "./state.js";
 import { StoryboardEditor } from "./editor.js";
+import { CapCutTimelineEditor } from "./capcut_timeline.js";
 
 // Toast Notifications
 export function showToast(message, type = "info", duration = 3500) {
@@ -335,6 +336,47 @@ document.addEventListener("DOMContentLoaded", async () => {
     };
 
     const storyboardEditor = new StoryboardEditor(editorElements, showToast);
+    const capcutTimeline = new CapCutTimelineEditor(editorElements, showToast);
+
+    // View Switcher: Storyboard Cards vs CapCut Timeline Editor
+    const viewCardsBtn = document.getElementById("viewCardsBtn");
+    const viewTimelineBtn = document.getElementById("viewTimelineBtn");
+    const storyboardContainer = document.getElementById("storyboardContainer");
+    const capcutEditorContainer = document.getElementById("capcutEditorContainer");
+    const capcutStitchHeaderBtn = document.getElementById("capcutStitchHeaderBtn");
+
+    function switchWorkspaceView(mode) {
+        if (mode === "timeline") {
+            if (viewTimelineBtn) viewTimelineBtn.classList.add("active");
+            if (viewCardsBtn) viewCardsBtn.classList.remove("active");
+            if (storyboardContainer) storyboardContainer.classList.add("hidden");
+            if (capcutEditorContainer) {
+                capcutEditorContainer.classList.remove("hidden");
+                if (state.project) capcutTimeline.render(state.project);
+            }
+        } else {
+            if (viewCardsBtn) viewCardsBtn.classList.add("active");
+            if (viewTimelineBtn) viewTimelineBtn.classList.remove("active");
+            if (capcutEditorContainer) {
+                capcutEditorContainer.classList.add("hidden");
+                capcutTimeline.pause();
+            }
+            if (storyboardContainer) {
+                storyboardContainer.classList.remove("hidden");
+                if (state.project) storyboardEditor.render(state.project);
+            }
+        }
+    }
+
+    if (viewCardsBtn) {
+        viewCardsBtn.addEventListener("click", () => switchWorkspaceView("cards"));
+    }
+    if (viewTimelineBtn) {
+        viewTimelineBtn.addEventListener("click", () => switchWorkspaceView("timeline"));
+    }
+    if (capcutStitchHeaderBtn) {
+        capcutStitchHeaderBtn.addEventListener("click", () => capcutTimeline.handleStitchTimeline());
+    }
 
     // ==========================================
     // STEP NAVIGATION
@@ -364,6 +406,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         state.setStep(stepNum);
+
+        if (stepNum === 2) {
+            if (viewTimelineBtn && viewTimelineBtn.classList.contains("active")) {
+                if (state.project) capcutTimeline.render(state.project);
+            }
+        }
 
         // Update Step 4 Summary if entering Step 4
         if (stepNum === 4) {
@@ -631,6 +679,143 @@ document.addEventListener("DOMContentLoaded", async () => {
                 previewVoiceBtn.disabled = false;
                 previewVoiceBtn.textContent = "🔊 Audition Voice";
             }
+        });
+    }
+
+    // ==========================================
+    // VOICE OVER STUDIO (Standalone Audio First Workflow)
+    // ==========================================
+    function escapeHtml(str) {
+        if (!str) return "";
+        return str
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    const generateVoiceoverBtn = document.getElementById("generateVoiceoverBtn");
+    const openTimelineFromVoiceBtn = document.getElementById("openTimelineFromVoiceBtn");
+    const voiceoverResultsArea = document.getElementById("voiceoverResultsArea");
+    const standaloneVoiceAudio = document.getElementById("standaloneVoiceAudio");
+    const voTotalDurationBadge = document.getElementById("voTotalDurationBadge");
+    const voSegmentsCountBadge = document.getElementById("voSegmentsCountBadge");
+    const voSegmentsTableBody = document.getElementById("voSegmentsTableBody");
+
+    function renderVoiceoverSegments(segments, totalDuration) {
+        if (!voSegmentsTableBody) return;
+        voSegmentsTableBody.innerHTML = "";
+
+        if (voTotalDurationBadge) {
+            voTotalDurationBadge.textContent = `${(totalDuration || 0).toFixed(1)}s`;
+        }
+        if (voSegmentsCountBadge) {
+            voSegmentsCountBadge.textContent = `${segments.length} scene${segments.length === 1 ? '' : 's'} detected`;
+        }
+
+        segments.forEach((seg, idx) => {
+            const tr = document.createElement("tr");
+            tr.style.borderBottom = "1px solid rgba(255, 255, 255, 0.05)";
+
+            const dur = (seg.duration || 3.0).toFixed(1);
+            const start = (seg.start || 0).toFixed(1);
+            const end = (seg.end !== undefined ? seg.end : (seg.start || 0) + (seg.duration || 3.0)).toFixed(1);
+
+            tr.innerHTML = `
+                <td style="padding: 8px 10px; font-weight: 700; color: #00e6ff; font-family: monospace;">
+                    Scene ${idx + 1}
+                </td>
+                <td style="padding: 8px 10px;">
+                    <span style="font-size: 11px; background: rgba(0, 230, 255, 0.12); color: #64ffda; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-family: monospace;">
+                        ${dur}s (${start}-${end}s)
+                    </span>
+                </td>
+                <td style="padding: 8px 10px; color: #e2e8f0; font-size: 12px; line-height: 1.4;">
+                    ${escapeHtml(seg.text || '')}
+                </td>
+                <td style="padding: 8px 10px; text-align: center;">
+                    <button type="button" class="btn-secondary btn-xs btn-audition-seg" style="padding: 3px 8px; font-size: 11px; border-radius: 4px; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.2); color: #fff; cursor: pointer;" title="Audition this line">
+                        ▶ Play
+                    </button>
+                </td>
+            `;
+
+            const playBtn = tr.querySelector(".btn-audition-seg");
+            if (playBtn && standaloneVoiceAudio) {
+                playBtn.addEventListener("click", () => {
+                    standaloneVoiceAudio.currentTime = seg.start || 0;
+                    standaloneVoiceAudio.play().catch(() => {});
+                });
+            }
+
+            voSegmentsTableBody.appendChild(tr);
+        });
+    }
+
+    if (generateVoiceoverBtn) {
+        generateVoiceoverBtn.addEventListener("click", async () => {
+            const script = scriptInput.value.trim();
+            if (!script) {
+                showToast("Please enter or generate a script first!", "warning");
+                scriptInput.focus();
+                return;
+            }
+
+            const voice = voiceSelect ? voiceSelect.value : "en-US-ChristopherNeural";
+            const spd = getVoiceSpeed(voice).toFixed(2);
+
+            generateVoiceoverBtn.disabled = true;
+            generateVoiceoverBtn.innerHTML = `<span>⏳ Synthesizing Voiceover (${spd}x)...</span>`;
+            showToast("Generating voiceover audio & aligning scene timestamps...", "info");
+
+            try {
+                const data = await api.generateStandaloneVoiceover(
+                    script,
+                    voice,
+                    spd,
+                    state.project ? state.project.id : null
+                );
+
+                if (data.project) {
+                    state.setProject(data.project);
+                }
+
+                if (standaloneVoiceAudio && data.audio_url) {
+                    standaloneVoiceAudio.src = data.audio_url + "?t=" + Date.now();
+                }
+
+                const segs = data.segments || (data.project?.timeline?.scenes) || [];
+                const totDur = data.total_duration || data.project?.total_duration || 0;
+                renderVoiceoverSegments(segs, totDur);
+
+                if (voiceoverResultsArea) voiceoverResultsArea.classList.remove("hidden");
+                if (openTimelineFromVoiceBtn) openTimelineFromVoiceBtn.classList.remove("hidden");
+
+                showToast(`Voiceover generated! (${totDur.toFixed(1)}s, ${segs.length} scenes)`, "success");
+            } catch (err) {
+                showToast(`Voiceover generation failed: ${err.message}`, "error");
+            } finally {
+                generateVoiceoverBtn.disabled = false;
+                generateVoiceoverBtn.innerHTML = `<span>🎙️ Synthesize Voiceover & Timings</span>`;
+            }
+        });
+    }
+
+    if (openTimelineFromVoiceBtn) {
+        openTimelineFromVoiceBtn.addEventListener("click", async () => {
+            const script = scriptInput.value.trim();
+            if (!script) {
+                showToast("Please enter a script first!", "warning");
+                return;
+            }
+            if (!state.project) {
+                await handleProceedToStep2();
+            } else {
+                goToStep(2);
+            }
+            switchWorkspaceView("timeline");
+            showToast("CapCut Timeline Editor active!", "info");
         });
     }
 

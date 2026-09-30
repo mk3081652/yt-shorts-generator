@@ -413,6 +413,39 @@ export const api = {
         });
     },
 
+    async generateStandaloneVoiceover(script, voice, rate = "0.85", projectId = null) {
+        return await request("/api/voiceover/generate_standalone", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ script, voice, rate, project_id: projectId })
+        });
+    },
+
+    async editDuration(projectId, sceneId, duration) {
+        return await request(`/api/projects/${projectId}/edit_duration`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ segment_id: sceneId, duration: parseFloat(duration) })
+        });
+    },
+
+    async searchStockVideos(query, limit = 12, orientation = "portrait") {
+        return await request("/api/stock/search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query, limit, orientation })
+        });
+    },
+
+    async assignStockVideo(projectId, sceneId, videoId, downloadUrl) {
+        return await request(`/api/projects/${projectId}/assign_stock_video`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ segment_id: sceneId, video_id: videoId, download_url: downloadUrl })
+        });
+    },
+
+
     // Final Short Render & Job Polling
     async generateShort(payload) {
         return await request("/api/generate_short", {
