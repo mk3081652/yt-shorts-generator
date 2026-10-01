@@ -2,10 +2,10 @@
  * static/js/main.js - Application Bootstrap & Step Coordination
  */
 
-import { api } from "./api.js?v=20261001_v6";
-import { state } from "./state.js?v=20261001_v6";
-import { StoryboardEditor } from "./editor.js?v=20261001_v6";
-import { CapCutTimelineEditor } from "./capcut_timeline.js?v=20261001_v6";
+import { api } from "./api.js?v=20261001_v7";
+import { state } from "./state.js?v=20261001_v7";
+import { StoryboardEditor } from "./editor.js?v=20261001_v7";
+import { CapCutTimelineEditor } from "./capcut_timeline.js?v=20261001_v7";
 
 // Toast Notifications
 export function showToast(message, type = "info", duration = 3500) {

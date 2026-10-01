@@ -336,19 +336,28 @@ export class CapCutTimelineEditor {
         const totalDuration = project.total_duration || scenes.reduce((acc, s) => acc + (s.duration || 3.0), 0);
         const totalWidth = Math.max(800, totalDuration * this.pixelsPerSecond);
 
-        // Resize track viewport
-        if (this.rulerTrack) this.rulerTrack.style.width = `${totalWidth}px`;
-        if (this.visualsTrack) this.visualsTrack.style.width = `${totalWidth}px`;
-        if (this.audioTrack) this.audioTrack.style.width = `${totalWidth}px`;
+        // Performance Guard: Avoid rebuilding tracks DOM if project structure and media URLs are unchanged
+        const renderFingerprint = `${this.pixelsPerSecond}_${scenes.length}_${totalDuration.toFixed(1)}_` +
+            scenes.map(s => `${s.id}:${s.status}:${s.media_url || s.image_url || ''}:${(s.duration || 3.0).toFixed(1)}`).join(";");
 
-        // 1. Render Time Ruler
-        this.renderRuler(totalDuration, totalWidth);
+        const hasTrackStructureChanged = (this._lastRenderFingerprint !== renderFingerprint);
+        this._lastRenderFingerprint = renderFingerprint;
 
-        // 2. Render Visuals Track
-        this.renderVisualsTrack(scenes);
+        if (hasTrackStructureChanged) {
+            // Resize track viewport
+            if (this.rulerTrack) this.rulerTrack.style.width = `${totalWidth}px`;
+            if (this.visualsTrack) this.visualsTrack.style.width = `${totalWidth}px`;
+            if (this.audioTrack) this.audioTrack.style.width = `${totalWidth}px`;
 
-        // 3. Render Audio Track
-        this.renderAudioTrack(project, totalDuration);
+            // 1. Render Time Ruler
+            this.renderRuler(totalDuration, totalWidth);
+
+            // 2. Render Visuals Track
+            this.renderVisualsTrack(scenes);
+
+            // 3. Render Audio Track
+            this.renderAudioTrack(project, totalDuration);
+        }
 
         // If no active scene selected, select first scene
         if (!this.activeSceneId || !scenes.some(s => s.id === this.activeSceneId)) {
@@ -356,7 +365,9 @@ export class CapCutTimelineEditor {
         } else {
             const currentScene = scenes.find(s => s.id === this.activeSceneId);
             this.updateInspector(currentScene);
-            this.updateCanvasMedia(currentScene);
+            if (hasTrackStructureChanged) {
+                this.updateCanvasMedia(currentScene);
+            }
         }
 
         // Update timecode readout
@@ -410,18 +421,20 @@ export class CapCutTimelineEditor {
             block.dataset.startTime = cumTime;
             block.dataset.duration = dur;
 
-            // Thumbnail or icon
+            // Thumbnail or icon (zero decoder overhead: avoids freezing browser with multiple HTML5 <video> pipelines)
             const mediaUrl = sc.media_url || sc.image_url;
-            const isVid = (sc.media_type === "video" || (mediaUrl && mediaUrl.endsWith(".mp4")));
+            const isVid = (sc.media_type === "video" || (mediaUrl && (mediaUrl.endsWith(".mp4") || mediaUrl.includes(".mp4"))));
             let thumbHtml = "";
             if (mediaUrl) {
-                if (isVid) {
-                    thumbHtml = `<video src="${mediaUrl}#t=0.5" class="capcut-clip-thumb" preload="metadata" muted></video>`;
+                if (sc.thumbnail && !sc.thumbnail.endsWith(".mp4")) {
+                    thumbHtml = `<img src="${sc.thumbnail}" class="capcut-clip-thumb" alt="Clip ${idx+1}" loading="lazy">`;
+                } else if (isVid) {
+                    thumbHtml = `<div class="capcut-clip-thumb capcut-clip-video-thumb" style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(135deg,#0b0f19,#1e1b4b);color:#00e6ff;font-size:16px;user-select:none;"><span style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.6));">🎬</span><span style="font-size:8px;font-weight:800;color:#94a3b8;letter-spacing:0.5px;margin-top:1px;">VIDEO</span></div>`;
                 } else {
-                    thumbHtml = `<img src="${mediaUrl}" class="capcut-clip-thumb" alt="Clip ${idx+1}">`;
+                    thumbHtml = `<img src="${mediaUrl}" class="capcut-clip-thumb" alt="Clip ${idx+1}" loading="lazy">`;
                 }
             } else {
-                thumbHtml = `<div class="capcut-clip-thumb" style="display:flex;align-items:center;justify-content:center;background:#1e293b;color:#64748b;font-size:16px;">🎬</div>`;
+                thumbHtml = `<div class="capcut-clip-thumb" style="display:flex;align-items:center;justify-content:center;background:#131726;color:#64748b;font-size:16px;">🎬</div>`;
             }
 
             block.innerHTML = `
@@ -1068,8 +1081,7 @@ export class CapCutTimelineEditor {
                         this.progressStep.textContent = `Downloaded & saved ${finishedCount} of ${total} clips (rendering live)...`;
                     }
 
-                    // Dynamically re-render clips on timeline & preview canvas
-                    this.render(currentProj);
+                    // state.setProject triggers this.render(currentProj) safely via 'project_updated' listener
 
                     if (generatingCount === 0 || pollAttempts >= maxPollAttempts) {
                         clearInterval(this._smartMatchTimer);
@@ -1090,7 +1102,7 @@ export class CapCutTimelineEditor {
                 } catch (e) {
                     console.warn("[SmartMatch Poll] Error polling project:", e);
                 }
-            }, 1000);
+            }, 1500);
 
         } catch (err) {
             resetButtons();

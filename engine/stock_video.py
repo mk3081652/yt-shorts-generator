@@ -94,6 +94,9 @@ def extract_queries_from_gemini_prompt(image_prompt: str, video_prompt: str = ""
                 if q2 and q2 not in queries:
                     queries.append(q2)
 
+    return queries
+
+
 def generate_gemini_visual_search_queries(
     scene_text: str,
     image_prompt: str = "",
@@ -511,11 +514,15 @@ def search_pexels_videos(
                 if not candidate_files:
                     continue
 
-                # Sort by resolution favoring 1080p
-                candidate_files.sort(
-                    key=lambda x: (x.get("width", 0) <= 1080, x.get("width", 0) * x.get("height", 0)),
-                    reverse=True
-                )
+                # Sort by resolution favoring standard 720p/1080p portrait MP4s (avoiding heavy 4K files)
+                def _file_sort_key(f):
+                    w = f.get("width", 0)
+                    h = f.get("height", 0)
+                    is_reasonable = (w <= 1080 and h <= 1920)
+                    is_hd = (720 <= w <= 1080) or (1280 <= h <= 1920)
+                    return (is_reasonable, is_hd, w * h)
+
+                candidate_files.sort(key=_file_sort_key, reverse=True)
                 best_file = candidate_files[0]
                 w = int(best_file.get("width", 1080))
                 h = int(best_file.get("height", 1920))
@@ -1043,12 +1050,13 @@ def fetch_broll_for_scene(
         "should_avoid": should_avoid or []
     }
 
-    # 5. AI Multimodal Vision Ranking (with deterministic fallback)
+    # 5. AI Ranking: Instant deterministic scoring by default; Multimodal Vision only when enabled
+    from engine.config import is_vision_qa_enabled
     chosen_vid = None
     chosen_score = None
     chosen_reason = None
 
-    if len(filtered_candidates) > 1:
+    if is_vision_qa_enabled() and len(filtered_candidates) > 1:
         chosen_vid, chosen_score, chosen_reason = rank_candidates_with_vision(
             candidates=filtered_candidates,
             scene_context=scene_context,
