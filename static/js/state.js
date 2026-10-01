@@ -43,28 +43,56 @@ class StateManager {
         return this.state.project;
     }
 
+    set project(val) {
+        this.setProject(val);
+    }
+
     get currentStep() {
         return this.state.currentStep;
+    }
+
+    set currentStep(val) {
+        this.setStep(val);
     }
 
     get mode() {
         return this.state.mode;
     }
 
+    set mode(val) {
+        this.setMode(val);
+    }
+
     get config() {
         return this.state.config;
+    }
+
+    set config(val) {
+        this.setConfig(val);
     }
 
     get isGenerating() {
         return this.state.isGenerating;
     }
 
+    set isGenerating(val) {
+        this.setGenerating(val);
+    }
+
     get focusedSceneId() {
         return this.state.focusedSceneId;
     }
 
+    set focusedSceneId(sceneId) {
+        this.setFocusedScene(sceneId);
+    }
+
     get activeSplitSceneId() {
         return this.state.activeSplitSceneId;
+    }
+
+    set activeSplitSceneId(sceneId) {
+        this.setActiveSplitScene(sceneId);
     }
 
     setProject(project) {

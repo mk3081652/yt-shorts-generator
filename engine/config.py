@@ -179,7 +179,7 @@ def get_youtube_token_path() -> str:
 
 def get_pexels_api_key() -> str:
     """Returns Pexels API key from environment for free stock video b-roll."""
-    return os.environ.get("PEXELS_API_KEY", "").strip()
+    return os.environ.get("PEXELS_API_KEY", "UWn8POXBcleK2HuVeL4y590PFxaqmE1UtLlzgyBxx16Bs3CzPMNeb99q").strip()
 
 
 

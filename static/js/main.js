@@ -3,9 +3,9 @@
  */
 
 import { api } from "./api.js";
-import { state } from "./state.js";
+import { state } from "./state.js?v=20261001_v4";
 import { StoryboardEditor } from "./editor.js";
-import { CapCutTimelineEditor } from "./capcut_timeline.js?v=20261001_v3";
+import { CapCutTimelineEditor } from "./capcut_timeline.js?v=20261001_v4";
 
 // Toast Notifications
 export function showToast(message, type = "info", duration = 3500) {

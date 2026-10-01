@@ -44,29 +44,29 @@
     border-radius: 12px;
     padding: 12px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
-    box-sizing: border-box;
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    overflow: hidden;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
 }
 
 /* Top Area: Monitor Canvas + Clip Inspector */
 .capcut-workspace-top {
     display: grid;
-    grid-template-columns: 240px minmax(0, 1fr);
+    grid-template-columns: 240px minmax(0, 1fr) !important;
     gap: 14px;
     height: 380px;
     max-height: 380px;
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
 }
 
 @media (max-width: 900px) {
     .capcut-workspace-top {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr) !important;
         height: auto;
         max-height: none;
     }
@@ -200,10 +200,11 @@
     flex-direction: column;
     height: 100%;
     max-height: 380px;
-    overflow: hidden;
-    box-sizing: border-box;
-    min-width: 0;
-    max-width: 100%;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
 }
 
 .capcut-inspector-box::-webkit-scrollbar {
@@ -359,12 +360,12 @@
     background: #080c16;
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 10px;
-    overflow: hidden;
+    overflow: hidden !important;
     position: relative;
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
 }
 
 /* Timeline Toolbar */
@@ -375,10 +376,10 @@
     padding: 8px 14px;
     background: rgba(255, 255, 255, 0.03);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
 }
 
 .capcut-zoom-controls {
@@ -392,15 +393,15 @@
 /* Timeline Viewport & Scroll Area */
 .capcut-timeline-viewport {
     position: relative;
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
     user-select: none;
     min-height: 190px;
     background: #050811;
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
 }
 
 /* Time Ruler Track */
@@ -461,6 +462,8 @@
     gap: 6px;
     padding: 8px 0;
     position: relative;
+    width: max-content;
+    min-width: 100%;
 }
 
 /* Track Row */
@@ -644,8 +647,11 @@
 }
 
 .capcut-tab-nav-btn {
-    flex: 1;
-    padding: 7px 8px;
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 6px 4px;
     font-size: 11px;
     font-weight: 700;
     border-radius: 6px;

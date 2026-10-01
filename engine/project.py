@@ -1503,76 +1503,90 @@ def smart_match_all_visuals(
 ) -> Tuple[Optional[Project], Optional[str], int]:
     """
     1-Click AI B-Roll Match: Scans all scenes and auto-assigns relevant vertical HD stock
-    videos from Pexels based on spoken keywords. Falls back to generating visuals via AI if needed.
+    videos from Pexels based strictly on Gemini prompt, search queries, or spoken narration.
+    Zero fallback to external image generators.
     """
     try:
         project = load_project(project_id)
         if not project:
             return None, "Project not found", 404
 
-        from engine.stock_video import search_pexels_videos, download_stock_video
+        from engine.stock_video import search_pexels_videos, download_stock_video, CACHE_DIR as STOCK_CACHE_DIR
         from engine.config import get_pexels_api_key
 
         project.snapshot()
         matched_count = 0
+        used_ids = set()
         pexels_key = get_pexels_api_key()
 
         for sc in project.scenes:
             if not force_all and sc.status == "ready" and sc.media_path and os.path.exists(sc.media_path):
+                if hasattr(sc, "video_id") and sc.video_id:
+                    used_ids.add(str(sc.video_id))
                 continue
 
-            queries = sc.search_queries or sc.broll_keywords or []
-            query = queries[0] if queries else " ".join(sc.text.split()[:4])
-            query = re.sub(r"[^\w\s]", "", query).strip() or "cinematic"
+            # 1. Gather queries strictly from Gemini Director plan or spoken narration
+            candidate_queries = []
+            if sc.search_queries and isinstance(sc.search_queries, list):
+                candidate_queries.extend([str(q).strip() for q in sc.search_queries if str(q).strip()])
+            if sc.broll_keywords and isinstance(sc.broll_keywords, list):
+                candidate_queries.extend([str(k).strip() for k in sc.broll_keywords if str(k).strip()])
 
-            video_assigned = False
-            if pexels_key:
-                try:
-                    candidates = search_pexels_videos(query, limit=5, orientation="portrait", api_key=pexels_key)
-                    if not candidates:
-                        # Try broader cinematic keywords
-                        fallback_q = "cinematic dark mysterious" if any(w in sc.text.lower() for w in ["vanish", "plane", "disappear", "mystery", "lost"]) else "cinematic vertical footage"
-                        candidates = search_pexels_videos(fallback_q, limit=3, orientation="portrait", api_key=pexels_key)
+            # Extract clean keyword phrase from narration text
+            clean_text = re.sub(r"[^\w\s]", " ", sc.text or "").strip()
+            stop_words = {"the", "and", "was", "for", "with", "that", "this", "from", "they", "there", "about", "what", "could", "have", "been", "were", "into"}
+            words = [w for w in clean_text.split() if len(w) > 2 and w.lower() not in stop_words]
+            if words:
+                candidate_queries.append(" ".join(words[:3]))
+                if len(words) >= 2:
+                    candidate_queries.append(words[0])
 
-                    if candidates:
-                        top = candidates[0]
-                        dl_url = top.get("download_url") or top.get("video_url")
-                        v_id = top.get("id", uuid.uuid4().hex[:6])
-                        if dl_url:
-                            out_name = f"pexels_{v_id}_{uuid.uuid4().hex[:6]}.mp4"
-                            out_path = os.path.join(STOCK_CACHE_DIR, out_name)
-                            downloaded = download_stock_video(dl_url, out_path)
-                            if downloaded and os.path.exists(downloaded):
-                                sc.media_path = downloaded
-                                sc.media_url = f"/outputs/stock_videos/{out_name}"
-                                sc.media_type = "video"
-                                sc.status = "ready"
-                                sc.source_tier = "manual"
-                                sc.selected_reason = f"Smart AI Matched for '{query}'"
-                                sc.fail_reason = None
-                                matched_count += 1
-                                video_assigned = True
-                except Exception as ex:
-                    logger.warning(f"[SmartMatch] Pexels match failed for scene {sc.id}: {ex}")
+            if not candidate_queries:
+                candidate_queries.append(clean_text[:25] or "cinematic")
 
-            # If Pexels video wasn't found or key wasn't provided, and scene still has no visual, fallback to FLUX AI image
-            if not video_assigned and (not sc.media_path or not os.path.exists(sc.media_path)):
-                try:
-                    from engine.flux import generate_image_flux
-                    prompt = sc.image_prompt or f"Cinematic 9:16 vertical composition: {sc.text[:120]}"
-                    out_name = f"flux_ai_{sc.id[:8]}_{uuid.uuid4().hex[:6]}.jpg"
-                    out_path = os.path.abspath(f"outputs/ai_previews/{out_name}")
-                    img_path = generate_image_flux(prompt, out_path=out_path)
-                    if img_path and os.path.exists(img_path):
-                        sc.media_path = img_path
-                        sc.media_url = f"/outputs/ai_previews/{out_name}"
-                        sc.media_type = "image"
-                        sc.status = "ready"
-                        sc.source_tier = "flux"
-                        sc.selected_reason = f"AI art generated for: {prompt[:40]}..."
-                        matched_count += 1
-                except Exception as ex:
-                    logger.warning(f"[SmartMatch] FLUX fallback failed for scene {sc.id}: {ex}")
+            # 2. Search Pexels for matching vertical video
+            candidates = []
+            matched_q = candidate_queries[0]
+            for raw_q in candidate_queries:
+                clean_q = re.sub(r"[^\w\s]", "", raw_q).strip()
+                if not clean_q:
+                    continue
+                # Try portrait first
+                vids = search_pexels_videos(clean_q, limit=4, orientation="portrait", api_key=pexels_key)
+                if not vids:
+                    # Try general orientation
+                    vids = search_pexels_videos(clean_q, limit=3, orientation="", api_key=pexels_key)
+                for v in vids:
+                    vid_id = str(v.get("id"))
+                    if vid_id not in used_ids:
+                        candidates.append(v)
+                if candidates:
+                    matched_q = clean_q
+                    break
+
+            # 3. Download and assign matched video
+            if candidates:
+                top = candidates[0]
+                dl_url = top.get("video_url") or top.get("download_url")
+                v_id = str(top.get("id", uuid.uuid4().hex[:6]))
+                if dl_url:
+                    out_name = f"pexels_{v_id}_{uuid.uuid4().hex[:6]}.mp4"
+                    out_path = os.path.join(STOCK_CACHE_DIR, out_name)
+                    try:
+                        downloaded = download_stock_video(dl_url, out_path)
+                        if downloaded and os.path.exists(downloaded):
+                            sc.media_path = downloaded
+                            sc.media_url = f"/outputs/stock_videos/{out_name}"
+                            sc.media_type = "video"
+                            sc.status = "ready"
+                            sc.source_tier = "manual"
+                            sc.selected_reason = f"Stock video matched for '{matched_q}'"
+                            sc.fail_reason = None
+                            sc.video_id = v_id
+                            used_ids.add(v_id)
+                            matched_count += 1
+                    except Exception as ex:
+                        logger.warning(f"[SmartMatch] Download failed for scene {sc.id}: {ex}")
 
         save_project(project)
         return project, None, 200

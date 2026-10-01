@@ -127,10 +127,16 @@ export class CapCutTimelineEditor {
             this.toolbarSplitBtn.addEventListener("click", () => this.handleSplitAtPlayhead());
         }
         if (this.toolbarAutoSyncBtn) {
-            this.toolbarAutoSyncBtn.addEventListener("click", () => this.switchTab("autoSync"));
+            this.toolbarAutoSyncBtn.addEventListener("click", () => {
+                this.switchTab("autoSync");
+                this.handleAutoSync("voice_lock");
+            });
         }
         if (this.toolbarMatchBtn) {
-            this.toolbarMatchBtn.addEventListener("click", () => this.switchTab("proTools"));
+            this.toolbarMatchBtn.addEventListener("click", () => {
+                this.switchTab("proTools");
+                this.handleSmartMatchAll();
+            });
         }
 
         // Auto-Sync actions
@@ -453,7 +459,7 @@ export class CapCutTimelineEditor {
 
     selectScene(sceneId) {
         this.activeSceneId = sceneId;
-        state.focusedSceneId = sceneId;
+        state.setFocusedScene(sceneId);
 
         // Highlight block
         const blocks = this.visualsTrack?.querySelectorAll(".capcut-clip-block");
