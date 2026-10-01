@@ -10,8 +10,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Montserrat:wght@800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/style.css?v=20260925_v6">
-    <link rel="stylesheet" href="/static/css/capcut.css?v=20260930_v1">
+    <link rel="stylesheet" href="/static/css/style.css?v=20261001_v1">
+    <link rel="stylesheet" href="/static/css/capcut.css?v=20261001_v2">
 </head>
 <body>
     <div class="app-container">
@@ -490,13 +490,13 @@
                                 <!-- Tab Navigation Bar -->
                                 <div class="capcut-inspector-tab-nav">
                                     <button type="button" class="capcut-tab-nav-btn active" id="capcutTabBtnInspector">
-                                        ✂️ Clip Inspector
+                                        ✂️ Clip Narration
                                     </button>
                                     <button type="button" class="capcut-tab-nav-btn" id="capcutTabBtnAutoSync">
-                                        ⚡ Smart Auto-Sync
+                                        ⚡ Auto-Sync
                                     </button>
                                     <button type="button" class="capcut-tab-nav-btn" id="capcutTabBtnProTools">
-                                        🎨 Pro Tools & LUTs
+                                        🎨 B-Roll & Style
                                     </button>
                                 </div>
 
@@ -514,38 +514,38 @@
 
                                     <div class="capcut-inspector-body">
                                         <div>
-                                            <label class="capcut-field-label">Spoken Narration (This Scene)</label>
+                                            <label class="capcut-field-label">Spoken Narration</label>
                                             <textarea id="capcutInspectorText" class="capcut-inspector-textarea" rows="2" placeholder="Spoken line for this scene..."></textarea>
                                         </div>
 
                                         <div>
-                                            <label class="capcut-field-label">Sync Duration (Seconds)</label>
+                                            <label class="capcut-field-label">Clip Timing</label>
                                             <div class="capcut-duration-row">
                                                 <button type="button" id="capcutDurMinusBtn" class="capcut-duration-btn">- 0.5s</button>
                                                 <input type="number" id="capcutDurationInput" class="capcut-duration-input" step="0.1" min="0.8" value="3.0">
                                                 <button type="button" id="capcutDurPlusBtn" class="capcut-duration-btn">+ 0.5s</button>
-                                                <span style="font-size: 11px; color: #94a3b8;">Adjusts clip timing</span>
+                                                <span style="font-size: 11px; color: #94a3b8;">Seconds</span>
                                             </div>
                                         </div>
 
                                         <div>
-                                            <label class="capcut-field-label">Visual Media Tools (Match to Voiceover)</label>
+                                            <label class="capcut-field-label">Visual Media Tools</label>
                                             <div class="capcut-tool-btn-grid">
                                                 <button type="button" id="capcutFindVideoBtn" class="capcut-tool-btn btn-primary-tool" title="Search vertical stock clips on Pexels">
-                                                    <span>🎬 Find Stock Video</span>
+                                                    <span>🎬 Stock Video</span>
                                                 </button>
                                                 <button type="button" id="capcutGenFluxBtn" class="capcut-tool-btn" title="Generate AI Image via FLUX">
-                                                    <span>🎨 Generate AI Art</span>
+                                                    <span>🎨 AI Art</span>
                                                 </button>
                                                 <button type="button" id="capcutUploadBtn" class="capcut-tool-btn" title="Upload custom MP4 or image">
-                                                    <span>📁 Upload File</span>
+                                                    <span>📁 Upload</span>
                                                 </button>
                                                 <input type="file" id="capcutUploadInput" accept="image/*,video/*" style="display: none;">
                                                 <button type="button" id="capcutSplitBtn" class="capcut-tool-btn" title="Split scene at specific word">
                                                     <span>✂️ Split Word</span>
                                                 </button>
                                                 <button type="button" id="capcutClearMediaBtn" class="capcut-tool-btn" title="Remove assigned visual">
-                                                    <span>🗑️ Clear Media</span>
+                                                    <span>🗑️ Clear</span>
                                                 </button>
                                             </div>
                                         </div>
@@ -555,17 +555,15 @@
                                 <!-- Tab 2: Smart Auto-Sync -->
                                 <div class="capcut-tab-panel hidden" id="capcutPanelAutoSync">
                                     <div class="capcut-pro-header">
-                                        <div>
-                                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
-                                                <h4 style="margin: 0; font-size: 13.5px; font-weight: 800; color: #fff;">
-                                                    ⚡ AI Retention & Auto-Sync
-                                                </h4>
-                                                <span class="capcut-pill-badge" id="capcutRetentionBadge">Retention: High</span>
-                                            </div>
-                                            <p style="margin: 4px 0 0 0; font-size: 11px; color: #94a3b8; line-height: 1.4;">
-                                                Auto-adjusts voiceover narration with visual pacing so clips never feel stretched or mismatched.
-                                            </p>
+                                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                                            <h4 style="margin: 0; font-size: 13px; font-weight: 800; color: #fff;">
+                                                ⚡ Retention & Auto-Sync
+                                            </h4>
+                                            <span class="capcut-pill-badge" id="capcutRetentionBadge">Retention: High</span>
                                         </div>
+                                        <p style="margin: 3px 0 0 0; font-size: 11px; color: #94a3b8;">
+                                            Sync voiceover with visual pacing to maintain maximum viewer attention.
+                                        </p>
                                     </div>
 
                                     <div class="capcut-pro-body">
@@ -576,7 +574,7 @@
                                                 <span class="capcut-tag-pill">Zero Lag</span>
                                             </div>
                                             <p class="capcut-pro-card-desc">
-                                                Snaps visual clip durations to spoken boundaries so visuals transition exactly as words are spoken.
+                                                Conforms visual clip durations strictly to spoken narration boundaries.
                                             </p>
                                             <button type="button" id="capcutVoiceLockBtn" class="capcut-action-btn btn-cyan">
                                                 ⚡ Snap Visuals to Voiceover
@@ -590,9 +588,9 @@
                                                 <span class="capcut-tag-pill">Hook Guard</span>
                                             </div>
                                             <p class="capcut-pro-card-desc">
-                                                Auto-subcuts long scenes at natural pauses so viewers never stare at a static clip for too long.
+                                                Auto-subcuts long scenes at natural pauses so visuals stay dynamic.
                                             </p>
-                                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px;">
+                                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 4px 0;">
                                                 <label style="font-size: 11px; color: #cbd5e1; font-weight: 600;">Max Clip Pacing:</label>
                                                 <select id="capcutMaxCutSelect" class="capcut-select-dropdown">
                                                     <option value="1.8">🔥 Hyper Pacing (1.8s)</option>
@@ -608,19 +606,19 @@
                                         <!-- Timeline Health & Retention Stats -->
                                         <div class="capcut-health-box" id="capcutPacingHealthBox">
                                             <div class="health-stat">
-                                                <span class="stat-label">Total Duration</span>
+                                                <span class="stat-label">Total Time</span>
                                                 <span class="stat-val" id="capcutStatTotalDur">0.0s</span>
                                             </div>
                                             <div class="health-stat">
-                                                <span class="stat-label">Total Scenes</span>
+                                                <span class="stat-label">Scenes</span>
                                                 <span class="stat-val" id="capcutStatSceneCount">0</span>
                                             </div>
                                             <div class="health-stat">
-                                                <span class="stat-label">Avg Cut Pace</span>
+                                                <span class="stat-label">Avg Pace</span>
                                                 <span class="stat-val" id="capcutStatAvgPace">0.0s</span>
                                             </div>
                                             <div class="health-stat">
-                                                <span class="stat-label">Longest Clip</span>
+                                                <span class="stat-label">Longest</span>
                                                 <span class="stat-val" id="capcutStatLongest">0.0s</span>
                                             </div>
                                         </div>
@@ -630,31 +628,15 @@
                                 <!-- Tab 3: Pro Tools & LUTs -->
                                 <div class="capcut-tab-panel hidden" id="capcutPanelProTools">
                                     <div class="capcut-pro-header">
-                                        <div>
-                                            <h4 style="margin: 0; font-size: 13.5px; font-weight: 800; color: #fff;">
-                                                🎨 Professional Fast Tools
-                                            </h4>
-                                            <p style="margin: 4px 0 0 0; font-size: 11px; color: #94a3b8;">
-                                                Professional timeline editing tools to finish in seconds.
-                                            </p>
-                                        </div>
+                                        <h4 style="margin: 0; font-size: 13px; font-weight: 800; color: #fff;">
+                                            🎨 B-Roll & Style Studio
+                                        </h4>
+                                        <p style="margin: 3px 0 0 0; font-size: 11px; color: #94a3b8;">
+                                            Fast automated tools to polish your Short in seconds.
+                                        </p>
                                     </div>
 
                                     <div class="capcut-pro-body">
-                                        <!-- Playhead Split / Magnetic Razor -->
-                                        <div class="capcut-pro-card">
-                                            <div class="capcut-pro-card-title">
-                                                <span>✂️ Split at Playhead (Razor)</span>
-                                                <span class="capcut-hotkey-pill">Shortcut: S</span>
-                                            </div>
-                                            <p class="capcut-pro-card-desc">
-                                                Splits the active scene directly where the red playhead needle is scrubbing.
-                                            </p>
-                                            <button type="button" id="capcutSplitAtPlayheadBtn" class="capcut-action-btn btn-cyan">
-                                                ✂️ Split at Playhead Needle
-                                            </button>
-                                        </div>
-
                                         <!-- 1-Click Smart Match All B-Roll -->
                                         <div class="capcut-pro-card">
                                             <div class="capcut-pro-card-title">
@@ -662,12 +644,12 @@
                                                 <span class="capcut-tag-pill">Pexels 1-Click</span>
                                             </div>
                                             <p class="capcut-pro-card-desc">
-                                                Auto-scans narration and downloads matching vertical clips for all scenes.
+                                                Auto-scans narration and assigns matching vertical clips for all scenes.
                                             </p>
-                                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                            <div style="display: flex; align-items: center; gap: 8px; margin: 4px 0;">
                                                 <input type="checkbox" id="capcutForceMatchAllCheck" style="cursor: pointer;">
                                                 <label for="capcutForceMatchAllCheck" style="font-size: 11px; color: #cbd5e1; cursor: pointer;">
-                                                    Replace existing clips (Force match all)
+                                                    Replace existing clips
                                                 </label>
                                             </div>
                                             <button type="button" id="capcutSmartMatchAllBtn" class="capcut-action-btn btn-purple">
@@ -684,7 +666,7 @@
                                             <p class="capcut-pro-card-desc">
                                                 Real-time color grade on canvas; baked into final video stitch.
                                             </p>
-                                            <select id="capcutColorFilterSelect" class="capcut-select-dropdown" style="width: 100%;">
+                                            <select id="capcutColorFilterSelect" class="capcut-select-dropdown" style="width: 100%; margin-top: 4px;">
                                                 <option value="none">Original (Natural Clean)</option>
                                                 <option value="viral_punch">⚡ Viral Punch (+18% Contrast, +25% Saturation)</option>
                                                 <option value="moody_noir">🎬 Moody Noir (Dramatic High-Contrast B&W)</option>
@@ -694,19 +676,18 @@
                                             </select>
                                         </div>
 
-                                        <!-- Reorder Scene Controls -->
+                                        <!-- Playhead Split / Magnetic Razor -->
                                         <div class="capcut-pro-card">
                                             <div class="capcut-pro-card-title">
-                                                <span>↔️ Reorder Selected Clip</span>
+                                                <span>✂️ Split at Playhead (Razor)</span>
+                                                <span class="capcut-hotkey-pill">Shortcut: S</span>
                                             </div>
-                                            <div style="display: flex; gap: 8px; margin-top: 6px;">
-                                                <button type="button" id="capcutReorderLeftBtn" class="capcut-action-btn btn-secondary-pro" style="flex: 1;">
-                                                    ◀ Move Earlier
-                                                </button>
-                                                <button type="button" id="capcutReorderRightBtn" class="capcut-action-btn btn-secondary-pro" style="flex: 1;">
-                                                    Move Later ▶
-                                                </button>
-                                            </div>
+                                            <p class="capcut-pro-card-desc">
+                                                Splits the active scene directly where the red playhead needle is scrubbing.
+                                            </p>
+                                            <button type="button" id="capcutSplitAtPlayheadBtn" class="capcut-action-btn btn-cyan">
+                                                ✂️ Split at Playhead Needle
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -717,28 +698,11 @@
                         <div class="capcut-timeline-wrapper">
                             <!-- Timeline Toolbar -->
                             <div class="capcut-timeline-toolbar">
-                                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
                                     <span style="font-size: 11.5px; font-weight: 700; color: #fff;">Tracks:</span>
                                     <button type="button" id="capcutToolbarSplitBtn" class="capcut-toolbar-btn" title="Split scene at playhead (Hotkey: S)">
                                         ✂️ Razor (S)
                                     </button>
-                                    <button type="button" id="capcutToolbarAutoSyncBtn" class="capcut-toolbar-btn" title="Open Auto-Sync Panel">
-                                        ⚡ Auto-Sync
-                                    </button>
-                                    <button type="button" id="capcutToolbarMatchBtn" class="capcut-toolbar-btn" title="Open Pro Tools Panel">
-                                        🤖 Match All
-                                    </button>
-                                    <div style="display: flex; align-items: center; gap: 4px; margin-left: 4px;">
-                                        <span style="font-size: 10.5px; color: #94a3b8;">LUT:</span>
-                                        <select id="capcutToolbarLutSelect" class="capcut-toolbar-select">
-                                            <option value="none">Original</option>
-                                            <option value="viral_punch">Viral Punch</option>
-                                            <option value="moody_noir">Moody Noir</option>
-                                            <option value="teal_orange">Teal & Orange</option>
-                                            <option value="warm_film">Warm Film</option>
-                                            <option value="cyberpunk">Cyberpunk</option>
-                                        </select>
-                                    </div>
                                 </div>
                                 <div class="capcut-zoom-controls">
                                     <span>Zoom:</span>
@@ -1091,7 +1055,7 @@
         </main>
     </div>
 
-    <script type="module" src="/static/js/main.js?v=20260927_voice_upgrade_v3"></script>
+    <script type="module" src="/static/js/main.js?v=20261001_v2"></script>
 
     <!-- Google Material Toast Notifications Container -->
     <div id="toastContainer" class="google-toast-container"></div>

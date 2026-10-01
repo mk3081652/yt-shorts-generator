@@ -459,6 +459,10 @@ def search_pexels_videos(
         return []
 
 
+# Alias for backward-compatibility
+search_stock_videos = search_pexels_videos
+
+
 def collect_candidate_videos(
     queries: List[str],
     used_video_ids: Optional[Set[str]] = None,

@@ -73,14 +73,9 @@ export class CapCutTimelineEditor {
         this.smartMatchAllBtn = document.getElementById("capcutSmartMatchAllBtn");
         this.forceMatchAllCheck = document.getElementById("capcutForceMatchAllCheck");
         this.colorFilterSelect = document.getElementById("capcutColorFilterSelect");
-        this.reorderLeftBtn = document.getElementById("capcutReorderLeftBtn");
-        this.reorderRightBtn = document.getElementById("capcutReorderRightBtn");
 
         // Toolbar quick-access
         this.toolbarSplitBtn = document.getElementById("capcutToolbarSplitBtn");
-        this.toolbarAutoSyncBtn = document.getElementById("capcutToolbarAutoSyncBtn");
-        this.toolbarMatchBtn = document.getElementById("capcutToolbarMatchBtn");
-        this.toolbarLutSelect = document.getElementById("capcutToolbarLutSelect");
 
         // Timeline tracks
         this.viewport = document.getElementById("capcutTimelineViewport");
@@ -129,15 +124,6 @@ export class CapCutTimelineEditor {
         if (this.toolbarSplitBtn) {
             this.toolbarSplitBtn.addEventListener("click", () => this.handleSplitAtPlayhead());
         }
-        if (this.toolbarAutoSyncBtn) {
-            this.toolbarAutoSyncBtn.addEventListener("click", () => this.switchTab("autoSync"));
-        }
-        if (this.toolbarMatchBtn) {
-            this.toolbarMatchBtn.addEventListener("click", () => this.switchTab("proTools"));
-        }
-        if (this.toolbarLutSelect) {
-            this.toolbarLutSelect.addEventListener("change", (e) => this.handleColorFilterChange(e.target.value));
-        }
 
         // Auto-Sync actions
         if (this.voiceLockBtn) {
@@ -159,12 +145,6 @@ export class CapCutTimelineEditor {
         }
         if (this.colorFilterSelect) {
             this.colorFilterSelect.addEventListener("change", (e) => this.handleColorFilterChange(e.target.value));
-        }
-        if (this.reorderLeftBtn) {
-            this.reorderLeftBtn.addEventListener("click", () => this.handleReorder("left"));
-        }
-        if (this.reorderRightBtn) {
-            this.reorderRightBtn.addEventListener("click", () => this.handleReorder("right"));
         }
         if (this.clearMediaBtn) {
             this.clearMediaBtn.addEventListener("click", () => this.handleClearMedia());
@@ -337,7 +317,9 @@ export class CapCutTimelineEditor {
         if (!this.activeSceneId || !scenes.some(s => s.id === this.activeSceneId)) {
             this.selectScene(scenes[0].id);
         } else {
-            this.updateInspector(scenes.find(s => s.id === this.activeSceneId));
+            const currentScene = scenes.find(s => s.id === this.activeSceneId);
+            this.updateInspector(currentScene);
+            this.updateCanvasMedia(currentScene);
         }
 
         // Update timecode readout
@@ -346,7 +328,6 @@ export class CapCutTimelineEditor {
         // Sync color filter & LUT
         if (project.color_filter) {
             if (this.colorFilterSelect) this.colorFilterSelect.value = project.color_filter;
-            if (this.toolbarLutSelect) this.toolbarLutSelect.value = project.color_filter;
             if (this.screenFrame) this.screenFrame.dataset.filter = project.color_filter;
         }
 
@@ -502,7 +483,7 @@ export class CapCutTimelineEditor {
     updateCanvasMedia(scene) {
         if (!scene) return;
         const mediaUrl = scene.media_url || scene.image_url;
-        const isVid = (scene.media_type === "video" || (mediaUrl && mediaUrl.endsWith(".mp4")));
+        const isVid = (scene.media_type === "video" || (mediaUrl && (mediaUrl.endsWith(".mp4") || mediaUrl.includes(".mp4"))));
 
         if (mediaUrl) {
             if (this.placeholder) this.placeholder.classList.add("hidden");
@@ -510,8 +491,11 @@ export class CapCutTimelineEditor {
                 if (this.monitorImg) this.monitorImg.classList.add("hidden");
                 if (this.monitorVideo) {
                     this.monitorVideo.classList.remove("hidden");
-                    if (this.monitorVideo.src !== mediaUrl) {
+                    if (this.monitorVideo.src !== mediaUrl && !this.monitorVideo.src.endsWith(mediaUrl)) {
                         this.monitorVideo.src = mediaUrl;
+                    }
+                    if (this.isPlaying) {
+                        this.monitorVideo.play().catch(() => {});
                     }
                 }
             } else {
@@ -548,6 +532,14 @@ export class CapCutTimelineEditor {
     }
 
     play() {
+        const totalDur = state.project?.total_duration || 
+            (state.project?.scenes ? state.project.scenes.reduce((acc, s) => acc + (s.duration || 3.0), 0) : 20.0);
+        
+        // If already at or very near end, restart from beginning
+        if (this.getCurrentTime() >= totalDur - 0.1) {
+            this.seekTo(0);
+        }
+
         const audio = this.getAudioElement();
         if (audio && audio.src) {
             audio.play().catch(() => {});
@@ -575,10 +567,33 @@ export class CapCutTimelineEditor {
     }
 
     startSyncLoop() {
-        const tick = () => {
+        if (this.animFrameId) {
+            cancelAnimationFrame(this.animFrameId);
+            this.animFrameId = null;
+        }
+
+        let lastWallTime = performance.now();
+
+        const tick = (now) => {
             if (!this.isPlaying) return;
-            const curTime = this.getCurrentTime();
-            const totalDur = state.project?.total_duration || 20.0;
+
+            const delta = Math.max(0, (now - lastWallTime) / 1000);
+            lastWallTime = now;
+
+            const audio = this.getAudioElement();
+            const totalDur = state.project?.total_duration || 
+                (state.project?.scenes ? state.project.scenes.reduce((acc, s) => acc + (s.duration || 3.0), 0) : 20.0);
+
+            let curTime;
+            // If voiceover audio is active and playing, use audio.currentTime as the master sync clock
+            if (audio && audio.src && !audio.paused && !audio.ended && !isNaN(audio.currentTime)) {
+                curTime = audio.currentTime;
+                this._simulatedTime = curTime;
+            } else {
+                // Standby mode or video without VO: advance simulated time smoothly by frame delta
+                this._simulatedTime = (this._simulatedTime || 0.0) + delta;
+                curTime = this._simulatedTime;
+            }
 
             if (curTime >= totalDur) {
                 this.pause();
@@ -597,7 +612,7 @@ export class CapCutTimelineEditor {
 
     getCurrentTime() {
         const audio = this.getAudioElement();
-        if (audio && audio.src && !isNaN(audio.currentTime)) {
+        if (audio && audio.src && !audio.paused && !audio.ended && !isNaN(audio.currentTime)) {
             return audio.currentTime;
         }
         return this._simulatedTime || 0.0;
@@ -606,14 +621,17 @@ export class CapCutTimelineEditor {
     seekTo(targetSeconds) {
         const audio = this.getAudioElement();
         const safeT = Math.max(0, targetSeconds);
-        if (audio && audio.src) {
-            audio.currentTime = safeT;
-        }
         this._simulatedTime = safeT;
+        if (audio && audio.src) {
+            try {
+                audio.currentTime = safeT;
+            } catch (e) {}
+        }
 
         this.updatePlayheadPosition(safeT);
         this.syncSceneAtTime(safeT);
-        const totalDur = state.project?.total_duration || 20.0;
+        const totalDur = state.project?.total_duration || 
+            (state.project?.scenes ? state.project.scenes.reduce((acc, s) => acc + (s.duration || 3.0), 0) : 20.0);
         this.updateTimecode(safeT, totalDur);
     }
 
@@ -631,11 +649,13 @@ export class CapCutTimelineEditor {
         const scenes = state.project?.scenes || [];
         let cum = 0.0;
         let activeSc = null;
+        let sceneStartTime = 0.0;
 
         for (const sc of scenes) {
             const dur = sc.duration || 3.0;
             if (time >= cum && time < (cum + dur)) {
                 activeSc = sc;
+                sceneStartTime = cum;
                 break;
             }
             cum += dur;
@@ -643,10 +663,22 @@ export class CapCutTimelineEditor {
 
         if (!activeSc && scenes.length > 0) {
             activeSc = scenes[scenes.length - 1];
+            sceneStartTime = Math.max(0, cum - (activeSc.duration || 3.0));
         }
 
-        if (activeSc && activeSc.id !== this.activeSceneId) {
-            this.selectScene(activeSc.id);
+        if (activeSc) {
+            if (activeSc.id !== this.activeSceneId) {
+                this.selectScene(activeSc.id);
+            }
+            // Sync monitor video offset if a video clip is active
+            if (this.monitorVideo && !this.monitorVideo.classList.contains("hidden")) {
+                const clipOffset = Math.max(0, time - sceneStartTime);
+                if (!this.isPlaying || Math.abs(this.monitorVideo.currentTime - clipOffset) > 0.3) {
+                    try {
+                        this.monitorVideo.currentTime = clipOffset;
+                    } catch (e) {}
+                }
+            }
         }
     }
 

@@ -38,25 +38,31 @@
 .capcut-editor-container {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
     background: #0b0f19;
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 12px;
-    padding: 16px;
+    padding: 12px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+    box-sizing: border-box;
+    width: 100%;
 }
 
 /* Top Area: Monitor Canvas + Clip Inspector */
 .capcut-workspace-top {
     display: grid;
-    grid-template-columns: 280px 1fr;
-    gap: 16px;
-    min-height: 420px;
+    grid-template-columns: 240px 1fr;
+    gap: 14px;
+    height: 380px;
+    max-height: 380px;
+    box-sizing: border-box;
 }
 
 @media (max-width: 900px) {
     .capcut-workspace-top {
         grid-template-columns: 1fr;
+        height: auto;
+        max-height: none;
     }
 }
 
@@ -69,14 +75,16 @@
     flex-direction: column;
     align-items: center;
     justify-content: space-between;
-    padding: 12px;
+    padding: 10px;
     position: relative;
     box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.8);
+    height: 100%;
+    box-sizing: border-box;
 }
 
 .capcut-screen-frame {
-    width: 200px;
-    height: 355px; /* 9:16 */
+    width: 170px;
+    height: 302px; /* 9:16 vertical standard */
     background: #000;
     border-radius: 8px;
     overflow: hidden;
@@ -86,6 +94,7 @@
     justify-content: center;
     border: 2px solid rgba(255, 255, 255, 0.15);
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.9);
+    flex-shrink: 0;
 }
 
 .capcut-screen-frame video,
@@ -180,10 +189,26 @@
     background: #0e1424;
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 10px;
-    padding: 16px;
+    padding: 12px 14px;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 8px;
+    height: 100%;
+    max-height: 380px;
+    overflow-y: auto;
+    box-sizing: border-box;
+}
+
+.capcut-inspector-box::-webkit-scrollbar {
+    width: 5px;
+}
+.capcut-inspector-box::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 4px;
+}
+.capcut-inspector-box::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
 }
 
 .capcut-inspector-header {
@@ -721,17 +746,21 @@
 }
 
 .capcut-action-btn {
-    padding: 8px 12px;
-    font-size: 11.5px;
+    padding: 7px 14px;
+    font-size: 11px;
     font-weight: 700;
     border-radius: 6px;
     cursor: pointer;
     border: none;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
     transition: all 0.2s ease;
+    align-self: flex-start;
+    width: auto;
+    margin-top: 4px;
+    text-decoration: none;
 }
 
 .capcut-action-btn.btn-cyan {
@@ -754,18 +783,6 @@
 .capcut-action-btn.btn-purple:hover {
     box-shadow: 0 4px 14px rgba(168, 85, 247, 0.5);
     transform: translateY(-1px);
-}
-
-.capcut-action-btn.btn-secondary-pro {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    color: #cbd5e1;
-}
-
-.capcut-action-btn.btn-secondary-pro:hover {
-    background: rgba(255, 255, 255, 0.15);
-    color: #fff;
-    border-color: rgba(255, 255, 255, 0.3);
 }
 
 /* Timeline Health & Retention Stats Grid */

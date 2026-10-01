@@ -1503,49 +1503,83 @@ def smart_match_all_visuals(
 ) -> Tuple[Optional[Project], Optional[str], int]:
     """
     1-Click AI B-Roll Match: Scans all scenes and auto-assigns relevant vertical HD stock
-    videos from Pexels based on spoken keywords.
+    videos from Pexels based on spoken keywords. Falls back to generating visuals via AI if needed.
     """
-    project = load_project(project_id)
-    if not project:
-        return None, "Project not found", 404
+    try:
+        project = load_project(project_id)
+        if not project:
+            return None, "Project not found", 404
 
-    from engine.stock_video import search_stock_videos, download_stock_video
+        from engine.stock_video import search_pexels_videos, download_stock_video
+        from engine.config import get_pexels_api_key
 
-    project.snapshot()
-    matched_count = 0
+        project.snapshot()
+        matched_count = 0
+        pexels_key = get_pexels_api_key()
 
-    for sc in project.scenes:
-        if not force_all and sc.status == "ready" and sc.media_path and os.path.exists(sc.media_path):
-            continue
+        for sc in project.scenes:
+            if not force_all and sc.status == "ready" and sc.media_path and os.path.exists(sc.media_path):
+                continue
 
-        queries = sc.search_queries or sc.broll_keywords or []
-        query = queries[0] if queries else " ".join(sc.text.split()[:4])
-        query = re.sub(r"[^\w\s]", "", query).strip() or "cinematic"
+            queries = sc.search_queries or sc.broll_keywords or []
+            query = queries[0] if queries else " ".join(sc.text.split()[:4])
+            query = re.sub(r"[^\w\s]", "", query).strip() or "cinematic"
 
-        try:
-            candidates = search_stock_videos(query, limit=5, orientation="portrait")
-            if candidates:
-                top = candidates[0]
-                dl_url = top.get("download_url")
-                v_id = top.get("id", uuid.uuid4().hex[:6])
-                if dl_url:
-                    out_name = f"pexels_{v_id}_{uuid.uuid4().hex[:6]}.mp4"
-                    out_path = os.path.join(STOCK_CACHE_DIR, out_name)
-                    downloaded = download_stock_video(dl_url, out_path)
-                    if downloaded and os.path.exists(downloaded):
-                        sc.media_path = downloaded
-                        sc.media_url = f"/outputs/stock_videos/{out_name}"
-                        sc.media_type = "video"
+            video_assigned = False
+            if pexels_key:
+                try:
+                    candidates = search_pexels_videos(query, limit=5, orientation="portrait", api_key=pexels_key)
+                    if not candidates:
+                        # Try broader cinematic keywords
+                        fallback_q = "cinematic dark mysterious" if any(w in sc.text.lower() for w in ["vanish", "plane", "disappear", "mystery", "lost"]) else "cinematic vertical footage"
+                        candidates = search_pexels_videos(fallback_q, limit=3, orientation="portrait", api_key=pexels_key)
+
+                    if candidates:
+                        top = candidates[0]
+                        dl_url = top.get("download_url") or top.get("video_url")
+                        v_id = top.get("id", uuid.uuid4().hex[:6])
+                        if dl_url:
+                            out_name = f"pexels_{v_id}_{uuid.uuid4().hex[:6]}.mp4"
+                            out_path = os.path.join(STOCK_CACHE_DIR, out_name)
+                            downloaded = download_stock_video(dl_url, out_path)
+                            if downloaded and os.path.exists(downloaded):
+                                sc.media_path = downloaded
+                                sc.media_url = f"/outputs/stock_videos/{out_name}"
+                                sc.media_type = "video"
+                                sc.status = "ready"
+                                sc.source_tier = "manual"
+                                sc.selected_reason = f"Smart AI Matched for '{query}'"
+                                sc.fail_reason = None
+                                matched_count += 1
+                                video_assigned = True
+                except Exception as ex:
+                    logger.warning(f"[SmartMatch] Pexels match failed for scene {sc.id}: {ex}")
+
+            # If Pexels video wasn't found or key wasn't provided, and scene still has no visual, fallback to FLUX AI image
+            if not video_assigned and (not sc.media_path or not os.path.exists(sc.media_path)):
+                try:
+                    from engine.flux import generate_image_flux
+                    prompt = sc.image_prompt or f"Cinematic 9:16 vertical composition: {sc.text[:120]}"
+                    out_name = f"flux_ai_{sc.id[:8]}_{uuid.uuid4().hex[:6]}.jpg"
+                    out_path = os.path.abspath(f"outputs/ai_previews/{out_name}")
+                    img_path = generate_image_flux(prompt, out_path=out_path)
+                    if img_path and os.path.exists(img_path):
+                        sc.media_path = img_path
+                        sc.media_url = f"/outputs/ai_previews/{out_name}"
+                        sc.media_type = "image"
                         sc.status = "ready"
-                        sc.source_tier = "manual"
-                        sc.selected_reason = f"Smart AI Matched for '{query}'"
-                        sc.fail_reason = None
+                        sc.source_tier = "flux"
+                        sc.selected_reason = f"AI art generated for: {prompt[:40]}..."
                         matched_count += 1
-        except Exception as e:
-            print(f"[SmartMatch] Error matching scene {sc.id}: {e}")
+                except Exception as ex:
+                    logger.warning(f"[SmartMatch] FLUX fallback failed for scene {sc.id}: {ex}")
 
-    save_project(project)
-    return project, None, 200
+        save_project(project)
+        return project, None, 200
+    except Exception as e:
+        logger.error(f"[SmartMatch] Error: {e}", exc_info=True)
+        return None, f"Smart match failed: {str(e)}", 500
+
 
 
 def apply_color_filter(
