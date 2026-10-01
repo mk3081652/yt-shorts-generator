@@ -468,8 +468,8 @@ def queue_project_generation(project_id: str) -> None:
                 except Exception as broll_err:
                     print(f"[StockVideo] Worker error for scene {sc.id}: {broll_err}")
 
-            # 2. If not assigned (or if visual_source is flux / strategy flux), generate via FLUX
-            if not media_assigned:
+            # 2. If not assigned and visual_source is flux/image/hybrid, generate via FLUX
+            if not media_assigned and visual_src in ("flux", "image", "hybrid"):
                 out_name = f"{pid}_{sc.id}.jpg"
                 out_path = os.path.join(PREVIEWS_DIR, out_name)
 
@@ -495,6 +495,9 @@ def queue_project_generation(project_id: str) -> None:
                     sc.status = "failed"
                     sc.source_tier = "flux_failed"
                     sc.fail_reason = reason
+            elif not media_assigned:
+                sc.status = "failed"
+                sc.fail_reason = "No vertical stock video found on Pexels for Gemini visual prompt"
 
             save_project(proj)
 
@@ -1147,7 +1150,7 @@ def generate_scene_media(project_id: str, scene_id: str, api_key: Optional[str] 
         except Exception as broll_err:
             print(f"[StockVideo] Single scene error for {target.id}: {broll_err}")
 
-    if not media_assigned:
+    if not media_assigned and visual_src in ("flux", "image", "hybrid"):
         out_name = f"{project_id}_{target.id}.jpg"
         out_path = os.path.join(PREVIEWS_DIR, out_name)
 
@@ -1164,6 +1167,9 @@ def generate_scene_media(project_id: str, scene_id: str, api_key: Optional[str] 
             target.status = "failed"
             target.source_tier = "flux_failed"
             target.fail_reason = reason
+    elif not media_assigned:
+        target.status = "failed"
+        target.fail_reason = "No vertical stock video found on Pexels for Gemini visual prompt"
 
     save_project(project)
     return project, None, 200
@@ -1530,14 +1536,24 @@ def smart_match_all_visuals(
 
         def _worker():
             try:
-                from engine.stock_video import search_pexels_videos, download_stock_video, CACHE_DIR as STOCK_CACHE_DIR
-                from engine.config import get_pexels_api_key
+                from engine.stock_video import (
+                    search_pexels_videos,
+                    download_stock_video,
+                    extract_broll_keywords,
+                    generate_gemini_visual_search_queries,
+                    clean_query_phrase,
+                    filter_candidates,
+                    rank_candidates_deterministically,
+                    CACHE_DIR as STOCK_CACHE_DIR
+                )
+                from engine.config import get_pexels_api_key, get_gemini_api_key
 
                 proj = load_project(project_id)
                 if not proj:
                     return
 
                 pexels_key = get_pexels_api_key()
+                gemini_key = get_gemini_api_key()
                 used_ids = set()
 
                 for s in proj.scenes:
@@ -1555,60 +1571,112 @@ def smart_match_all_visuals(
                     if not sc:
                         continue
 
-                    # 1. Gather queries strictly from Gemini Director plan or spoken narration
+                    # 1. Synthesize & gather queries strictly based on Gemini visual prompt
                     candidate_queries = []
+
+                    # If scene search queries missing or insufficient, synthesize strictly from Gemini prompt
+                    if not sc.search_queries or len(sc.search_queries) < 2:
+                        gemini_q, synth_prompt = generate_gemini_visual_search_queries(
+                            scene_text=sc.text,
+                            image_prompt=sc.image_prompt,
+                            video_prompt=sc.video_prompt,
+                            subject=getattr(sc, "subject", ""),
+                            action=getattr(sc, "action", ""),
+                            setting=getattr(sc, "setting", ""),
+                            must_show=getattr(sc, "must_show", []),
+                            api_key=gemini_key
+                        )
+                        if gemini_q:
+                            candidate_queries.extend(gemini_q)
+                            if synth_prompt and not sc.image_prompt:
+                                sc.image_prompt = synth_prompt
+                            sc.search_queries = list(gemini_q)
+                            sc.broll_keywords = list(gemini_q[:3])
+
                     if sc.search_queries and isinstance(sc.search_queries, list):
-                        candidate_queries.extend([str(q).strip() for q in sc.search_queries if str(q).strip()])
+                        for sq in sc.search_queries:
+                            cq = clean_query_phrase(str(sq), max_words=4)
+                            if cq and cq not in candidate_queries:
+                                candidate_queries.append(cq)
+
                     if sc.broll_keywords and isinstance(sc.broll_keywords, list):
-                        candidate_queries.extend([str(k).strip() for k in sc.broll_keywords if str(k).strip()])
+                        for bk in sc.broll_keywords:
+                            cq = clean_query_phrase(str(bk), max_words=3)
+                            if cq and cq not in candidate_queries:
+                                candidate_queries.append(cq)
 
-                    clean_text = re.sub(r"[^\w\s]", " ", sc.text or "").strip()
-                    stop_words = {"the", "and", "was", "for", "with", "that", "this", "from", "they", "there", "about", "what", "could", "have", "been", "were", "into"}
-                    words = [w for w in clean_text.split() if len(w) > 2 and w.lower() not in stop_words]
-                    if words:
-                        candidate_queries.append(" ".join(words[:3]))
-                        if len(words) >= 2:
-                            candidate_queries.append(words[0])
+                    # Supplement with domain visual keywords extracted from Gemini prompt
+                    extra_queries = extract_broll_keywords(
+                        scene_text=sc.text,
+                        image_prompt=sc.image_prompt,
+                        video_prompt=sc.video_prompt,
+                        subject=getattr(sc, "subject", ""),
+                        action=getattr(sc, "action", ""),
+                        setting=getattr(sc, "setting", ""),
+                        must_show=getattr(sc, "must_show", []),
+                        should_avoid=getattr(sc, "should_avoid", []),
+                        search_queries=sc.search_queries,
+                        broll_keywords=sc.broll_keywords,
+                        topic=p.script[:100],
+                        scene_id=sc.id
+                    )
+                    for eq in extra_queries:
+                        if eq not in candidate_queries:
+                            candidate_queries.append(eq)
 
-                    if not candidate_queries:
-                        candidate_queries.append(clean_text[:25] or "cinematic")
-
-                    # 2. Search Pexels for matching vertical video
+                    # 2. Search Pexels for vertical videos matching Gemini prompt queries
                     candidates = []
-                    matched_q = candidate_queries[0]
-                    for raw_q in candidate_queries:
-                        clean_q = re.sub(r"[^\w\s]", "", raw_q).strip()
+                    for clean_q in candidate_queries:
                         if not clean_q:
                             continue
-                        vids = search_pexels_videos(clean_q, limit=4, orientation="portrait", api_key=pexels_key)
+                        vids = search_pexels_videos(clean_q, limit=6, orientation="portrait", api_key=pexels_key)
                         if not vids:
-                            vids = search_pexels_videos(clean_q, limit=3, orientation="", api_key=pexels_key)
+                            vids = search_pexels_videos(clean_q, limit=4, orientation="", api_key=pexels_key)
                         for v in vids:
                             vid_id = str(v.get("id"))
-                            if vid_id not in used_ids:
+                            if vid_id not in used_ids and not any(str(c.get("id")) == vid_id for c in candidates):
                                 candidates.append(v)
-                        if candidates:
-                            matched_q = clean_q
+                        if len(candidates) >= 12:
                             break
 
-                    # 3. Download and assign matched video
+                    # 3. Hard filter candidates (resolution, minimum duration)
+                    valid_candidates = filter_candidates(candidates)
+
+                    # 4. Rank candidates strictly against Gemini's visual prompt
                     assigned = False
-                    if candidates:
-                        top = candidates[0]
-                        dl_url = top.get("video_url") or top.get("download_url")
-                        v_id = str(top.get("id", uuid.uuid4().hex[:6]))
+                    if valid_candidates:
+                        scene_ctx = {
+                            "scene_text": sc.text,
+                            "subject": getattr(sc, "subject", "") or sc.image_prompt[:40],
+                            "action": getattr(sc, "action", ""),
+                            "setting": getattr(sc, "setting", ""),
+                            "shot": getattr(sc, "shot_scale", "") or getattr(sc, "motion", ""),
+                            "mood": getattr(sc, "mood", "cinematic"),
+                            "visual_type": getattr(sc, "visual_type", "literal"),
+                            "must_show": getattr(sc, "must_show", []),
+                            "should_avoid": getattr(sc, "should_avoid", [])
+                        }
+
+                        best_cand, best_score, best_reason = rank_candidates_deterministically(valid_candidates, scene_ctx)
+                        if not best_cand:
+                            best_cand = valid_candidates[0]
+                            best_reason = f"Matched strictly per Gemini prompt '{best_cand.get('query')}'"
+
+                        dl_url = best_cand.get("video_url")
+                        v_id = str(best_cand.get("id", uuid.uuid4().hex[:6]))
                         if dl_url:
                             out_name = f"pexels_{v_id}_{uuid.uuid4().hex[:6]}.mp4"
                             out_path = os.path.join(STOCK_CACHE_DIR, out_name)
                             try:
-                                downloaded = download_stock_video(dl_url, out_path, timeout=25)
+                                downloaded = download_stock_video(dl_url, out_path, timeout=30)
                                 if downloaded and os.path.exists(downloaded):
                                     sc.media_path = downloaded
                                     sc.media_url = f"/outputs/stock_videos/{out_name}"
                                     sc.media_type = "video"
                                     sc.status = "ready"
                                     sc.source_tier = "manual"
-                                    sc.selected_reason = f"Stock video matched for '{matched_q}'"
+                                    sc.selected_query = best_cand.get("query")
+                                    sc.selected_reason = best_reason
                                     sc.fail_reason = None
                                     sc.video_id = v_id
                                     used_ids.add(v_id)
@@ -1618,7 +1686,7 @@ def smart_match_all_visuals(
 
                     if not assigned:
                         sc.status = "failed"
-                        sc.fail_reason = f"No stock video found for queries: {', '.join(candidate_queries[:2])}"
+                        sc.fail_reason = f"No vertical stock video found on Pexels for Gemini prompt queries: {', '.join(candidate_queries[:3])}"
 
                     # SAVE PROJECT IMMEDIATELY AFTER EACH SCENE IS MATCHED!
                     save_project(p)

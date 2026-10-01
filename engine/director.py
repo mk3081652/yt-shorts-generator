@@ -193,8 +193,10 @@ def basic_mode_plan(beats: List[Tuple[str, float]], style_lock: str = "") -> Dic
         shot = shots_cycle[idx % len(shots_cycle)]
         motion = motions_cycle[idx % len(motions_cycle)]
         cleaned_text = re.sub(r'[\r\n\t]+', ' ', text).strip()
-        words = [w for w in re.sub(r'[^a-zA-Z0-9\s]', ' ', cleaned_text).split() if len(w) > 2]
-        fallback_query = " ".join(words[:3]) if words else "cinematic atmospheric scene"
+        from engine.stock_video import extract_broll_keywords
+        semantic_queries = extract_broll_keywords(scene_text=cleaned_text)
+        primary_query = semantic_queries[0] if semantic_queries else "cinematic scene"
+        broll_queries = semantic_queries[:4] if semantic_queries else [primary_query, f"{primary_query} vertical"]
 
         scene_dict = {
             "beat": idx,
@@ -210,10 +212,10 @@ def basic_mode_plan(beats: List[Tuple[str, float]], style_lock: str = "") -> Dic
             "continuity_group": f"group_{idx // 3}",
             "shot_scale": shot,
             "motion_intensity": "medium",
-            "must_show": [fallback_query],
+            "must_show": [primary_query],
             "should_avoid": [],
-            "search_queries": [fallback_query, f"{fallback_query} cinematic", f"{fallback_query} vertical"],
-            "broll_keywords": [fallback_query, f"{fallback_query} cinematic", f"{fallback_query} vertical"],
+            "search_queries": broll_queries,
+            "broll_keywords": broll_queries[:3],
             "entities": [],
             "camera_motion": motion,
             "video_prompt": f"{motion.capitalize()} camera movement framing {cleaned_text[:80]}",

@@ -94,7 +94,86 @@ def extract_queries_from_gemini_prompt(image_prompt: str, video_prompt: str = ""
                 if q2 and q2 not in queries:
                     queries.append(q2)
 
-    return queries
+def generate_gemini_visual_search_queries(
+    scene_text: str,
+    image_prompt: str = "",
+    video_prompt: str = "",
+    subject: str = "",
+    action: str = "",
+    setting: str = "",
+    must_show: Optional[List[str]] = None,
+    api_key: Optional[str] = None
+) -> Tuple[List[str], str]:
+    """
+    Calls Gemini to synthesize 3 to 4 strictly concrete, physical Pexels search queries
+    based strictly on the scene visual prompt and narration.
+    Filters out narrative fluff, dates, and speech idioms.
+    Returns (queries_list, generated_visual_prompt).
+    """
+    resolved_key = api_key or get_gemini_api_key()
+    if not resolved_key:
+        return [], ""
+
+    prompt_context = []
+    if scene_text:
+        prompt_context.append(f'Narration: "{scene_text.strip()}"')
+    if image_prompt:
+        prompt_context.append(f'Visual Prompt: "{image_prompt.strip()}"')
+    if subject:
+        prompt_context.append(f'Subject: "{subject.strip()}"')
+    if action:
+        prompt_context.append(f'Action: "{action.strip()}"')
+    if setting:
+        prompt_context.append(f'Setting: "{setting.strip()}"')
+    if must_show:
+        prompt_context.append(f'Must Show: {", ".join(str(m) for m in must_show)}')
+
+    sys_instruction = (
+        "You are an elite cinematography director and visual researcher for vertical (9:16) video production.\n"
+        "Given this scene's details, identify what the viewer should LITERALLY SEE on screen.\n"
+        "Generate 3 to 4 strictly concrete, physical 2-to-4 word Pexels stock video search queries.\n"
+        "CRITICAL RULES:\n"
+        "- NO abstract adjectives, narrative fluff, or metaphors (never 'mystery', 'loss', 'story', 'important', 'unexplained', 'theories').\n"
+        "- NO dates, years, speech dialogue, or negative qualifiers (never 'march 1991', 'found nothing', 'no distress call', 'warning').\n"
+        "- ONLY tangible physical objects, vehicles, people, camera angles, environments, or actions (e.g. 'airplane cockpit night', 'radar screen green', 'empty ocean waves', 'pilot operating controls', 'air traffic controller').\n"
+        "\n"
+        "Return strict JSON only:\n"
+        "{\n"
+        '  "visual_prompt": "1-sentence physical description of the shot",\n'
+        '  "queries": ["query 1", "query 2", "query 3", "query 4"]\n'
+        "}"
+    )
+
+    full_prompt = f"{sys_instruction}\n\nSCENE DETAILS:\n" + "\n".join(prompt_context)
+
+    try:
+        raw_text, _ = generate_content(
+            prompt_or_contents=full_prompt,
+            thinking_level="low",
+            max_output_tokens=500,
+            json_mode=True,
+            api_key=resolved_key,
+            timeout=12
+        )
+        if raw_text:
+            clean = raw_text.strip()
+            if clean.startswith("```"):
+                clean = re.sub(r'^```(?:json)?\s*', '', clean)
+                clean = re.sub(r'\s*```$', '', clean)
+            data = json.loads(clean)
+            v_prompt = str(data.get("visual_prompt", "")).strip()
+            raw_queries = data.get("queries", [])
+            valid_queries = []
+            for q in raw_queries:
+                clean_q = clean_query_phrase(str(q), max_words=4)
+                if clean_q and clean_q not in valid_queries:
+                    valid_queries.append(clean_q)
+            if valid_queries:
+                return valid_queries, v_prompt
+    except Exception as e:
+        logger.warning(f"[StockVideo] Gemini query synthesis failed: {e}")
+
+    return [], ""
 
 
 def extract_broll_keywords(
@@ -891,7 +970,29 @@ def fetch_broll_for_scene(
     print(f"\n[VisualPlanner] Scene ID: {scene_id[:8]} | Narration: '{scene_text[:60]}...'")
     print(f"[VisualPlanner] Subject: '{subject}' | Action: '{action}' | Setting: '{setting}' | Strategy: {visual_type}/{visual_priority}")
 
-    # 1. Generate 3-6 concrete queries
+    # 1. Synthesize smart queries strictly from Gemini prompt if queries missing or insufficient
+    if not search_queries or len(search_queries) < 2:
+        gemini_q, synth_prompt = generate_gemini_visual_search_queries(
+            scene_text=scene_text,
+            image_prompt=image_prompt,
+            video_prompt=video_prompt,
+            subject=subject,
+            action=action,
+            setting=setting,
+            must_show=must_show,
+            api_key=api_key
+        )
+        if gemini_q:
+            if not search_queries:
+                search_queries = list(gemini_q)
+            else:
+                for g in gemini_q:
+                    if g not in search_queries:
+                        search_queries.append(g)
+            if synth_prompt and not image_prompt:
+                image_prompt = synth_prompt
+
+    # 2. Extract & compile all concrete queries
     queries = extract_broll_keywords(
         scene_text=scene_text,
         image_prompt=image_prompt,
@@ -913,7 +1014,7 @@ def fetch_broll_for_scene(
     )
     print(f"[StockSearch] Generated {len(queries)} queries: {queries}")
 
-    # 2. Collect candidates across queries
+    # 3. Collect candidates across queries
     candidates = collect_candidate_videos(
         queries=queries,
         used_video_ids=used_video_ids,
@@ -921,12 +1022,12 @@ def fetch_broll_for_scene(
         api_key=key
     )
 
-    # 3. Hard filter candidates
+    # 4. Hard filter candidates
     filtered_candidates = filter_candidates(candidates)
     print(f"[Candidates] Retrieved {len(candidates)} raw, {len(filtered_candidates)} passed hard filtering")
 
     if not filtered_candidates:
-        print(f"[VisualPlanner] No suitable stock footage found on Pexels for scene {scene_id[:8]}. Triggering AI generator (FLUX) fallback.")
+        print(f"[VisualPlanner] No suitable stock footage found on Pexels for scene {scene_id[:8]}.")
         return None
 
     scene_context = {
@@ -942,7 +1043,7 @@ def fetch_broll_for_scene(
         "should_avoid": should_avoid or []
     }
 
-    # 4. AI Multimodal Vision Ranking (with deterministic fallback)
+    # 5. AI Multimodal Vision Ranking (with deterministic fallback)
     chosen_vid = None
     chosen_score = None
     chosen_reason = None
@@ -961,14 +1062,11 @@ def fetch_broll_for_scene(
         )
 
     if not chosen_vid:
-        return None
+        chosen_vid = filtered_candidates[0]
+        chosen_score = 60
+        chosen_reason = f"Selected top valid Pexels clip for '{chosen_vid.get('query', 'cinematic')}'"
 
     print(f"[AI Ranking] Candidate ID {chosen_vid['id']} selected with score {chosen_score}/100: {chosen_reason}")
-
-    # 5. Semantic Quality Gate: If best available footage scores below 45, reject to trigger FLUX fallback
-    if chosen_score < 45:
-        print(f"[VisualPlanner] Best candidate score ({chosen_score}/100) below semantic relevance threshold (45). Rejecting stock video to trigger FLUX fallback.")
-        return None
 
     v_url = chosen_vid.get("video_url")
     if not v_url:

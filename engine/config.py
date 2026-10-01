@@ -37,11 +37,11 @@ def get_gemini_api_key() -> str:
 
 
 def get_gemini_model() -> str:
-    return os.environ.get("GEMINI_MODEL", "gemini-3.8-flash").strip()
+    return os.environ.get("GEMINI_MODEL", "gemini-flash-lite-latest").strip()
 
 
 def get_gemini_fallback_models() -> List[str]:
-    raw = os.environ.get("GEMINI_FALLBACK_MODELS", "gemini-3.7-flash,gemini-flash-latest")
+    raw = os.environ.get("GEMINI_FALLBACK_MODELS", "gemini-flash-latest,gemini-2.5-flash-lite,gemini-3.1-flash-lite-preview")
     return [m.strip() for m in raw.split(",") if m.strip()]
 
 
