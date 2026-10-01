@@ -46,15 +46,21 @@
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
     box-sizing: border-box;
     width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
 }
 
 /* Top Area: Monitor Canvas + Clip Inspector */
 .capcut-workspace-top {
     display: grid;
-    grid-template-columns: 240px 1fr;
+    grid-template-columns: 240px minmax(0, 1fr);
     gap: 14px;
     height: 380px;
     max-height: 380px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     box-sizing: border-box;
 }
 
@@ -189,14 +195,15 @@
     background: #0e1424;
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 10px;
-    padding: 12px 14px;
+    padding: 10px 12px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
     height: 100%;
     max-height: 380px;
-    overflow-y: auto;
+    overflow: hidden;
     box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .capcut-inspector-box::-webkit-scrollbar {
@@ -268,13 +275,15 @@
 /* Visual Match Tool Buttons */
 .capcut-tool-btn-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 6px;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .capcut-tool-btn {
-    padding: 9px 12px;
-    font-size: 12px;
+    padding: 8px 10px;
+    font-size: 11.5px;
     font-weight: 600;
     border-radius: 6px;
     cursor: pointer;
@@ -284,8 +293,13 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    text-align: center;
+    gap: 5px;
     transition: all 0.15s ease;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    white-space: nowrap;
 }
 
 .capcut-tool-btn:hover {
@@ -347,6 +361,10 @@
     border-radius: 10px;
     overflow: hidden;
     position: relative;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
 }
 
 /* Timeline Toolbar */
@@ -357,6 +375,10 @@
     padding: 8px 14px;
     background: rgba(255, 255, 255, 0.03);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
 }
 
 .capcut-zoom-controls {
@@ -375,6 +397,10 @@
     user-select: none;
     min-height: 190px;
     background: #050811;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
 }
 
 /* Time Ruler Track */
@@ -609,9 +635,12 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    padding-bottom: 10px;
+    padding-bottom: 8px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    margin-bottom: 10px;
+    margin-bottom: 8px;
+    flex-shrink: 0;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .capcut-tab-nav-btn {
@@ -645,7 +674,25 @@
 .capcut-tab-panel {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
+    box-sizing: border-box;
+    padding-right: 4px;
+}
+
+.capcut-tab-panel::-webkit-scrollbar {
+    width: 5px;
+}
+.capcut-tab-panel::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 4px;
+}
+.capcut-tab-panel::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
 }
 
 .capcut-tab-panel.hidden {
@@ -835,6 +882,19 @@
     background: rgba(0, 230, 255, 0.2);
     border-color: #00e6ff;
     color: #00e6ff;
+}
+
+.capcut-toolbar-btn.btn-teal-glow {
+    background: rgba(0, 230, 255, 0.15);
+    border-color: rgba(0, 230, 255, 0.5);
+    color: #00e6ff;
+    font-weight: 700;
+}
+
+.capcut-toolbar-btn.btn-teal-glow:hover {
+    background: #00e6ff;
+    color: #000;
+    box-shadow: 0 0 10px rgba(0, 230, 255, 0.4);
 }
 
 .capcut-toolbar-select {

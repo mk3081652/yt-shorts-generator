@@ -76,6 +76,8 @@ export class CapCutTimelineEditor {
 
         // Toolbar quick-access
         this.toolbarSplitBtn = document.getElementById("capcutToolbarSplitBtn");
+        this.toolbarAutoSyncBtn = document.getElementById("capcutToolbarAutoSyncBtn");
+        this.toolbarMatchBtn = document.getElementById("capcutToolbarMatchBtn");
 
         // Timeline tracks
         this.viewport = document.getElementById("capcutTimelineViewport");
@@ -123,6 +125,12 @@ export class CapCutTimelineEditor {
         // Toolbar quick actions
         if (this.toolbarSplitBtn) {
             this.toolbarSplitBtn.addEventListener("click", () => this.handleSplitAtPlayhead());
+        }
+        if (this.toolbarAutoSyncBtn) {
+            this.toolbarAutoSyncBtn.addEventListener("click", () => this.switchTab("autoSync"));
+        }
+        if (this.toolbarMatchBtn) {
+            this.toolbarMatchBtn.addEventListener("click", () => this.switchTab("proTools"));
         }
 
         // Auto-Sync actions
