@@ -148,4 +148,9 @@ class StateManager {
     }
 }
 
-export const state = new StateManager();
+// Ensure state is a true global singleton across all ES module imports, even with query params
+const globalState = (typeof window !== "undefined")
+    ? (window.__appState || (window.__appState = new StateManager()))
+    : new StateManager();
+
+export const state = globalState;

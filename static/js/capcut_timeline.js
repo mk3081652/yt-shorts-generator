@@ -14,6 +14,7 @@ export class CapCutTimelineEditor {
         this.pixelsPerSecond = 80; // Default zoom scale (px per second)
         this.animFrameId = null;
         this.searchTargetSceneId = null;
+        this.project = null;
 
         this.initDOM();
         this.initListeners();
@@ -106,6 +107,7 @@ export class CapCutTimelineEditor {
     initListeners() {
         // State updates
         state.on("project_updated", (proj) => {
+            if (proj) this.project = proj;
             if (this.isVisible()) {
                 this.render(proj);
             }
@@ -211,10 +213,13 @@ export class CapCutTimelineEditor {
         // Inspector actions
         if (this.saveTextBtn && this.inspectorText) {
             this.saveTextBtn.addEventListener("click", async () => {
-                if (!state.project || !this.activeSceneId) return;
+                const proj = state.project || this.project;
+                if (!proj || !this.activeSceneId) return;
+                if (!state.project) state.setProject(proj);
                 const newText = this.inspectorText.value.trim();
                 try {
-                    const updated = await api.editText(state.project.id, this.activeSceneId, newText);
+                    const updated = await api.editText(proj.id, this.activeSceneId, newText);
+                    this.project = updated;
                     state.setProject(updated);
                     this.showToast("Scene narration updated!", "success");
                 } catch (err) {
@@ -243,10 +248,13 @@ export class CapCutTimelineEditor {
         }
         if (this.genFluxBtn) {
             this.genFluxBtn.addEventListener("click", async () => {
-                if (!state.project || !this.activeSceneId) return;
+                const proj = state.project || this.project;
+                if (!proj || !this.activeSceneId) return;
+                if (!state.project) state.setProject(proj);
                 this.showToast("Generating visual via FLUX...", "info");
                 try {
-                    const updated = await api.generateSceneMedia(state.project.id, this.activeSceneId);
+                    const updated = await api.generateSceneMedia(proj.id, this.activeSceneId);
+                    this.project = updated;
                     state.setProject(updated);
                     this.showToast("FLUX visual generated!", "success");
                 } catch (err) {
@@ -257,11 +265,14 @@ export class CapCutTimelineEditor {
         if (this.uploadBtn && this.uploadInput) {
             this.uploadBtn.addEventListener("click", () => this.uploadInput.click());
             this.uploadInput.addEventListener("change", async (e) => {
+                const proj = state.project || this.project;
                 const file = e.target.files[0];
-                if (!file || !state.project || !this.activeSceneId) return;
+                if (!file || !proj || !this.activeSceneId) return;
+                if (!state.project) state.setProject(proj);
                 this.showToast("Uploading media...", "info");
                 try {
-                    const updated = await api.uploadMedia(state.project.id, this.activeSceneId, file);
+                    const updated = await api.uploadMedia(proj.id, this.activeSceneId, file);
+                    this.project = updated;
                     state.setProject(updated);
                     this.showToast("Uploaded media successfully!", "success");
                 } catch (err) {
@@ -307,7 +318,12 @@ export class CapCutTimelineEditor {
     }
 
     render(project) {
-        if (!project || !project.scenes || project.scenes.length === 0) return;
+        if (!project) return;
+        this.project = project;
+        if (!state.project && project) {
+            state.setProject(project);
+        }
+        if (!project.scenes || project.scenes.length === 0) return;
 
         const scenes = project.scenes;
         const totalDuration = project.total_duration || scenes.reduce((acc, s) => acc + (s.duration || 3.0), 0);
@@ -732,17 +748,21 @@ export class CapCutTimelineEditor {
     }
 
     async nudgeDuration(delta) {
-        if (!state.project || !this.activeSceneId) return;
-        const sc = state.project.scenes.find(s => s.id === this.activeSceneId);
+        const proj = state.project || this.project;
+        if (!proj || !this.activeSceneId) return;
+        const sc = proj.scenes.find(s => s.id === this.activeSceneId);
         if (!sc) return;
         const newDur = Math.max(0.8, (sc.duration || 3.0) + delta);
         await this.setDuration(newDur);
     }
 
     async setDuration(val) {
-        if (!state.project || !this.activeSceneId) return;
+        const proj = state.project || this.project;
+        if (!proj || !this.activeSceneId) return;
+        if (!state.project) state.setProject(proj);
         try {
-            const updated = await api.editDuration(state.project.id, this.activeSceneId, val);
+            const updated = await api.editDuration(proj.id, this.activeSceneId, val);
+            this.project = updated;
             state.setProject(updated);
             this.showToast(`Scene duration updated to ${val.toFixed(1)}s`, "success");
         } catch (err) {
@@ -752,9 +772,10 @@ export class CapCutTimelineEditor {
 
     // Pexels Stock Video Search Modal
     openStockSearch(sceneId) {
-        if (!sceneId || !state.project) return;
+        const proj = state.project || this.project;
+        if (!sceneId || !proj) return;
         this.searchTargetSceneId = sceneId;
-        const sc = state.project.scenes.find(s => s.id === sceneId);
+        const sc = proj.scenes.find(s => s.id === sceneId);
         if (!sc) return;
 
         if (this.stockContext) {
@@ -822,10 +843,13 @@ export class CapCutTimelineEditor {
                 `;
 
                 card.querySelector("button").addEventListener("click", async () => {
-                    if (!state.project || !this.searchTargetSceneId) return;
+                    const proj = state.project || this.project;
+                    if (!proj || !this.searchTargetSceneId) return;
+                    if (!state.project) state.setProject(proj);
                     this.showToast("Downloading and assigning stock clip to scene...", "info");
                     try {
-                        const updated = await api.assignStockVideo(state.project.id, this.searchTargetSceneId, v.id, dlUrl);
+                        const updated = await api.assignStockVideo(proj.id, this.searchTargetSceneId, v.id, dlUrl);
+                        this.project = updated;
                         state.setProject(updated);
                         this.showToast("Stock video assigned to scene!", "success");
                         this.closeStockSearch();
@@ -847,10 +871,12 @@ export class CapCutTimelineEditor {
 
     // Manual Stitch Timeline & Render
     handleStitchTimeline() {
-        if (!state.project) {
+        const proj = state.project || this.project;
+        if (!proj) {
             this.showToast("No active project to stitch!", "warning");
             return;
         }
+        if (!state.project) state.setProject(proj);
 
         // Transition to Step 4 Produce & trigger render
         const toStep4Btn = document.getElementById("toStep4Btn");
@@ -880,10 +906,12 @@ export class CapCutTimelineEditor {
     }
 
     async handleAutoSync(mode, maxCutDur = 2.8) {
-        if (!state.project) {
+        const proj = state.project || this.project;
+        if (!proj || !proj.id) {
             this.showToast("No active project to auto-sync", "warning");
             return;
         }
+        if (!state.project) state.setProject(proj);
 
         const msg = mode === "voice_lock" 
             ? "⚡ Locking visual durations to exact voiceover boundaries..."
@@ -891,7 +919,8 @@ export class CapCutTimelineEditor {
         this.showToast(msg, "info", 4000);
 
         try {
-            const updated = await api.autoSync(state.project.id, mode, maxCutDur);
+            const updated = await api.autoSync(proj.id, mode, maxCutDur);
+            this.project = updated;
             state.setProject(updated);
             const successMsg = mode === "voice_lock"
                 ? "✅ Timeline visuals locked to spoken voice!"
@@ -903,13 +932,15 @@ export class CapCutTimelineEditor {
     }
 
     async handleSplitAtPlayhead() {
-        if (!state.project) {
+        const proj = state.project || this.project;
+        if (!proj || !proj.id) {
             this.showToast("No active project to split", "warning");
             return;
         }
+        if (!state.project) state.setProject(proj);
 
         const playheadTime = this.getCurrentTime();
-        const scenes = state.project.scenes || [];
+        const scenes = proj.scenes || [];
         let cum = 0;
         let targetScene = null;
 
@@ -932,7 +963,8 @@ export class CapCutTimelineEditor {
         }
 
         try {
-            const updated = await api.splitAtPlayhead(state.project.id, targetScene.id, playheadTime);
+            const updated = await api.splitAtPlayhead(proj.id, targetScene.id, playheadTime);
+            this.project = updated;
             state.setProject(updated);
             this.showToast("✂️ Split scene cleanly at playhead needle!", "success");
         } catch (err) {
@@ -941,16 +973,19 @@ export class CapCutTimelineEditor {
     }
 
     async handleSmartMatchAll() {
-        if (!state.project) {
+        const proj = state.project || this.project;
+        if (!proj || !proj.id) {
             this.showToast("No active project to match visuals", "warning");
             return;
         }
+        if (!state.project) state.setProject(proj);
 
         const forceAll = Boolean(this.forceMatchAllCheck?.checked);
         this.showToast("🤖 Analyzing narration and matching vertical B-roll from Pexels...", "info", 5000);
 
         try {
-            const updated = await api.smartMatchAll(state.project.id, forceAll);
+            const updated = await api.smartMatchAll(proj.id, forceAll);
+            this.project = updated;
             state.setProject(updated);
             this.showToast("✅ All scenes matched with vertical stock video clips!", "success");
         } catch (err) {
@@ -959,13 +994,16 @@ export class CapCutTimelineEditor {
     }
 
     async handleColorFilterChange(filterVal) {
-        if (!state.project) return;
+        const proj = state.project || this.project;
+        if (!proj) return;
+        if (!state.project) state.setProject(proj);
         if (this.colorFilterSelect) this.colorFilterSelect.value = filterVal;
         if (this.toolbarLutSelect) this.toolbarLutSelect.value = filterVal;
         if (this.screenFrame) this.screenFrame.dataset.filter = filterVal;
 
         try {
-            const updated = await api.setColorFilter(state.project.id, filterVal);
+            const updated = await api.setColorFilter(proj.id, filterVal);
+            this.project = updated;
             state.setProject(updated);
             const label = filterVal === "none" ? "Original" : filterVal.replace("_", " ").toUpperCase();
             this.showToast(`🎨 Color Grade LUT set: ${label}`, "success");
@@ -975,13 +1013,16 @@ export class CapCutTimelineEditor {
     }
 
     async handleReorder(direction) {
-        if (!state.project || !this.activeSceneId) {
+        const proj = state.project || this.project;
+        if (!proj || !this.activeSceneId) {
             this.showToast("Please select a clip to reorder", "warning");
             return;
         }
+        if (!state.project) state.setProject(proj);
 
         try {
-            const updated = await api.reorderScene(state.project.id, this.activeSceneId, direction);
+            const updated = await api.reorderScene(proj.id, this.activeSceneId, direction);
+            this.project = updated;
             state.setProject(updated);
             this.showToast(`Clip moved ${direction === 'left' ? 'earlier' : 'later'}!`, "success");
         } catch (err) {
@@ -990,9 +1031,12 @@ export class CapCutTimelineEditor {
     }
 
     async handleClearMedia() {
-        if (!state.project || !this.activeSceneId) return;
+        const proj = state.project || this.project;
+        if (!proj || !this.activeSceneId) return;
+        if (!state.project) state.setProject(proj);
         try {
-            const updated = await api.clearMedia(state.project.id, this.activeSceneId);
+            const updated = await api.clearMedia(proj.id, this.activeSceneId);
+            this.project = updated;
             state.setProject(updated);
             this.showToast("Media removed from scene", "info");
         } catch (err) {
