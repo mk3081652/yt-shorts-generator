@@ -95,6 +95,13 @@ export class CapCutTimelineEditor {
         // Audio element for voice playback
         this.audioEl = document.getElementById("standaloneVoiceAudio") || document.getElementById("voiceAudioPreview");
 
+        // CapCut Live Progress Card
+        this.progressCard = document.getElementById("capcutProgressCard");
+        this.progressStatus = document.getElementById("capcutProgressStatus");
+        this.progressStep = document.getElementById("capcutProgressStep");
+        this.progressPct = document.getElementById("capcutProgressPct");
+        this.progressBar = document.getElementById("capcutProgressBar");
+
         // Stock Modal
         this.stockModal = document.getElementById("stockSearchModal");
         this.closeStockModal = document.getElementById("closeStockSearchModal");
@@ -981,14 +988,113 @@ export class CapCutTimelineEditor {
         if (!state.project) state.setProject(proj);
 
         const forceAll = Boolean(this.forceMatchAllCheck?.checked);
-        this.showToast("🤖 Analyzing narration and matching vertical B-roll from Pexels...", "info", 5000);
+
+        // Ensure progress elements are available
+        if (!this.progressCard) {
+            this.progressCard = document.getElementById("capcutProgressCard");
+            this.progressStatus = document.getElementById("capcutProgressStatus");
+            this.progressStep = document.getElementById("capcutProgressStep");
+            this.progressPct = document.getElementById("capcutProgressPct");
+            this.progressBar = document.getElementById("capcutProgressBar");
+        }
+
+        // Show progress UI immediately
+        if (this.progressCard) {
+            this.progressCard.classList.remove("hidden");
+            if (this.progressPct) this.progressPct.textContent = "5%";
+            if (this.progressBar) this.progressBar.style.width = "5%";
+            if (this.progressStatus) this.progressStatus.textContent = "Matching Vertical B-Roll (Pexels)...";
+            if (this.progressStep) this.progressStep.textContent = "Searching and downloading vertical clips per scene...";
+        }
+
+        // Disable match buttons & show loading spinners
+        const origSmartText = this.smartMatchAllBtn ? this.smartMatchAllBtn.innerHTML : "";
+        const origToolbarText = this.toolbarMatchBtn ? this.toolbarMatchBtn.innerHTML : "";
+        const spinnerHTML = `<span class="spinner" style="display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:middle;margin-right:6px;"></span> Matching...`;
+        if (this.smartMatchAllBtn) {
+            this.smartMatchAllBtn.disabled = true;
+            this.smartMatchAllBtn.innerHTML = spinnerHTML;
+        }
+        if (this.toolbarMatchBtn) {
+            this.toolbarMatchBtn.disabled = true;
+            this.toolbarMatchBtn.innerHTML = spinnerHTML;
+        }
+
+        this.showToast("🤖 Analyzing narration & matching vertical clips...", "info", 4000);
+
+        const resetButtons = () => {
+            if (this.smartMatchAllBtn) {
+                this.smartMatchAllBtn.disabled = false;
+                this.smartMatchAllBtn.innerHTML = origSmartText;
+            }
+            if (this.toolbarMatchBtn) {
+                this.toolbarMatchBtn.disabled = false;
+                this.toolbarMatchBtn.innerHTML = origToolbarText;
+            }
+        };
 
         try {
-            const updated = await api.smartMatchAll(proj.id, forceAll);
-            this.project = updated;
-            state.setProject(updated);
-            this.showToast("✅ All scenes matched with vertical stock video clips!", "success");
+            await api.smartMatchAll(proj.id, forceAll);
+
+            // Active polling interval for real-time CapCut timeline updates
+            if (this._smartMatchTimer) clearInterval(this._smartMatchTimer);
+            let pollAttempts = 0;
+            const maxPollAttempts = 180; // 3 minutes timeout
+
+            this._smartMatchTimer = setInterval(async () => {
+                pollAttempts++;
+                try {
+                    const currentProj = await api.getProject(proj.id);
+                    if (!currentProj) return;
+
+                    this.project = currentProj;
+                    state.setProject(currentProj);
+
+                    const scenes = currentProj.scenes || [];
+                    const total = Math.max(1, scenes.length);
+                    const readyCount = scenes.filter(s => s.status === "ready" || s.status === "manual").length;
+                    const failedCount = scenes.filter(s => s.status === "failed").length;
+                    const generatingCount = scenes.filter(s => s.status === "generating" || s.status === "queued").length;
+                    const finishedCount = readyCount + failedCount;
+
+                    const pct = Math.min(95, Math.round(8 + (finishedCount / total) * 87));
+
+                    if (this.progressPct) this.progressPct.textContent = `${pct}%`;
+                    if (this.progressBar) this.progressBar.style.width = `${pct}%`;
+                    if (this.progressStatus) {
+                        this.progressStatus.textContent = `Matching Vertical B-Roll (${readyCount}/${total} Ready)...`;
+                    }
+                    if (this.progressStep) {
+                        this.progressStep.textContent = `Downloaded & saved ${finishedCount} of ${total} clips (rendering live)...`;
+                    }
+
+                    // Dynamically re-render clips on timeline & preview canvas
+                    this.render(currentProj);
+
+                    if (generatingCount === 0 || pollAttempts >= maxPollAttempts) {
+                        clearInterval(this._smartMatchTimer);
+                        this._smartMatchTimer = null;
+
+                        if (this.progressPct) this.progressPct.textContent = "100%";
+                        if (this.progressBar) this.progressBar.style.width = "100%";
+                        if (this.progressStatus) this.progressStatus.textContent = "✅ All Scenes Matched!";
+                        if (this.progressStep) this.progressStep.textContent = `Successfully ready: ${readyCount} of ${total} clips.`;
+
+                        resetButtons();
+                        this.showToast(`✅ Matched ${readyCount}/${total} scenes with vertical stock video!`, "success", 4000);
+
+                        setTimeout(() => {
+                            if (this.progressCard) this.progressCard.classList.add("hidden");
+                        }, 2200);
+                    }
+                } catch (e) {
+                    console.warn("[SmartMatch Poll] Error polling project:", e);
+                }
+            }, 1000);
+
         } catch (err) {
+            resetButtons();
+            if (this.progressCard) this.progressCard.classList.add("hidden");
             this.showToast(`Auto-match failed: ${err.message}`, "error");
         }
     }

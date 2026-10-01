@@ -1499,97 +1499,140 @@ def split_scene_at_playhead(
 
 def smart_match_all_visuals(
     project_id: str,
-    force_all: bool = False
+    force_all: bool = False,
+    run_sync: bool = False
 ) -> Tuple[Optional[Project], Optional[str], int]:
     """
     1-Click AI B-Roll Match: Scans all scenes and auto-assigns relevant vertical HD stock
     videos from Pexels based strictly on Gemini prompt, search queries, or spoken narration.
     Zero fallback to external image generators.
+    Dispatches generation in a background worker thread with immediate HTTP response,
+    updating scene status in real-time as each clip is downloaded.
     """
     try:
+        import threading
         project = load_project(project_id)
         if not project:
             return None, "Project not found", 404
 
-        from engine.stock_video import search_pexels_videos, download_stock_video, CACHE_DIR as STOCK_CACHE_DIR
-        from engine.config import get_pexels_api_key
+        target_scene_ids = []
+        for sc in project.scenes:
+            if force_all or not (sc.status == "ready" and sc.media_path and os.path.exists(sc.media_path)):
+                sc.status = "generating"
+                sc.fail_reason = None
+                target_scene_ids.append(sc.id)
+
+        if not target_scene_ids:
+            return project, None, 200
 
         project.snapshot()
-        matched_count = 0
-        used_ids = set()
-        pexels_key = get_pexels_api_key()
-
-        for sc in project.scenes:
-            if not force_all and sc.status == "ready" and sc.media_path and os.path.exists(sc.media_path):
-                if hasattr(sc, "video_id") and sc.video_id:
-                    used_ids.add(str(sc.video_id))
-                continue
-
-            # 1. Gather queries strictly from Gemini Director plan or spoken narration
-            candidate_queries = []
-            if sc.search_queries and isinstance(sc.search_queries, list):
-                candidate_queries.extend([str(q).strip() for q in sc.search_queries if str(q).strip()])
-            if sc.broll_keywords and isinstance(sc.broll_keywords, list):
-                candidate_queries.extend([str(k).strip() for k in sc.broll_keywords if str(k).strip()])
-
-            # Extract clean keyword phrase from narration text
-            clean_text = re.sub(r"[^\w\s]", " ", sc.text or "").strip()
-            stop_words = {"the", "and", "was", "for", "with", "that", "this", "from", "they", "there", "about", "what", "could", "have", "been", "were", "into"}
-            words = [w for w in clean_text.split() if len(w) > 2 and w.lower() not in stop_words]
-            if words:
-                candidate_queries.append(" ".join(words[:3]))
-                if len(words) >= 2:
-                    candidate_queries.append(words[0])
-
-            if not candidate_queries:
-                candidate_queries.append(clean_text[:25] or "cinematic")
-
-            # 2. Search Pexels for matching vertical video
-            candidates = []
-            matched_q = candidate_queries[0]
-            for raw_q in candidate_queries:
-                clean_q = re.sub(r"[^\w\s]", "", raw_q).strip()
-                if not clean_q:
-                    continue
-                # Try portrait first
-                vids = search_pexels_videos(clean_q, limit=4, orientation="portrait", api_key=pexels_key)
-                if not vids:
-                    # Try general orientation
-                    vids = search_pexels_videos(clean_q, limit=3, orientation="", api_key=pexels_key)
-                for v in vids:
-                    vid_id = str(v.get("id"))
-                    if vid_id not in used_ids:
-                        candidates.append(v)
-                if candidates:
-                    matched_q = clean_q
-                    break
-
-            # 3. Download and assign matched video
-            if candidates:
-                top = candidates[0]
-                dl_url = top.get("video_url") or top.get("download_url")
-                v_id = str(top.get("id", uuid.uuid4().hex[:6]))
-                if dl_url:
-                    out_name = f"pexels_{v_id}_{uuid.uuid4().hex[:6]}.mp4"
-                    out_path = os.path.join(STOCK_CACHE_DIR, out_name)
-                    try:
-                        downloaded = download_stock_video(dl_url, out_path)
-                        if downloaded and os.path.exists(downloaded):
-                            sc.media_path = downloaded
-                            sc.media_url = f"/outputs/stock_videos/{out_name}"
-                            sc.media_type = "video"
-                            sc.status = "ready"
-                            sc.source_tier = "manual"
-                            sc.selected_reason = f"Stock video matched for '{matched_q}'"
-                            sc.fail_reason = None
-                            sc.video_id = v_id
-                            used_ids.add(v_id)
-                            matched_count += 1
-                    except Exception as ex:
-                        logger.warning(f"[SmartMatch] Download failed for scene {sc.id}: {ex}")
-
         save_project(project)
-        return project, None, 200
+
+        def _worker():
+            try:
+                from engine.stock_video import search_pexels_videos, download_stock_video, CACHE_DIR as STOCK_CACHE_DIR
+                from engine.config import get_pexels_api_key
+
+                proj = load_project(project_id)
+                if not proj:
+                    return
+
+                pexels_key = get_pexels_api_key()
+                used_ids = set()
+
+                for s in proj.scenes:
+                    if s.media_path and s.status in ("ready", "manual"):
+                        vid_id = getattr(s, "video_id", None)
+                        if vid_id:
+                            used_ids.add(str(vid_id))
+
+                for sc_id in target_scene_ids:
+                    # Always reload project state in case of concurrent edits
+                    p = load_project(project_id)
+                    if not p:
+                        break
+                    sc = next((s for s in p.scenes if s.id == sc_id), None)
+                    if not sc:
+                        continue
+
+                    # 1. Gather queries strictly from Gemini Director plan or spoken narration
+                    candidate_queries = []
+                    if sc.search_queries and isinstance(sc.search_queries, list):
+                        candidate_queries.extend([str(q).strip() for q in sc.search_queries if str(q).strip()])
+                    if sc.broll_keywords and isinstance(sc.broll_keywords, list):
+                        candidate_queries.extend([str(k).strip() for k in sc.broll_keywords if str(k).strip()])
+
+                    clean_text = re.sub(r"[^\w\s]", " ", sc.text or "").strip()
+                    stop_words = {"the", "and", "was", "for", "with", "that", "this", "from", "they", "there", "about", "what", "could", "have", "been", "were", "into"}
+                    words = [w for w in clean_text.split() if len(w) > 2 and w.lower() not in stop_words]
+                    if words:
+                        candidate_queries.append(" ".join(words[:3]))
+                        if len(words) >= 2:
+                            candidate_queries.append(words[0])
+
+                    if not candidate_queries:
+                        candidate_queries.append(clean_text[:25] or "cinematic")
+
+                    # 2. Search Pexels for matching vertical video
+                    candidates = []
+                    matched_q = candidate_queries[0]
+                    for raw_q in candidate_queries:
+                        clean_q = re.sub(r"[^\w\s]", "", raw_q).strip()
+                        if not clean_q:
+                            continue
+                        vids = search_pexels_videos(clean_q, limit=4, orientation="portrait", api_key=pexels_key)
+                        if not vids:
+                            vids = search_pexels_videos(clean_q, limit=3, orientation="", api_key=pexels_key)
+                        for v in vids:
+                            vid_id = str(v.get("id"))
+                            if vid_id not in used_ids:
+                                candidates.append(v)
+                        if candidates:
+                            matched_q = clean_q
+                            break
+
+                    # 3. Download and assign matched video
+                    assigned = False
+                    if candidates:
+                        top = candidates[0]
+                        dl_url = top.get("video_url") or top.get("download_url")
+                        v_id = str(top.get("id", uuid.uuid4().hex[:6]))
+                        if dl_url:
+                            out_name = f"pexels_{v_id}_{uuid.uuid4().hex[:6]}.mp4"
+                            out_path = os.path.join(STOCK_CACHE_DIR, out_name)
+                            try:
+                                downloaded = download_stock_video(dl_url, out_path, timeout=25)
+                                if downloaded and os.path.exists(downloaded):
+                                    sc.media_path = downloaded
+                                    sc.media_url = f"/outputs/stock_videos/{out_name}"
+                                    sc.media_type = "video"
+                                    sc.status = "ready"
+                                    sc.source_tier = "manual"
+                                    sc.selected_reason = f"Stock video matched for '{matched_q}'"
+                                    sc.fail_reason = None
+                                    sc.video_id = v_id
+                                    used_ids.add(v_id)
+                                    assigned = True
+                            except Exception as ex:
+                                logger.warning(f"[SmartMatch] Download failed for scene {sc.id}: {ex}")
+
+                    if not assigned:
+                        sc.status = "failed"
+                        sc.fail_reason = f"No stock video found for queries: {', '.join(candidate_queries[:2])}"
+
+                    # SAVE PROJECT IMMEDIATELY AFTER EACH SCENE IS MATCHED!
+                    save_project(p)
+
+            except Exception as ex:
+                logger.error(f"[SmartMatch Worker Error] {ex}", exc_info=True)
+
+        if run_sync:
+            _worker()
+            return load_project(project_id), None, 200
+        else:
+            threading.Thread(target=_worker, daemon=True).start()
+            return project, None, 200
+
     except Exception as e:
         logger.error(f"[SmartMatch] Error: {e}", exc_info=True)
         return None, f"Smart match failed: {str(e)}", 500

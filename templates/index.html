@@ -10,8 +10,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Montserrat:wght@800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/style.css?v=20261001_v5">
-    <link rel="stylesheet" href="/static/css/capcut.css?v=20261001_v5">
+    <link rel="stylesheet" href="/static/css/style.css?v=20261001_v6">
+    <link rel="stylesheet" href="/static/css/capcut.css?v=20261001_v6">
 </head>
 <body>
     <div class="app-container">
@@ -462,6 +462,23 @@
 
                     <!-- 🎬 CapCut Multi-Track Timeline Editor Container (Toggled via Workspace View Switcher) -->
                     <div id="capcutEditorContainer" class="capcut-editor-container hidden">
+                        <!-- CapCut Live Progress Card (Visual Clips Fetching) -->
+                        <div id="capcutProgressCard" class="card progress-card hidden" style="margin: 0 0 10px 0; background: rgba(13, 17, 28, 0.98); border: 1px solid rgba(0, 230, 255, 0.45); padding: 12px 18px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0, 230, 255, 0.2);">
+                            <div class="progress-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                <div style="display: flex; align-items: center; gap: 12px;">
+                                    <div class="spinner" style="width: 20px; height: 20px; border-width: 2.5px; border-top-color: #00e6ff;"></div>
+                                    <div class="progress-info">
+                                        <h4 id="capcutProgressStatus" style="font-size: 0.95rem; font-weight: 700; color: #fff; margin: 0;">Matching Vertical B-Roll (Pexels)...</h4>
+                                        <span id="capcutProgressStep" style="font-size: 0.8rem; color: #94a3b8;">Searching and downloading vertical clips per scene...</span>
+                                    </div>
+                                </div>
+                                <span id="capcutProgressPct" class="progress-pct" style="font-size: 1.25rem; font-weight: 800; color: #00e6ff;">0%</span>
+                            </div>
+                            <div class="progress-bar-bg" style="height: 8px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; overflow: hidden;">
+                                <div id="capcutProgressBar" class="progress-bar-fill" style="width: 0%; height: 100%; background: linear-gradient(90deg, #00e6ff, #a855f7); transition: width 0.25s ease; border-radius: 4px;"></div>
+                            </div>
+                        </div>
+
                         <!-- Top Row: 9:16 Canvas Monitor + Active Clip Inspector -->
                         <div class="capcut-workspace-top">
                             <!-- 9:16 Monitor -->
@@ -1061,7 +1078,7 @@
         </main>
     </div>
 
-    <script type="module" src="/static/js/main.js?v=20261001_v5"></script>
+    <script type="module" src="/static/js/main.js?v=20261001_v6"></script>
 
     <!-- Google Material Toast Notifications Container -->
     <div id="toastContainer" class="google-toast-container"></div>

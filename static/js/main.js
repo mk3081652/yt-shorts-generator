@@ -2,10 +2,10 @@
  * static/js/main.js - Application Bootstrap & Step Coordination
  */
 
-import { api } from "./api.js";
-import { state } from "./state.js";
-import { StoryboardEditor } from "./editor.js";
-import { CapCutTimelineEditor } from "./capcut_timeline.js";
+import { api } from "./api.js?v=20261001_v6";
+import { state } from "./state.js?v=20261001_v6";
+import { StoryboardEditor } from "./editor.js?v=20261001_v6";
+import { CapCutTimelineEditor } from "./capcut_timeline.js?v=20261001_v6";
 
 // Toast Notifications
 export function showToast(message, type = "info", duration = 3500) {
@@ -191,6 +191,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     const storyboardProgressStep = document.getElementById("storyboardProgressStep");
     const storyboardProgressPct = document.getElementById("storyboardProgressPct");
     const storyboardProgressBar = document.getElementById("storyboardProgressBar");
+
+    const capcutProgressCard = document.getElementById("capcutProgressCard");
+    const capcutProgressStatus = document.getElementById("capcutProgressStatus");
+    const capcutProgressStep = document.getElementById("capcutProgressStep");
+    const capcutProgressPct = document.getElementById("capcutProgressPct");
+    const capcutProgressBar = document.getElementById("capcutProgressBar");
 
     // DOM Elements - Step 3
     const bgmSelect = document.getElementById("bgmSelect");
@@ -864,14 +870,21 @@ document.addEventListener("DOMContentLoaded", async () => {
         const curSource = document.getElementById("step2VisualSource")?.value || document.getElementById("visualSourceSelect")?.value || "video";
         const isVid = (curSource === "video");
 
-        // Show progress card immediately
-        if (storyboardProgressCard) {
-            storyboardProgressCard.classList.remove("hidden");
-            if (storyboardProgressPct) storyboardProgressPct.textContent = "0%";
-            if (storyboardProgressBar) storyboardProgressBar.style.width = "5%";
-            if (storyboardProgressStatus) storyboardProgressStatus.textContent = isVid ? "Fetching Cinematic B-Roll Clips (Pexels)..." : "Rendering Visuals via FLUX...";
-            if (storyboardProgressStep) storyboardProgressStep.textContent = isVid ? "Downloading portrait 1080p clips..." : "Generating 9:16 images in background...";
-        }
+        const getCards = () => [
+            { card: storyboardProgressCard, pct: storyboardProgressPct, bar: storyboardProgressBar, status: storyboardProgressStatus, step: storyboardProgressStep },
+            { card: capcutProgressCard, pct: capcutProgressPct, bar: capcutProgressBar, status: capcutProgressStatus, step: capcutProgressStep }
+        ];
+
+        // Show progress cards immediately
+        getCards().forEach(p => {
+            if (p.card) {
+                p.card.classList.remove("hidden");
+                if (p.pct) p.pct.textContent = "0%";
+                if (p.bar) p.bar.style.width = "5%";
+                if (p.status) p.status.textContent = isVid ? "Fetching Cinematic B-Roll Clips (Pexels)..." : "Rendering Visuals via FLUX...";
+                if (p.step) p.step.textContent = isVid ? "Downloading portrait 1080p clips..." : "Generating 9:16 images in background...";
+            }
+        });
 
         projectPollTimer = setInterval(async () => {
             try {
@@ -879,42 +892,49 @@ document.addEventListener("DOMContentLoaded", async () => {
                 state.setProject(proj);
 
                 const isAnyGenerating = proj.scenes.some(s => s.status === "generating" || s.status === "queued");
-                if (storyboardProgressCard) {
-                    if (isAnyGenerating) {
-                        storyboardProgressCard.classList.remove("hidden");
-                        const readyCount = proj.scenes.filter(s => s.status === "ready").length;
-                        const failedCount = proj.scenes.filter(s => s.status === "failed").length;
-                        const finishedCount = readyCount + failedCount;
-                        const total = Math.max(1, proj.scenes.length);
-                        const pct = Math.min(95, Math.round(15 + (finishedCount / total) * 80));
-                        const isVideoSrc = (proj.visual_source === "video");
-                        if (storyboardProgressPct) storyboardProgressPct.textContent = `${pct}%`;
-                        if (storyboardProgressBar) storyboardProgressBar.style.width = `${pct}%`;
-                        if (storyboardProgressStatus) storyboardProgressStatus.textContent = isVideoSrc ? `Fetching Video Clips (${readyCount}/${total})...` : `Generating Images (${readyCount}/${total})...`;
-                        if (storyboardProgressStep) storyboardProgressStep.textContent = `Completed ${finishedCount} of ${total} scenes...`;
-                    } else {
-                        storyboardProgressCard.classList.add("hidden");
-                        clearInterval(projectPollTimer);
-                        projectPollTimer = null;
+                const cards = getCards();
 
-                        if (!hasNotifiedFinished) {
-                            hasNotifiedFinished = true;
-                            const readyCount = proj.scenes.filter(s => s.status === "ready").length;
-                            const total = proj.scenes.length;
-                            const quotaFailed = proj.scenes.some(s => s.fail_reason === "flux_quota_exhausted");
-                            const rateFailed = proj.scenes.some(s => s.fail_reason === "flux_rate_limited");
-                            const notCfg = proj.scenes.some(s => s.fail_reason === "flux_not_configured");
+                if (isAnyGenerating) {
+                    const readyCount = proj.scenes.filter(s => s.status === "ready" || s.status === "manual").length;
+                    const failedCount = proj.scenes.filter(s => s.status === "failed").length;
+                    const finishedCount = readyCount + failedCount;
+                    const total = Math.max(1, proj.scenes.length);
+                    const pct = Math.min(95, Math.round(15 + (finishedCount / total) * 80));
+                    const isVideoSrc = (proj.visual_source === "video");
 
-                            if (quotaFailed) {
-                                showToast("⚠️ Cloudflare daily limit reached. Stock video b-roll can be used with 0 quota limit!", "warning", 8000);
-                            } else if (rateFailed) {
-                                showToast("⚠️ Cloudflare rate limit active. Please wait or use Cinematic Video Clips.", "warning", 6000);
-                            } else if (notCfg) {
-                                showToast("⚠️ FLUX credentials not configured. Using high-retention video clips instead.", "info", 6000);
-                            } else if (readyCount > 0) {
-                                const isVideoSrc = (proj.visual_source === "video");
-                                showToast(`✨ Loaded ${readyCount}/${total} ${isVideoSrc ? "cinematic video clips" : "visuals"} successfully!`, "success", 4000);
-                            }
+                    cards.forEach(p => {
+                        if (p.card) {
+                            p.card.classList.remove("hidden");
+                            if (p.pct) p.pct.textContent = `${pct}%`;
+                            if (p.bar) p.bar.style.width = `${pct}%`;
+                            if (p.status) p.status.textContent = isVideoSrc ? `Fetching Video Clips (${readyCount}/${total})...` : `Generating Images (${readyCount}/${total})...`;
+                            if (p.step) p.step.textContent = `Completed ${finishedCount} of ${total} scenes...`;
+                        }
+                    });
+                } else {
+                    cards.forEach(p => {
+                        if (p.card) p.card.classList.add("hidden");
+                    });
+                    clearInterval(projectPollTimer);
+                    projectPollTimer = null;
+
+                    if (!hasNotifiedFinished) {
+                        hasNotifiedFinished = true;
+                        const readyCount = proj.scenes.filter(s => s.status === "ready" || s.status === "manual").length;
+                        const total = proj.scenes.length;
+                        const quotaFailed = proj.scenes.some(s => s.fail_reason === "flux_quota_exhausted");
+                        const rateFailed = proj.scenes.some(s => s.fail_reason === "flux_rate_limited");
+                        const notCfg = proj.scenes.some(s => s.fail_reason === "flux_not_configured");
+
+                        if (quotaFailed) {
+                            showToast("⚠️ Cloudflare daily limit reached. Stock video b-roll can be used with 0 quota limit!", "warning", 8000);
+                        } else if (rateFailed) {
+                            showToast("⚠️ Cloudflare rate limit active. Please wait or use Cinematic Video Clips.", "warning", 6000);
+                        } else if (notCfg) {
+                            showToast("⚠️ FLUX credentials not configured. Using high-retention video clips instead.", "info", 6000);
+                        } else if (readyCount > 0) {
+                            const isVideoSrc = (proj.visual_source === "video");
+                            showToast(`✨ Loaded ${readyCount}/${total} ${isVideoSrc ? "cinematic video clips" : "visuals"} successfully!`, "success", 4000);
                         }
                     }
                 }
