@@ -498,17 +498,8 @@ def render_shorts_video(
             filter_parts.append("noise=alls=8:allf=t+u")
         video_filter_in = ",".join(filter_parts)
 
-        enable_progress_bar = kwargs.get("enable_progress_bar", True)
-        if enable_progress_bar:
-            dur_s = max(1.0, video_duration)
-            accent_color = "0x00E6FF" if subtitle_style == "glacier_cyan" else "yellow"
-            bar_filter = (
-                f"drawbox=x=0:y={bar_y}:w={res_w}:h={bar_h}:color=black@0.45:t=fill,"
-                f"drawbox=x=0:y={bar_y}:w='min({res_w}, ({res_w}*t/{dur_s:.2f}))':h={bar_h}:color={accent_color}@0.95:t=fill"
-            )
-            v_chain = f"{video_filter_in},{bar_filter},subtitles=filename='{norm_ass_path}'[vout]"
-        else:
-            v_chain = f"{video_filter_in},subtitles=filename='{norm_ass_path}'[vout]"
+        # Compose visual filter chain with subtitles (clean video with no bottom line)
+        v_chain = f"{video_filter_in},subtitles=filename='{norm_ass_path}'[vout]"
 
         # Compose Audio Inputs: Boost voiceover, standardize sample rates, mix without attenuation
         audio_streams = ["[1:a]volume=1.25,aformat=sample_rates=44100:channel_layouts=stereo[v_clean]"]

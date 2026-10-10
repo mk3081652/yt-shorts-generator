@@ -1337,7 +1337,7 @@ class YouTubePublishRequest(BaseModel):
     rapid_pacing: bool = True
     category_id: str = "27"
     enable_sfx: bool = True
-    enable_progress_bar: bool = True
+    enable_progress_bar: bool = False
     resolution: Optional[str] = "720p"
 
 

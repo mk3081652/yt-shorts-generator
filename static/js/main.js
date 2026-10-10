@@ -2075,7 +2075,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (playerActions) playerActions.classList.add("hidden");
         if (ytPublishedBanner) ytPublishedBanner.classList.add("hidden");
         const enableSfx = document.getElementById("ytEnableSfx") ? document.getElementById("ytEnableSfx").checked : true;
-        const enableProgressBar = document.getElementById("ytProgressBar") ? document.getElementById("ytProgressBar").checked : true;
+        const enableProgressBar = false;
         const resolution = document.getElementById("ytResolutionSelect")?.value || "720p";
 
         const payload = {
