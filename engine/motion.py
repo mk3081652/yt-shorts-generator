@@ -177,12 +177,12 @@ def make_blank_clip(duration: float, output_path: str, width: int = 1080, height
 
 def probe_media_duration(file_path: str) -> Optional[float]:
     """Measures media duration in seconds via ffmpeg stderr."""
-    if not os.path.exists(file_path):
+    if not file_path or not os.path.exists(file_path):
         return None
     try:
         cmd = [FFMPEG_EXE, "-i", os.path.abspath(file_path)]
         res = subprocess.run(cmd, capture_output=True, text=True, errors="replace", timeout=8)
-        dur_match = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.\d+)", res.stderr)
+        dur_match = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", res.stderr)
         if dur_match:
             hours = float(dur_match.group(1))
             mins = float(dur_match.group(2))
@@ -194,18 +194,35 @@ def probe_media_duration(file_path: str) -> Optional[float]:
 
 
 def make_video_scene_clip(src_video_path: str, duration: float, output_path: str, width: int = 1080, height: int = 1920) -> bool:
-    """Scales, crops to target dimensions, and trims, retimes or loops video to exact duration."""
+    """
+    Scales, crops to target dimensions, and retimes video so the FULL clip plays across the exact
+    scene duration without repeating loops or stuttering.
+    """
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+    if duration <= 0:
+        duration = 10.0
+
     src_dur = probe_media_duration(src_video_path)
 
-    # Smart 10s Google Flow Retiming:
-    # If source clip is ~10s (6.5s - 13.0s) and requested scene duration is within 5.0s - 15.0s,
-    # smoothly retime via setpts so the entire 10s visual action fits scene duration 100%!
-    if src_dur and 6.5 <= src_dur <= 13.0 and 5.0 <= duration <= 15.0 and abs(duration - src_dur) > 0.3:
-        pts_scale = duration / src_dur
-        vf = f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},setpts={pts_scale:.4f}*PTS,fps=25,format=yuv420p"
-        input_args = ["-i", os.path.abspath(src_video_path)]
+    # 10s Google Flow & Continuous Video Alignment:
+    # If source clip duration is known and within a reasonable retiming ratio (0.35x to 2.8x),
+    # smoothly retime via setpts so 100% of the video plays from first to last frame!
+    if src_dur and src_dur > 0.5:
+        ratio = duration / src_dur
+        if 0.35 <= ratio <= 2.8:
+            # Retime video to exact scene duration: 100% of clip plays, NO looping, NO stutter!
+            vf = f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},setpts={ratio:.5f}*PTS,fps=25,format=yuv420p"
+            input_args = ["-i", os.path.abspath(src_video_path)]
+        elif ratio < 0.35:
+            # Video is significantly longer than scene: play from start without looping
+            vf = f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},setpts=PTS-STARTPTS,fps=25,format=yuv420p"
+            input_args = ["-i", os.path.abspath(src_video_path)]
+        else:
+            # Video is extremely short (<35% of scene duration): loop as fallback
+            vf = f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},fps=25,format=yuv420p"
+            input_args = ["-stream_loop", "-1", "-i", os.path.abspath(src_video_path)]
     else:
+        # Fallback if duration couldn't be probed
         vf = f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},fps=25,format=yuv420p"
         input_args = ["-stream_loop", "-1", "-i", os.path.abspath(src_video_path)]
 

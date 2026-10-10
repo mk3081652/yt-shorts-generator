@@ -294,8 +294,8 @@
                         </div>
 
 
-                        <!-- Stats & Info Bar -->
-                        <div id="storyboardToolbar" class="storyboard-toolbar">
+                        <!-- Stats & Clean Action Bar -->
+                        <div id="storyboardToolbar" class="storyboard-toolbar" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: rgba(13, 17, 28, 0.7); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; margin-bottom: 12px;">
                             <div class="storyboard-stats">
                                 <span id="storyboardSceneCount" class="badge-pill">0 scenes</span>
                                 <span id="storyboardBlankCount" class="badge-pill badge-blank hidden">0 blank</span>
@@ -303,31 +303,10 @@
                                 <span id="storyboardVisualsCount" class="badge-pill badge-loaded">0 visuals loaded</span>
                             </div>
                             <div class="toolbar-right-actions">
-                                <button type="button" id="undoBtn" class="btn-secondary btn-xs" title="Undo (Ctrl+Z)" disabled>
-                                    ↩ Undo
-                                </button>
-                                <button type="button" id="redoBtn" class="btn-secondary btn-xs" title="Redo (Ctrl+Y)" disabled>
-                                    ↪ Redo
-                                </button>
-                                <button type="button" id="copyAllPromptsBtn" class="btn-secondary btn-xs" title="Copy all prompts numbered to clipboard">
-                                    📋 Copy All Prompts
-                                </button>
-                                <button type="button" id="downloadVisualsZipBtn" class="btn-secondary btn-xs" title="Download all generated visuals as a ZIP archive">
-                                    📥 Download Visuals (ZIP)
-                                </button>
-                                <button type="button" id="addBeatBtn" class="btn-secondary btn-xs" title="Add a new scene at the end">
+                                <button type="button" id="addBeatBtn" class="btn-secondary btn-sm" style="font-weight: 700; color: #00e6ff; border-color: rgba(0, 230, 255, 0.4); background: rgba(0, 230, 255, 0.1);" title="Add a new scene at the end">
                                     ➕ Add Scene
                                 </button>
                             </div>
-                        </div>
-
-                        <!-- Local Visuals Folder Info & Clipboard Copy -->
-                        <div class="local-browse-bar" style="display: flex; align-items: center; justify-content: space-between; margin: 8px 0; padding: 7px 12px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; font-size: 11.5px; color: #a0a6b8;">
-                            <div style="display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                                <span>📁 <strong>Local Visuals Folder:</strong></span>
-                                <code id="localVisualsPathCode" style="color: #64ffda; background: rgba(100, 255, 218, 0.08); padding: 2px 6px; border-radius: 4px; user-select: all; font-size: 11px;">outputs\ai_previews</code>
-                            </div>
-                            <button type="button" id="copyLocalPathBtn" class="btn-secondary btn-xs" style="padding: 2px 8px; font-size: 11px; white-space: nowrap;" title="Copy local folder path to clipboard">📋 Copy Path</button>
                         </div>
 
                         <!-- Blank Scene Warning Banner -->
@@ -482,6 +461,20 @@
                                 <span id="volLabel">18%</span>
                             </div>
                             <input type="range" id="bgmVolume" min="0" max="0.4" step="0.02" value="0.18" class="form-slider">
+                        </div>
+
+                        <div class="form-group" style="margin-top: 14px;">
+                            <div class="slider-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                <label for="clipVolumeSlider" style="display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; color: #e0e4f0;">
+                                    <span>📹 Uploaded Clip Audio:</span>
+                                    <span id="clipVolBadge" style="font-size: 10.5px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: rgba(0, 230, 255, 0.15); color: #00e6ff; border: 1px solid rgba(0, 230, 255, 0.3);">12% • Soothing</span>
+                                </label>
+                                <span id="clipVolLabel" style="font-weight: 700; color: #00e6ff; font-size: 13px;">12%</span>
+                            </div>
+                            <input type="range" id="clipVolumeSlider" min="0" max="0.4" step="0.02" value="0.12" class="form-slider" style="width: 100%;">
+                            <p style="margin: 4px 0 0 0; font-size: 11px; color: #94a3b8; line-height: 1.4;">
+                                Automatically softens & ducks ambient sound from uploaded video clips beneath narration so the voiceover stays soothing and crystal clear (slide to 0% to mute clips).
+                            </p>
                         </div>
                     </div>
 

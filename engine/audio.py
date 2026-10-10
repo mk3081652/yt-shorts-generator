@@ -171,3 +171,90 @@ def build_sfx_track(
         return None
 
 
+def probe_media_has_audio(file_path: str) -> bool:
+    """Checks if a video file has an audio stream."""
+    if not file_path or not os.path.exists(file_path):
+        return False
+    try:
+        ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+        cmd = [ffmpeg, "-i", os.path.abspath(file_path)]
+        res = subprocess.run(cmd, capture_output=True, text=True, errors="replace", timeout=8)
+        return "Audio:" in res.stderr
+    except Exception:
+        return False
+
+
+def build_ambient_clips_audio_track(
+    scenes: List[Dict[str, Any]],
+    output_path: str,
+    total_duration: float,
+    global_clip_volume: float = 0.12
+) -> Optional[str]:
+    """
+    Extracts ambient audio from uploaded video clips, auto-adjusts to a soothing
+    background level (ducked beneath voiceover with gentle lowpass and fades),
+    and mixes into a synchronized ambient audio track.
+    """
+    ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+
+    inputs = []
+    filter_parts = []
+    stream_labels = []
+
+    elapsed = 0.0
+    for idx, sc in enumerate(scenes):
+        dur = float(sc.get("duration", 3.0))
+        m_path = sc.get("media_path") or sc.get("image_path") or ""
+        vol = float(sc.get("clip_audio_volume") if sc.get("clip_audio_volume") is not None else global_clip_volume)
+
+        if m_path and os.path.exists(m_path) and vol > 0.005 and probe_media_has_audio(m_path):
+            in_idx = len(inputs) // 2
+            inputs.extend(["-i", os.path.abspath(m_path)])
+            delay_ms = int(round(elapsed * 1000.0))
+            out_label = f"[amb_{idx}]"
+            fade_dur = min(0.3, dur * 0.25)
+            fade_out_st = max(0.0, dur - fade_dur)
+            filter_parts.append(
+                f"[{in_idx}:a]atrim=0:{dur:.2f},asetpts=PTS-STARTPTS,"
+                f"volume={vol:.3f},lowpass=f=4500,highpass=f=120,"
+                f"afade=t=in:st=0:d={fade_dur:.2f},afade=t=out:st={fade_out_st:.2f}:d={fade_dur:.2f},"
+                f"adelay={delay_ms}|{delay_ms},"
+                f"aformat=sample_rates=44100:channel_layouts=stereo{out_label}"
+            )
+            stream_labels.append(out_label)
+
+        elapsed += dur
+
+    if not stream_labels:
+        return None
+
+    if len(stream_labels) == 1:
+        mix_expr = f"{stream_labels[0]}apad=whole_dur={total_duration:.2f}[aout]"
+    else:
+        mix_inputs = "".join(stream_labels)
+        mix_expr = (
+            f"{mix_inputs}amix=inputs={len(stream_labels)}:dropout_transition=2:normalize=0,"
+            f"apad=whole_dur={total_duration:.2f}[aout]"
+        )
+    filter_parts.append(mix_expr)
+
+    cmd = [
+        ffmpeg, "-y",
+        *inputs,
+        "-filter_complex", ";".join(filter_parts),
+        "-map", "[aout]",
+        "-t", f"{total_duration:.2f}",
+        "-c:a", "pcm_s16le",
+        os.path.abspath(output_path)
+    ]
+    try:
+        res = subprocess.run(cmd, capture_output=True, timeout=60)
+        if res.returncode == 0 and os.path.exists(output_path):
+            return output_path
+    except Exception as e:
+        print(f"[Audio] build_ambient_clips_audio_track failed: {e}")
+    return None
+
+
+

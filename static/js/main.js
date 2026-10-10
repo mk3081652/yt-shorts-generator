@@ -1086,6 +1086,20 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
+    const clipVolumeSlider = document.getElementById("clipVolumeSlider");
+    const clipVolLabel = document.getElementById("clipVolLabel");
+    const clipVolBadge = document.getElementById("clipVolBadge");
+    if (clipVolumeSlider) {
+        clipVolumeSlider.addEventListener("input", (e) => {
+            const pct = Math.round(parseFloat(e.target.value) * 100);
+            if (clipVolLabel) clipVolLabel.textContent = `${pct}%`;
+            if (clipVolBadge) {
+                clipVolBadge.textContent = pct === 0 ? "0% • Muted" : `${pct}% • Soothing`;
+                clipVolBadge.style.color = pct === 0 ? "#94a3b8" : "#00e6ff";
+            }
+        });
+    }
+
     // ==========================================
     // STEP 4: PRODUCE & EXPORT
     // ==========================================
@@ -1106,6 +1120,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const subtitleStyle = document.querySelector('input[name="subtitleStyle"]:checked')?.value || "hyper_yellow";
             const bgmTrack = bgmSelect.value;
             const bgmVol = parseFloat(bgmVolume.value) || 0.18;
+            const clipVol = clipVolumeSlider ? (parseFloat(clipVolumeSlider.value) || 0.0) : 0.12;
 
             generateBtn.disabled = true;
             generateBtn.classList.add("btn-loading");
@@ -1133,6 +1148,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 subtitle_style: subtitleStyle,
                 bgm_track: bgmTrack,
                 bgm_volume: bgmVol,
+                clip_audio_volume: clipVol,
                 resolution: resolution,
                 project_id: state.project ? state.project.id : null
             };

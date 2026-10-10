@@ -105,6 +105,51 @@ def test_progressive_typewriter_subtitles():
         assert "Dialogue:" in content
         # Progressive typing formats with highlight tags
         assert "\\c&H" in content
+
+        # Verify strictly 1 or 2 lines per dialogue event (at most one \\N)
+        for line in content.splitlines():
+            if line.startswith("Dialogue: 0,"):
+                assert line.count("\\N") <= 1
     finally:
         if os.path.exists(ass_path):
             os.remove(ass_path)
+
+
+def test_ambient_clips_audio_track():
+    from engine.audio import probe_media_has_audio, build_ambient_clips_audio_track
+    assert probe_media_has_audio("") is False
+    assert probe_media_has_audio("non_existent_file.mp4") is False
+
+    scenes = [
+        {"duration": 5.0, "media_path": "", "clip_audio_volume": 0.12},
+        {"duration": 5.0, "media_path": "fake.jpg", "clip_audio_volume": 0.12}
+    ]
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf:
+        out_wav = tf.name
+
+    try:
+        res = build_ambient_clips_audio_track(scenes, out_wav, 10.0, global_clip_volume=0.12)
+        assert res is None
+    finally:
+        if os.path.exists(out_wav):
+            os.remove(out_wav)
+
+
+def test_video_scenes_not_subdivided_in_rapid_cuts():
+    from engine.render import expand_scenes_to_rapid_cuts
+    scenes = [
+        {"duration": 10.0, "media_path": "flow_clip_1.mp4", "media_type": "video"},
+        {"duration": 8.0, "image_path": "photo.jpg", "media_type": "image"},
+        {"duration": 10.0, "media_url": "/outputs/custom_scenes/flow_clip_2.webm"}
+    ]
+    expanded = expand_scenes_to_rapid_cuts(scenes, max_cut_dur=3.0)
+    # The two video scenes should remain single full-duration scenes (not split into subcuts!)
+    video_scenes = [s for s in expanded if "flow_clip" in (s.get("media_path") or s.get("media_url") or "")]
+    assert len(video_scenes) == 2
+    assert video_scenes[0]["duration"] == 10.0
+    assert video_scenes[1]["duration"] == 10.0
+    # The image scene was longer than 3.0, so it was split into subcuts for Ken Burns
+    image_scenes = [s for s in expanded if "photo.jpg" in (s.get("image_path") or "")]
+    assert len(image_scenes) > 1
+
+

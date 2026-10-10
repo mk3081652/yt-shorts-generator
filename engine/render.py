@@ -95,16 +95,39 @@ def render_scene_clip(
     return os.path.exists(out_path)
 
 
+def is_video_scene(sc: Dict[str, Any]) -> bool:
+    """Returns True if the scene contains a video file (MP4/WebM/MOV)."""
+    if sc.get("media_type") == "video":
+        return True
+    for key in ("media_path", "media_url", "image_path", "image_url"):
+        val = sc.get(key)
+        if isinstance(val, str) and val.strip():
+            clean = val.split("?")[0].lower().strip()
+            if any(clean.endswith(ext) for ext in [".mp4", ".mov", ".webm", ".mkv", ".m4v"]):
+                return True
+    return False
+
+
 def expand_scenes_to_rapid_cuts(scenes: List[Dict[str, Any]], max_cut_dur: float = 3.2) -> List[Dict[str, Any]]:
     """
-    Subdivides scenes longer than max_cut_dur into dynamic sub-cuts using multi-focal camera
-    framing (zoom_in, pan_right, snap_zoom, pan_left, tilt_up) so videos maintain
-    high viewer retention.
+    Subdivides static image scenes longer than max_cut_dur into dynamic sub-cuts using multi-focal camera
+    framing (zoom_in, pan_right, snap_zoom, pan_left, tilt_up).
+
+    IMPORTANT: Video scenes (e.g. 10s Google Flow clips, B-roll MP4s) ALREADY have continuous motion
+    and dynamic action. They are preserved intact so the full 10-second clip plays continuously
+    without repeating loops or stuttering.
     """
     expanded = []
     MOTION_CYCLE = ["zoom_in", "pan_right", "snap_zoom", "pan_left", "tilt_up"]
     motion_idx = 0
     for sc in scenes:
+        # If scene has a video clip, preserve it intact so the full 10s clip plays!
+        if is_video_scene(sc):
+            sc_copy = dict(sc)
+            sc_copy["media_type"] = "video"
+            expanded.append(sc_copy)
+            continue
+
         dur = float(sc.get("duration", 3.0))
         if dur <= max_cut_dur:
             sc_copy = dict(sc)
@@ -353,6 +376,9 @@ def render_shorts_video(
                     sc["image_path"] = ov
                     sc["image_url"] = f"/outputs/ai_previews/{os.path.basename(ov)}"
                     sc["status"] = "manual"
+                    clean_ov = ov.split("?")[0].lower().strip()
+                    if any(clean_ov.endswith(ext) for ext in [".mp4", ".mov", ".webm", ".mkv", ".m4v"]):
+                        sc["media_type"] = "video"
 
         aligned_timeline = align(scenes, word_boundaries, video_duration)
         for idx, a in enumerate(aligned_timeline):
@@ -508,6 +534,28 @@ def render_shorts_video(
             ffmpeg_cmd.extend(["-i", os.path.abspath(actual_sfx_path)])
             audio_streams.append(f"[{next_in_idx}:a]volume=0.20,aformat=sample_rates=44100:channel_layouts=stereo[sfx_clean]")
             amix_inputs.append("[sfx_clean]")
+            next_in_idx += 1
+
+        # Build soothing ambient audio from uploaded video clips if present
+        actual_ambient_path = None
+        clip_audio_vol = float(kwargs.get("clip_audio_volume", 0.12) if kwargs.get("clip_audio_volume") is not None else 0.12)
+        if clip_audio_vol > 0.005:
+            try:
+                from engine.audio import build_ambient_clips_audio_track
+                amb_out = os.path.join(work_dir, "ambient_clips.wav")
+                actual_ambient_path = build_ambient_clips_audio_track(
+                    scenes=scenes,
+                    output_path=amb_out,
+                    total_duration=video_duration,
+                    global_clip_volume=clip_audio_vol
+                )
+            except Exception as e:
+                print(f"[Render] Ambient clips audio build skipped: {e}")
+
+        if actual_ambient_path and os.path.exists(actual_ambient_path):
+            ffmpeg_cmd.extend(["-i", os.path.abspath(actual_ambient_path)])
+            audio_streams.append(f"[{next_in_idx}:a]aformat=sample_rates=44100:channel_layouts=stereo[amb_clean]")
+            amix_inputs.append("[amb_clean]")
             next_in_idx += 1
 
         if len(amix_inputs) > 1:

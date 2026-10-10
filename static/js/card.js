@@ -220,9 +220,87 @@ export function createSceneCard(scene, index, totalScenes, callbacks = {}) {
     const narrationGroup = document.createElement("div");
     narrationGroup.className = "field-group";
 
+    const narrationHeader = document.createElement("div");
+    narrationHeader.className = "field-header-row";
+
     const narrationLabel = document.createElement("label");
     narrationLabel.className = "field-label";
     narrationLabel.textContent = "🎙️ Spoken Narration:";
+
+    const listenBtn = document.createElement("button");
+    listenBtn.type = "button";
+    listenBtn.className = "btn-text-action btn-listen-narration";
+    listenBtn.style.color = "#00e6ff";
+    listenBtn.style.borderColor = "rgba(0, 230, 255, 0.4)";
+    listenBtn.textContent = "🔊 Listen Narration";
+    listenBtn.title = "Audition neural voice reading this scene";
+
+    listenBtn.addEventListener("click", async () => {
+        const text = narrationArea.value.trim();
+        if (!text) {
+            alert("Please enter spoken narration text first!");
+            return;
+        }
+
+        if (listenBtn.dataset.playing === "true") {
+            if (window._sceneAudioPlayer) {
+                window._sceneAudioPlayer.pause();
+                window._sceneAudioPlayer = null;
+            }
+            listenBtn.dataset.playing = "false";
+            listenBtn.textContent = "🔊 Listen Narration";
+            return;
+        }
+
+        // Stop any active audition
+        if (window._sceneAudioPlayer) {
+            window._sceneAudioPlayer.pause();
+            window._sceneAudioPlayer = null;
+        }
+        document.querySelectorAll(".btn-listen-narration").forEach(b => {
+            b.dataset.playing = "false";
+            b.textContent = "🔊 Listen Narration";
+        });
+
+        listenBtn.dataset.playing = "true";
+        listenBtn.textContent = "⏳ Speaking...";
+
+        try {
+            const voice = document.getElementById("voiceSelect")?.value || "en-US-ChristopherNeural";
+            const speedSlider = document.getElementById("voiceSpeedSlider");
+            const rate = speedSlider ? speedSlider.value : "0.85";
+            const res = await api.previewVoice(text, voice, rate);
+            const audioSrc = res && (res.audio_url || res.preview_url);
+            if (audioSrc) {
+                const aud = new Audio(audioSrc + "?t=" + Date.now());
+                window._sceneAudioPlayer = aud;
+                listenBtn.textContent = "⏹️ Stop";
+                aud.onended = () => {
+                    listenBtn.dataset.playing = "false";
+                    listenBtn.textContent = "🔊 Listen Narration";
+                    window._sceneAudioPlayer = null;
+                };
+                aud.onerror = (e) => {
+                    listenBtn.dataset.playing = "false";
+                    listenBtn.textContent = "🔊 Listen Narration";
+                    window._sceneAudioPlayer = null;
+                    console.error("Audio playback error:", e);
+                };
+                await aud.play();
+            } else {
+                throw new Error("No preview audio returned from server");
+            }
+        } catch (err) {
+            listenBtn.dataset.playing = "false";
+            listenBtn.textContent = "🔊 Listen Narration";
+            console.error("Audition failed:", err);
+            alert("Could not audition voice: " + (err.message || err));
+        }
+    });
+
+    narrationHeader.appendChild(narrationLabel);
+    narrationHeader.appendChild(listenBtn);
+    narrationGroup.appendChild(narrationHeader);
 
     const narrationArea = document.createElement("textarea");
     narrationArea.className = "scene-narration-input";
@@ -240,84 +318,26 @@ export function createSceneCard(scene, index, totalScenes, callbacks = {}) {
         }
     });
 
-    narrationGroup.appendChild(narrationLabel);
     narrationGroup.appendChild(narrationArea);
     contentBox.appendChild(narrationGroup);
 
-    // Visual Prompt
+    // Consolidated Visual Prompt (Google Flow / Realistic B-Roll)
     const promptGroup = document.createElement("div");
-    promptGroup.className = "field-group";
+    promptGroup.className = "field-group flow-prompt-group";
+    promptGroup.style.marginTop = "8px";
 
     const promptHeader = document.createElement("div");
     promptHeader.className = "field-header-row";
 
     const promptLabel = document.createElement("label");
     promptLabel.className = "field-label";
-    promptLabel.textContent = "🎨 Visual Image Prompt:";
+    promptLabel.style.color = "#00e6ff";
+    promptLabel.textContent = "🎬 Visual Prompt (Google Flow / B-Roll):";
 
     const promptActions = document.createElement("div");
     promptActions.className = "field-actions";
 
-    const suggestBtn = document.createElement("button");
-    suggestBtn.type = "button";
-    suggestBtn.className = "btn-text-action";
-    suggestBtn.textContent = "💡 Suggest Prompts";
-    suggestBtn.title = "Get 3 alternative prompts from Gemini";
-    suggestBtn.addEventListener("click", () => {
-        if (callbacks.onSuggestPrompts) callbacks.onSuggestPrompts(scene.id);
-    });
-
-    const genBtn = document.createElement("button");
-    genBtn.type = "button";
-    genBtn.className = "btn-text-action";
-    genBtn.textContent = "⚡ Generate Image";
-    genBtn.disabled = isManual;
-    genBtn.title = isManual ? "Scene is locked as manual" : "Generate image with FLUX";
-    genBtn.addEventListener("click", () => {
-        if (callbacks.onGenerateMedia) callbacks.onGenerateMedia(scene.id);
-    });
-
-    promptActions.appendChild(suggestBtn);
-    promptActions.appendChild(genBtn);
-
-    promptHeader.appendChild(promptLabel);
-    promptHeader.appendChild(promptActions);
-
-    const promptArea = document.createElement("textarea");
-    promptArea.className = "scene-prompt-input";
-    promptArea.rows = 2;
-    promptArea.value = scene.image_prompt || "";
-    promptArea.placeholder = "Enter visual prompt for FLUX image generator...";
-
-    promptArea.addEventListener("focus", () => {
-        state.setFocusedScene(scene.id);
-    });
-    promptArea.addEventListener("blur", () => {
-        const val = promptArea.value.trim();
-        if (val !== scene.image_prompt && callbacks.onEditPrompt) {
-            callbacks.onEditPrompt(scene.id, val);
-        }
-    });
-
-    promptGroup.appendChild(promptHeader);
-    promptGroup.appendChild(promptArea);
-    contentBox.appendChild(promptGroup);
-
-    // Google Flow 10s Video Prompt Box
-    const flowPromptGroup = document.createElement("div");
-    flowPromptGroup.className = "field-group flow-prompt-group";
-    flowPromptGroup.style.marginTop = "8px";
-
-    const flowHeader = document.createElement("div");
-    flowHeader.className = "field-header-row";
-
-    const flowLabel = document.createElement("label");
-    flowLabel.className = "field-label";
-    flowLabel.style.color = "#00e6ff";
-    flowLabel.textContent = "🎬 Google Flow Clip Prompt (10s Alignment):";
-
-    const flowActions = document.createElement("div");
-    flowActions.className = "field-actions";
+    const flowPromptVal = scene.google_flow_prompt || scene.video_prompt || scene.image_prompt || "";
 
     const copyFlowBtn = document.createElement("button");
     copyFlowBtn.type = "button";
@@ -327,16 +347,13 @@ export function createSceneCard(scene, index, totalScenes, callbacks = {}) {
     copyFlowBtn.textContent = "📋 Copy for Flow";
     copyFlowBtn.title = "Copy prompt to clipboard for Google Flow / Veo";
 
-    const flowPromptVal = scene.google_flow_prompt || scene.video_prompt || scene.image_prompt || "";
-
     copyFlowBtn.addEventListener("click", async () => {
         try {
-            await navigator.clipboard.writeText(flowArea.value || flowPromptVal);
+            await navigator.clipboard.writeText(promptArea.value || flowPromptVal);
             copyFlowBtn.textContent = "✅ Copied!";
             setTimeout(() => { copyFlowBtn.textContent = "📋 Copy for Flow"; }, 2000);
         } catch {
-            // Fallback for older browsers
-            flowArea.select();
+            promptArea.select();
             document.execCommand("copy");
             copyFlowBtn.textContent = "✅ Copied!";
             setTimeout(() => { copyFlowBtn.textContent = "📋 Copy for Flow"; }, 2000);
@@ -352,31 +369,49 @@ export function createSceneCard(scene, index, totalScenes, callbacks = {}) {
         fileInput.click();
     });
 
-    flowActions.appendChild(copyFlowBtn);
-    flowActions.appendChild(browseClipBtn);
+    promptActions.appendChild(copyFlowBtn);
+    promptActions.appendChild(browseClipBtn);
 
-    flowHeader.appendChild(flowLabel);
-    flowHeader.appendChild(flowActions);
+    const curSource = document.getElementById("step2VisualSource")?.value || "video";
+    if (curSource === "flux") {
+        const genBtn = document.createElement("button");
+        genBtn.type = "button";
+        genBtn.className = "btn-text-action";
+        genBtn.textContent = "⚡ Generate Art";
+        genBtn.disabled = isManual;
+        genBtn.addEventListener("click", () => {
+            if (callbacks.onGenerateMedia) callbacks.onGenerateMedia(scene.id);
+        });
+        promptActions.appendChild(genBtn);
+    }
 
-    const flowArea = document.createElement("textarea");
-    flowArea.className = "scene-prompt-input flow-prompt-input";
-    flowArea.rows = 2;
-    flowArea.value = flowPromptVal;
-    flowArea.placeholder = "Google Flow 10s video generation prompt...";
-    flowArea.style.borderColor = "rgba(0, 230, 255, 0.25)";
-    flowArea.style.background = "rgba(0, 230, 255, 0.04)";
+    promptHeader.appendChild(promptLabel);
+    promptHeader.appendChild(promptActions);
 
-    flowArea.addEventListener("blur", () => {
-        const val = flowArea.value.trim();
+    const promptArea = document.createElement("textarea");
+    promptArea.className = "scene-prompt-input flow-prompt-input";
+    promptArea.rows = 2;
+    promptArea.value = flowPromptVal;
+    promptArea.placeholder = "Google Flow 10s video prompt or realistic visual description...";
+    promptArea.style.borderColor = "rgba(0, 230, 255, 0.25)";
+    promptArea.style.background = "rgba(0, 230, 255, 0.04)";
+
+    promptArea.addEventListener("focus", () => {
+        state.setFocusedScene(scene.id);
+    });
+    promptArea.addEventListener("blur", () => {
+        const val = promptArea.value.trim();
         scene.google_flow_prompt = val;
+        scene.image_prompt = val;
+        scene.video_prompt = val;
         if (callbacks.onEditPrompt) {
             callbacks.onEditPrompt(scene.id, val, "google_flow");
         }
     });
 
-    flowPromptGroup.appendChild(flowHeader);
-    flowPromptGroup.appendChild(flowArea);
-    contentBox.appendChild(flowPromptGroup);
+    promptGroup.appendChild(promptHeader);
+    promptGroup.appendChild(promptArea);
+    contentBox.appendChild(promptGroup);
 
     body.appendChild(contentBox);
     card.appendChild(body);
@@ -415,32 +450,6 @@ export function createSceneCard(scene, index, totalScenes, callbacks = {}) {
 
     const seamGroup = document.createElement("div");
     seamGroup.className = "seam-actions-group";
-
-    // Shift word left
-    if (index > 0) {
-        const shiftLeftBtn = document.createElement("button");
-        shiftLeftBtn.type = "button";
-        shiftLeftBtn.className = "btn-seam";
-        shiftLeftBtn.title = "Shift 1 word left to previous scene";
-        shiftLeftBtn.textContent = "◀ Shift Left";
-        shiftLeftBtn.addEventListener("click", () => {
-            if (callbacks.onMoveBoundary) callbacks.onMoveBoundary(scene.id, "left", 1);
-        });
-        seamGroup.appendChild(shiftLeftBtn);
-    }
-
-    // Shift word right
-    if (index < totalScenes - 1) {
-        const shiftRightBtn = document.createElement("button");
-        shiftRightBtn.type = "button";
-        shiftRightBtn.className = "btn-seam";
-        shiftRightBtn.title = "Shift 1 word right to next scene";
-        shiftRightBtn.textContent = "Shift Right ▶";
-        shiftRightBtn.addEventListener("click", () => {
-            if (callbacks.onMoveBoundary) callbacks.onMoveBoundary(scene.id, "right", 1);
-        });
-        seamGroup.appendChild(shiftRightBtn);
-    }
 
     // Split
     const splitBtn = document.createElement("button");

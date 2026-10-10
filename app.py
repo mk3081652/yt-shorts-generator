@@ -184,6 +184,7 @@ class RenderRequest(BaseModel):
     tts_provider: Optional[str] = None
     motion_texture: Optional[str] = None
     resolution: Optional[str] = "720p"
+    clip_audio_volume: Optional[float] = 0.12
 
     model_config = ConfigDict(extra="allow")
 
@@ -421,6 +422,7 @@ async def preview_voice(req: VoicePreviewRequest):
         if os.path.exists(output_path) and os.path.getsize(output_path) > 500:
             return {
                 "audio_url": f"/outputs/preview_{preview_id}.mp3",
+                "preview_url": f"/outputs/preview_{preview_id}.mp3",
                 "voice": edge_voice,
                 "speed": edge_rate_str
             }
@@ -1176,7 +1178,8 @@ def run_render_task(job_id: str, req: RenderRequest):
             tts_provider=getattr(req, "tts_provider", None),
             motion_texture=getattr(req, "motion_texture", None),
             color_filter=getattr(req, "color_filter", None) or (load_project(req.project_id).color_filter if req.project_id and load_project(req.project_id) else "none"),
-            resolution=getattr(req, "resolution", "720p") or "720p"
+            resolution=getattr(req, "resolution", "720p") or "720p",
+            clip_audio_volume=getattr(req, "clip_audio_volume", 0.12)
         )
         script_for_meta = req.script or ""
         if not script_for_meta.strip() and req.project_id:
