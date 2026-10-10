@@ -12,7 +12,8 @@ class StateManager {
             config: null,
             isGenerating: false,
             focusedSceneId: null,
-            activeSplitSceneId: null
+            activeSplitSceneId: null,
+            flowTenSec: false
         };
     }
 
@@ -93,6 +94,19 @@ class StateManager {
 
     set activeSplitSceneId(sceneId) {
         this.setActiveSplitScene(sceneId);
+    }
+
+    get flowTenSec() {
+        return this.state.flowTenSec;
+    }
+
+    set flowTenSec(val) {
+        this.setFlowTenSec(val);
+    }
+
+    setFlowTenSec(val) {
+        this.state.flowTenSec = !!val;
+        this.emit("flow_ten_sec_changed", this.state.flowTenSec);
     }
 
     setProject(project) {

@@ -5,7 +5,6 @@
 import { api } from "./api.js?v=20261001_v7";
 import { state } from "./state.js?v=20261001_v7";
 import { StoryboardEditor } from "./editor.js?v=20261001_v7";
-import { CapCutTimelineEditor } from "./capcut_timeline.js?v=20261001_v7";
 
 // Toast Notifications
 export function showToast(message, type = "info", duration = 3500) {
@@ -192,11 +191,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     const storyboardProgressPct = document.getElementById("storyboardProgressPct");
     const storyboardProgressBar = document.getElementById("storyboardProgressBar");
 
-    const capcutProgressCard = document.getElementById("capcutProgressCard");
-    const capcutProgressStatus = document.getElementById("capcutProgressStatus");
-    const capcutProgressStep = document.getElementById("capcutProgressStep");
-    const capcutProgressPct = document.getElementById("capcutProgressPct");
-    const capcutProgressBar = document.getElementById("capcutProgressBar");
 
     // DOM Elements - Step 3
     const bgmSelect = document.getElementById("bgmSelect");
@@ -342,48 +336,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     };
 
     const storyboardEditor = new StoryboardEditor(editorElements, showToast);
-    const capcutTimeline = new CapCutTimelineEditor(editorElements, showToast);
-
-    // View Switcher: Storyboard Cards vs CapCut Timeline Editor
-    const viewCardsBtn = document.getElementById("viewCardsBtn");
-    const viewTimelineBtn = document.getElementById("viewTimelineBtn");
-    const storyboardContainer = document.getElementById("storyboardContainer");
-    const capcutEditorContainer = document.getElementById("capcutEditorContainer");
-    const capcutStitchHeaderBtn = document.getElementById("capcutStitchHeaderBtn");
-
-    function switchWorkspaceView(mode) {
-        if (mode === "timeline") {
-            if (viewTimelineBtn) viewTimelineBtn.classList.add("active");
-            if (viewCardsBtn) viewCardsBtn.classList.remove("active");
-            if (storyboardContainer) storyboardContainer.classList.add("hidden");
-            if (capcutEditorContainer) {
-                capcutEditorContainer.classList.remove("hidden");
-                if (state.project) capcutTimeline.render(state.project);
-            }
-        } else {
-            if (viewCardsBtn) viewCardsBtn.classList.add("active");
-            if (viewTimelineBtn) viewTimelineBtn.classList.remove("active");
-            if (capcutEditorContainer) {
-                capcutEditorContainer.classList.add("hidden");
-                capcutTimeline.pause();
-            }
-            if (storyboardContainer) {
-                storyboardContainer.classList.remove("hidden");
-                if (state.project) storyboardEditor.render(state.project);
-            }
-        }
-    }
-
-    if (viewCardsBtn) {
-        viewCardsBtn.addEventListener("click", () => switchWorkspaceView("cards"));
-    }
-    if (viewTimelineBtn) {
-        viewTimelineBtn.addEventListener("click", () => switchWorkspaceView("timeline"));
-    }
-    if (capcutStitchHeaderBtn) {
-        capcutStitchHeaderBtn.addEventListener("click", () => capcutTimeline.handleStitchTimeline());
-    }
-
     // ==========================================
     // STEP NAVIGATION
     // ==========================================
@@ -413,11 +365,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         state.setStep(stepNum);
 
-        if (stepNum === 2) {
-            if (viewTimelineBtn && viewTimelineBtn.classList.contains("active")) {
-                if (state.project) capcutTimeline.render(state.project);
-            }
-        }
+        
 
         // Update Step 4 Summary if entering Step 4
         if (stepNum === 4) {
@@ -808,23 +756,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    if (openTimelineFromVoiceBtn) {
-        openTimelineFromVoiceBtn.addEventListener("click", async () => {
-            const script = scriptInput.value.trim();
-            if (!script) {
-                showToast("Please enter a script first!", "warning");
-                return;
-            }
-            if (!state.project) {
-                await handleProceedToStep2();
-            } else {
-                goToStep(2);
-            }
-            switchWorkspaceView("timeline");
-            showToast("CapCut Timeline Editor active!", "info");
-        });
-    }
-
     // Step 1 -> Step 2
     async function handleProceedToStep2() {
         const script = scriptInput.value.trim();
@@ -847,7 +778,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const visualSource = document.getElementById("visualSourceSelect")?.value || "video";
 
         try {
-            const proj = await api.createProject(script, state.mode, false, visualSource);
+            const proj = await api.createProject(script, state.mode, false, visualSource, state.flowTenSec);
             state.setProject(proj);
             goToStep(2);
             showToast("Storyboard planned successfully!", "success");
@@ -871,8 +802,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const isVid = (curSource === "video");
 
         const getCards = () => [
-            { card: storyboardProgressCard, pct: storyboardProgressPct, bar: storyboardProgressBar, status: storyboardProgressStatus, step: storyboardProgressStep },
-            { card: capcutProgressCard, pct: capcutProgressPct, bar: capcutProgressBar, status: capcutProgressStatus, step: capcutProgressStep }
+            { card: storyboardProgressCard, pct: storyboardProgressPct, bar: storyboardProgressBar, status: storyboardProgressStatus, step: storyboardProgressStep }
         ];
 
         // Show progress cards immediately
@@ -1027,7 +957,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     showToast("Visual generation started!", "success");
                     startProjectPolling(state.project.id);
                 } else {
-                    const proj = await api.createProject(script, "auto", false, visualSource);
+                    const proj = await api.createProject(script, "auto", false, visualSource, state.flowTenSec);
                     state.setProject(proj);
                     showToast("Visual generation started!", "success");
                     startProjectPolling(proj.id);
@@ -1607,6 +1537,55 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
+    
+    // ⏱️ 10s Google Flow Mode Action
+    const flowTenSecModeBtn = document.getElementById("flowTenSecModeBtn");
+    if (flowTenSecModeBtn) {
+        flowTenSecModeBtn.addEventListener("click", () => {
+            const nextVal = !state.flowTenSec;
+            state.setFlowTenSec(nextVal);
+            if (nextVal) {
+                flowTenSecModeBtn.style.background = "rgba(0, 230, 255, 0.28)";
+                flowTenSecModeBtn.style.borderColor = "#00e6ff";
+                flowTenSecModeBtn.style.color = "#ffffff";
+                flowTenSecModeBtn.style.boxShadow = "0 0 12px rgba(0, 230, 255, 0.45)";
+                flowTenSecModeBtn.textContent = "⏱️ 10s Flow Mode (Active)";
+                showToast("⏱️ 10s Google Flow Mode enabled! Every scene will be segmented into exact ~10-second beats with customized Google Flow prompts.", "info", 5000);
+            } else {
+                flowTenSecModeBtn.style.background = "rgba(0, 230, 255, 0.12)";
+                flowTenSecModeBtn.style.borderColor = "rgba(0, 230, 255, 0.45)";
+                flowTenSecModeBtn.style.color = "#00e6ff";
+                flowTenSecModeBtn.style.boxShadow = "none";
+                flowTenSecModeBtn.textContent = "⏱️ 10s Google Flow Mode";
+                showToast("Standard scene segmentation enabled.", "info");
+            }
+        });
+    }
+
+    // ⏱️ 10s Flow Sync Action in Step 2 Storyboard
+    const alignFlowTenSecBtn = document.getElementById("alignFlowTenSecBtn");
+    if (alignFlowTenSecBtn) {
+        alignFlowTenSecBtn.addEventListener("click", async () => {
+            if (!state.project) {
+                showToast("Please plan or generate a storyboard first!", "warning");
+                return;
+            }
+            alignFlowTenSecBtn.disabled = true;
+            alignFlowTenSecBtn.innerHTML = "⏳ Aligning...";
+            showToast("Aligning scenes to 10s Google Flow beats...", "info");
+            try {
+                const updatedProj = await api.alignFlowTenSec(state.project.id);
+                state.setProject(updatedProj);
+                showToast("✅ Successfully aligned scenes to 10s Google Flow beats!", "success", 4000);
+            } catch (err) {
+                showToast(`Failed to align 10s beats: ${err.message}`, "error");
+            } finally {
+                alignFlowTenSecBtn.disabled = false;
+                alignFlowTenSecBtn.innerHTML = "⏱️ 10s Flow Sync";
+            }
+        });
+    }
+
     // 🔁 1-Click Infinity Loop Action
     const loopScriptBtn = document.getElementById("loopScriptBtn");
     if (loopScriptBtn) {
@@ -2022,7 +2001,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 showToast("Analyzing script & planning storyboard...", "info");
                 const visualSource = document.getElementById("visualSourceSelect")?.value || "video";
                 try {
-                    currentProj = await api.createProject(script, "manual", false, visualSource);
+                    currentProj = await api.createProject(script, "manual", false, visualSource, state.flowTenSec);
                     state.setProject(currentProj);
                 } catch (err) {
                     showToast(`Failed to plan storyboard: ${err.message}`, "error");

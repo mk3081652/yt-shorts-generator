@@ -157,18 +157,18 @@ def generate_ass_subtitles(
     word_boundaries: List[Dict[str, Any]],
     output_ass_path: str,
     style_name: str = "hyper_yellow",
-    max_words_per_segment: int = 3,   # 1-3 words per cut for max retention
+    max_words_per_segment: int = 5,   # 5-6 words live per phrase
     margin_v: int = None,
     high_impact_words: Optional[List[str]] = None,
-    hook_banner: Optional[Dict[str, Any]] = None
+    hook_banner: Optional[Dict[str, Any]] = None,
+    progressive_typing: bool = True    # Types live word-by-word as narration speaks
 ) -> str:
     """
     Builds an Advanced SubStation Alpha (.ass) subtitle file.
-    Groups words into punchy 1-3 word segments shown in the middle-third of the
-    screen (alignment=5, center-screen). Each word segment pops in with a
-    kinetic scale bounce. High-impact words (numbers, ALL-CAPS, keywords)
-    get accent color + 120% scale pop for maximum eye-lock retention.
-    Optional bold hook banner overlay at top for Scene 1.
+    Groups words into natural 5-6 word phrases shown in the middle-third of the screen.
+    With progressive_typing=True, words type out live one-by-one as the voiceover speaks,
+    with the current spoken word highlighted with kinetic bounce, and previously spoken
+    words remaining visible until the 5-6 word phrase completes.
     """
     resolved_style_name = STYLE_ALIASES.get(style_name, style_name)
     style = dict(STYLE_PRESETS.get(resolved_style_name, STYLE_PRESETS["hyper_yellow"]))
@@ -179,9 +179,6 @@ def generate_ass_subtitles(
     play_res_y = 1920
     font_size = style["font_size"] * 4  # 19*4=76px on 1080x1920
     border_style = style.get("border_style", 1)
-    # MarginV in ASS for alignment=5 is measured from bottom (same as alignment=2)
-    # But to position at center, we rely on alignment=5 which already centers vertically.
-    # MarginV here shifts from the center: positive shifts up, negative shifts down.
     ass_margin_v = max(0, style["margin_v"]) if style["margin_v"] >= 0 else 0
 
     ass_header = f"""[Script Info]
@@ -207,7 +204,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     if not word_boundaries:
         return output_ass_path
 
-    # Clean words and group into 1-3 punchy words
+    # Clean words and group into 5-6 word phrases
     clean_items = []
     for item in word_boundaries:
         cw = clean_word_text(item["word"])
@@ -227,15 +224,16 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     for item in clean_items:
         current_chunk.append(item)
         word_text = item["word"]
-        has_punctuation = any(p in word_text for p in ['.', '!', '?', ',', ';', ':'])
-        if len(current_chunk) >= max_words_per_segment or has_punctuation:
+        # Split on strong punctuation (. ! ?) or when reaching 5-6 words
+        has_sentence_end = any(p in word_text for p in ['.', '!', '?'])
+        if len(current_chunk) >= max_words_per_segment or (len(current_chunk) >= 4 and has_sentence_end):
             chunks.append(current_chunk)
             current_chunk = []
             
     if current_chunk:
         chunks.append(current_chunk)
 
-    # Vibrant highlight colors for active word karaoke pop per preset
+    # Vibrant highlight colors for active word pop per preset
     STYLE_HIGHLIGHTS = {
         "hyper_yellow": "&H0000FFFF",  # Brilliant Electric Yellow
         "glacier_cyan": "&H00FFF200",  # Ice Cyan
@@ -261,21 +259,25 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             end_time = format_ass_time(end_t)
 
             words_formatted = []
-            for w_idx, w_item in enumerate(chunk):
+            # In progressive live typing, show words up to the currently spoken word
+            visible_range = range(active_idx + 1) if progressive_typing else range(num_words)
+
+            for w_idx in visible_range:
+                w_item = chunk[w_idx]
                 raw_w = w_item["word"]
                 disp_w = raw_w.upper() if style.get("uppercase", True) else raw_w
                 is_hi = is_high_impact_word(raw_w, high_impact_words)
 
                 if w_idx == active_idx:
-                    # Active spoken word in bright highlight color with kinetic scale bounce
+                    # Active spoken word types in with vivid highlight and kinetic bounce
                     if is_hi:
                         words_formatted.append(f"{{\\c{highlight_c}&\\fscx120\\fscy120}}{disp_w}{{\\c{base_c}&\\fscx100\\fscy100}}")
                     else:
-                        words_formatted.append(f"{{\\c{highlight_c}&\\fscx110\\fscy110}}{disp_w}{{\\c{base_c}&\\fscx100\\fscy100}}")
+                        words_formatted.append(f"{{\\c{highlight_c}&\\fscx112\\fscy112}}{disp_w}{{\\c{base_c}&\\fscx100\\fscy100}}")
                 else:
-                    # Non-active word in the current chunk
+                    # Already typed words in the current 5-6 word phrase
                     if is_hi:
-                        words_formatted.append(f"{{\\c{highlight_c}&\\fscx120\\fscy120}}{disp_w}{{\\c{base_c}&\\fscx100\\fscy100}}")
+                        words_formatted.append(f"{{\\c{highlight_c}&}}{disp_w}")
                     else:
                         words_formatted.append(f"{{\\c{base_c}&}}{disp_w}")
 

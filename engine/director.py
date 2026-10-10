@@ -102,6 +102,29 @@ DEFAULT_CAMERA_MOTIONS = ["push in", "pull out", "pan right", "pan left", "tilt 
 DEFAULT_SHOTS = ["wide", "medium", "close-up", "macro", "low-angle", "over-shoulder", "POV", "aerial"]
 
 
+def build_google_flow_prompt(
+    narration_text: str = "",
+    subject: str = "",
+    action: str = "",
+    setting: str = "",
+    camera_motion: str = "push in",
+    shot: str = "medium",
+    scene_keywords: str = "",
+    motion_hint: str = ""
+) -> str:
+    """Builds an optimized prompt for Google Flow / Veo 10s vertical video generation."""
+    sub_name = (subject or scene_keywords or narration_text[:60] or "subject").strip()
+    shot_name = (shot or "medium").strip()
+    cam_mot = (motion_hint or camera_motion or "push in").strip()
+    flow_parts = ["Cinematic 9:16 vertical video", f"{shot_name} shot of {sub_name}"]
+    if action:
+        flow_parts.append(action.strip())
+    if setting:
+        flow_parts.append(f"in {setting.strip()}")
+    flow_parts.append(f"smooth {cam_mot} camera motion, photorealistic, 8k resolution, highly detailed film still, no text, no subtitles")
+    return ", ".join(flow_parts)
+
+
 def compile_prompt(
     scene_data: Dict[str, Any],
     entities_map: Dict[str, str],
@@ -333,6 +356,16 @@ Plan the storyboard following the system instructions. Return valid JSON only.""
                     s["camera_motion"] = "push in"
                 if not s.get("video_prompt"):
                     s["video_prompt"] = f"{s.get('camera_motion', 'push in').capitalize()} camera movement on {s.get('subject', text)[:80]}"
+
+                # Google Flow / Veo 10s video generation prompt
+                s["google_flow_prompt"] = build_google_flow_prompt(
+                    narration_text=text,
+                    subject=s.get("subject", ""),
+                    action=s.get("action", ""),
+                    setting=s.get("setting", ""),
+                    camera_motion=s.get("camera_motion", "push in"),
+                    shot=s.get("shot", "medium")
+                )
 
                 # Parse and normalize extended visual fields
                 v_type = str(s.get("visual_type") or "literal").lower()

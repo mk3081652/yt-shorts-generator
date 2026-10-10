@@ -10,8 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Montserrat:wght@800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/style.css?v=20261001_v7">
-    <link rel="stylesheet" href="/static/css/capcut.css?v=20261001_v7">
+    <link rel="stylesheet" href="/static/css/style.css?v=20261010_v1">
 </head>
 <body>
     <div class="app-container">
@@ -79,9 +78,14 @@
                                 <span class="icon">📝</span>
                                 <h3 style="color: #ffffff; font-weight: 700; font-size: 17px;">Spoken Script & Directing</h3>
                             </div>
-                            <button type="button" id="loopScriptBtn" class="btn-secondary btn-sm" style="padding: 5px 12px; font-size: 11.5px; font-weight: 600; border-radius: 14px; background: rgba(0, 230, 255, 0.12); border: 1px solid rgba(0, 230, 255, 0.45); color: #00e6ff; cursor: pointer; transition: all 0.2s;" title="Seamlessly bridges the final sentence back into the opening hook sentence to drive >100% retention">
-                                🔁 1-Click Infinity Loop
-                            </button>
+                            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                                <button type="button" id="flowTenSecModeBtn" class="btn-secondary btn-sm" style="padding: 5px 12px; font-size: 11.5px; font-weight: 600; border-radius: 14px; background: rgba(0, 230, 255, 0.12); border: 1px solid rgba(0, 230, 255, 0.45); color: #00e6ff; cursor: pointer; transition: all 0.2s;" title="Auto-segments script into ~10s beats for 100% Google Flow clip alignment">
+                                    ⏱️ 10s Google Flow Mode
+                                </button>
+                                <button type="button" id="loopScriptBtn" class="btn-secondary btn-sm" style="padding: 5px 12px; font-size: 11.5px; font-weight: 600; border-radius: 14px; background: rgba(0, 230, 255, 0.12); border: 1px solid rgba(0, 230, 255, 0.45); color: #00e6ff; cursor: pointer; transition: all 0.2s;" title="Seamlessly bridges the final sentence back into the opening hook sentence to drive >100% retention">
+                                    🔁 1-Click Infinity Loop
+                                </button>
+                            </div>
                         </div>
 
                         <p style="font-size: 12.5px; color: #94a3b8; margin: 0 0 12px 0; line-height: 1.45;">
@@ -207,12 +211,9 @@
                         <audio id="voiceAudioPreview" class="hidden-audio" controls></audio>
 
                         <!-- Studio Action Buttons -->
-                        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 8px;">
-                            <button type="button" id="generateVoiceoverBtn" class="btn-master" style="flex: 1; min-width: 220px; background: linear-gradient(135deg, #00b4d8 0%, #0077b6 100%); border: none; font-size: 13.5px; font-weight: 700; padding: 10px 16px; border-radius: 6px; cursor: pointer; color: #fff; display: flex; align-items: center; justify-content: center; gap: 8px;">
-                                <span>🎙️ Synthesize Voiceover & Timings</span>
-                            </button>
-                            <button type="button" id="openTimelineFromVoiceBtn" class="btn-secondary btn-sm hidden" style="background: rgba(168, 85, 247, 0.2); border: 1px solid rgba(168, 85, 247, 0.5); color: #d8b4fe; font-weight: 700; padding: 10px 16px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                                <span>🎬 Open in CapCut Timeline Editor ➔</span>
+                        <div style="margin-bottom: 8px;">
+                            <button type="button" id="generateVoiceoverBtn" class="btn-master" style="width: 100%; background: linear-gradient(135deg, #00b4d8 0%, #0077b6 100%); border: none; font-size: 14px; font-weight: 700; padding: 12px 18px; border-radius: 8px; cursor: pointer; color: #fff; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                                <span>🎙️ Synthesize Voiceover & Scene Pacing</span>
                             </button>
                         </div>
                         
@@ -244,55 +245,10 @@
                                 </table>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- 🚀 Production, YouTube Channel & Navigation Master Card -->
-                    <div class="card master-dispatch-card" id="oneClickPublishCard" style="border: 2px solid rgba(255, 51, 75, 0.35); background: linear-gradient(135deg, rgba(255, 51, 75, 0.08) 0%, rgba(20, 20, 35, 0.98) 100%); margin-bottom: 14px; box-shadow: 0 6px 25px rgba(255, 0, 51, 0.15);">
-                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px;">
-                            <div style="display: flex; align-items: center; gap: 10px;">
-                                <span style="font-size: 20px;">🚀</span>
-                                <div>
-                                    <h4 style="margin: 0; font-size: 15px; font-weight: 700; color: #fff;">Produce, Review & Publish</h4>
-                                    <p style="margin: 2px 0 0 0; font-size: 12px; color: #94a3b8;">Review in Storyboard / CapCut Timeline, or 1-Click Publish instantly to YouTube</p>
-                                </div>
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                                <select id="ytChannelSelect" class="form-select compact-select" style="max-width: 190px; padding: 5px 10px; font-size: 12px; font-weight: 600; background: rgba(10, 15, 30, 0.95); border: 1px solid rgba(0, 230, 118, 0.4); color: #00e676; border-radius: 16px; cursor: pointer;">
-                                    <option value="">Loading Channels...</option>
-                                </select>
-                                <button type="button" id="manageChannelsBtn" class="btn-secondary btn-sm" style="padding: 5px 10px; font-size: 11px; border-radius: 16px; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.2); color: #e0e4f0; cursor: pointer; white-space: nowrap;" title="Manage YouTube Channels (Add, Switch, Import)">
-                                    ⚙️ Channels
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Publishing Options Row (Privacy & Resolution side-by-side) -->
-                        <div class="form-row" style="margin-bottom: 14px; gap: 12px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
-                            <div class="form-group" style="margin: 0;">
-                                <label for="ytPrivacySelect" style="font-size: 11.5px; font-weight: 600; color: #e0e4f0; margin-bottom: 4px; display: block;">Upload Privacy</label>
-                                <select id="ytPrivacySelect" class="form-select compact-select" style="padding: 8px 12px; width: 100%;">
-                                    <option value="public" selected>Public (Immediate Live)</option>
-                                    <option value="unlisted">Unlisted (Review First)</option>
-                                    <option value="private">Private</option>
-                                </select>
-                            </div>
-                            <div class="form-group" style="margin: 0;">
-                                <label for="ytResolutionSelect" style="font-size: 11.5px; font-weight: 600; color: #e0e4f0; margin-bottom: 4px; display: block;">Render Speed & Res</label>
-                                <select id="ytResolutionSelect" class="form-select compact-select" style="padding: 8px 12px; width: 100%;">
-                                    <option value="720p" selected>⚡ Turbo 720p HD (3x Faster)</option>
-                                    <option value="1080p">1080p Full HD</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <!-- Dual Action Paths: 1-Click Publish VS Continue to Visual Storyboard / CapCut Timeline -->
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px;">
-                            <button type="button" id="oneClickPublishBtn" class="btn-master" style="background: linear-gradient(135deg, #ff0033 0%, #ff4b2b 100%); box-shadow: 0 4px 18px rgba(255, 0, 51, 0.45); font-size: 14px; font-weight: 700; padding: 12px 18px; letter-spacing: 0.5px; border-radius: 8px; border: none; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
-                                <span class="btn-icon" style="font-size: 16px;">🚀</span>
-                                <span class="btn-text">1-CLICK PUBLISH TO YOUTUBE</span>
-                            </button>
-
-                            <button class="btn-google-next" id="toStep2Btn" style="font-size: 14px; font-weight: 700; padding: 12px 18px; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%); color: #fff; border: none; cursor: pointer; box-shadow: 0 4px 18px rgba(124, 58, 237, 0.35);">
+                        <!-- Step 1 Navigation Action -->
+                        <div style="margin-top: 14px;">
+                            <button class="btn-master" id="toStep2Btn" style="width: 100%; font-size: 14px; font-weight: 700; padding: 12px 18px; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%); color: #fff; border: none; cursor: pointer; box-shadow: 0 4px 18px rgba(124, 58, 237, 0.35);">
                                 <span>Continue to Visual Storyboard ➔</span>
                             </button>
                         </div>
@@ -302,26 +258,6 @@
 
                 <!-- STEP 2: Visual Storyboard & Scene Editor -->
                 <div class="step-panel hidden" id="stepPanel2">
-                    <!-- Layout View Switcher: Storyboard Cards vs CapCut Timeline Editor -->
-                    <div class="view-mode-toggle-bar">
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <span style="font-size: 11.5px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Workspace View:</span>
-                            <div class="mode-toggle" style="background: rgba(0, 0, 0, 0.45); padding: 3px; border-radius: 6px; display: inline-flex; gap: 4px; border: 1px solid rgba(255, 255, 255, 0.08);">
-                                <button type="button" class="mode-btn active" id="viewCardsBtn">
-                                    🗂️ Storyboard Cards
-                                </button>
-                                <button type="button" class="mode-btn" id="viewTimelineBtn">
-                                    🎬 CapCut Timeline Editor
-                                </button>
-                            </div>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <button type="button" id="capcutStitchHeaderBtn" class="btn-master btn-sm" style="background: linear-gradient(135deg, #a855f7 0%, #6366f1 100%); color: #fff; font-weight: 700; padding: 6px 14px; border-radius: 6px; border: none; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 12px;">
-                                ⚡ Stitch & Render Video
-                            </button>
-                        </div>
-                    </div>
-
                     <!-- Mode Switch & Toolbar -->
                     <div class="card editor-controls-card">
                         <div class="editor-header-row">
@@ -341,6 +277,9 @@
                                     <option value="video" selected>🎬 Video (Pexels)</option>
                                     <option value="flux">🎨 AI Art (FLUX)</option>
                                 </select>
+                                <button type="button" id="alignFlowTenSecBtn" class="btn-secondary btn-sm" style="padding: 5px 11px; font-size: 11.5px; background: rgba(0, 230, 255, 0.15); border: 1px solid rgba(0, 230, 255, 0.45); color: #00e6ff; border-radius: 6px; font-weight: 700; cursor: pointer;" title="Aligns all scenes into 10-second segments with Google Flow video prompts">
+                                    ⏱️ 10s Flow Sync
+                                </button>
                                 <button type="button" id="generateAllScenesBtn" class="btn-storyboard" title="Generate all scene prompts and visuals">
                                     ⚡ Generate Visuals
                                 </button>
@@ -351,9 +290,6 @@
                                     📥 Drop / Upload Files
                                     <input type="file" id="multiMediaInput" accept="image/*,video/*" multiple style="display:none;">
                                 </label>
-                                <button type="button" id="publishFromStep2Btn" class="btn-master btn-sm" style="background: linear-gradient(135deg, #ff0033 0%, #ff4b2b 100%); color: #fff; font-weight: 700; padding: 6px 14px; border-radius: 6px; border: none; cursor: pointer; display: flex; align-items: center; gap: 6px;" title="Publish this reviewed storyboard directly to YouTube">
-                                    🚀 Publish to YouTube
-                                </button>
                             </div>
                         </div>
 
@@ -460,305 +396,6 @@
                         <div id="sceneCardsList" class="scene-cards-list"></div>
                     </div>
 
-                    <!-- 🎬 CapCut Multi-Track Timeline Editor Container (Toggled via Workspace View Switcher) -->
-                    <div id="capcutEditorContainer" class="capcut-editor-container hidden">
-                        <!-- CapCut Live Progress Card (Visual Clips Fetching) -->
-                        <div id="capcutProgressCard" class="card progress-card hidden" style="margin: 0 0 10px 0; background: rgba(13, 17, 28, 0.98); border: 1px solid rgba(0, 230, 255, 0.45); padding: 12px 18px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0, 230, 255, 0.2);">
-                            <div class="progress-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                                <div style="display: flex; align-items: center; gap: 12px;">
-                                    <div class="spinner" style="width: 20px; height: 20px; border-width: 2.5px; border-top-color: #00e6ff;"></div>
-                                    <div class="progress-info">
-                                        <h4 id="capcutProgressStatus" style="font-size: 0.95rem; font-weight: 700; color: #fff; margin: 0;">Matching Vertical B-Roll (Pexels)...</h4>
-                                        <span id="capcutProgressStep" style="font-size: 0.8rem; color: #94a3b8;">Searching and downloading vertical clips per scene...</span>
-                                    </div>
-                                </div>
-                                <span id="capcutProgressPct" class="progress-pct" style="font-size: 1.25rem; font-weight: 800; color: #00e6ff;">0%</span>
-                            </div>
-                            <div class="progress-bar-bg" style="height: 8px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; overflow: hidden;">
-                                <div id="capcutProgressBar" class="progress-bar-fill" style="width: 0%; height: 100%; background: linear-gradient(90deg, #00e6ff, #a855f7); transition: width 0.25s ease; border-radius: 4px;"></div>
-                            </div>
-                        </div>
-
-                        <!-- Top Row: 9:16 Canvas Monitor + Active Clip Inspector -->
-                        <div class="capcut-workspace-top">
-                            <!-- 9:16 Monitor -->
-                            <div class="capcut-monitor-box">
-                                <div class="capcut-screen-frame">
-                                    <video id="capcutCanvasVideo" class="hidden" playsinline muted></video>
-                                    <img id="capcutCanvasImg" class="hidden" alt="Canvas Scene Preview">
-                                    <div id="capcutCanvasPlaceholder" class="capcut-canvas-placeholder">
-                                        <div style="font-size: 28px; margin-bottom: 6px;">🎬</div>
-                                        <strong>9:16 Video Monitor</strong>
-                                        <p style="margin: 4px 0 0 0; font-size: 11px; color: #64748b;">Visuals play in sync with your voiceover</p>
-                                    </div>
-                                    <div id="capcutSubtitleOverlay" class="capcut-subtitle-overlay"></div>
-                                </div>
-                                <!-- Transport Bar -->
-                                <div class="capcut-transport-bar">
-                                    <button type="button" id="capcutRwBtn" class="capcut-transport-btn" title="Back 1s">⏪</button>
-                                    <button type="button" id="capcutPlayBtn" class="capcut-transport-btn btn-play" title="Play/Pause (Spacebar)">▶</button>
-                                    <button type="button" id="capcutFwBtn" class="capcut-transport-btn" title="Forward 1s">⏩</button>
-                                    <span id="capcutCurrentTime" class="capcut-timecode-badge">0:00 / 0:00</span>
-                                </div>
-                            </div>
-
-                            <!-- Tabbed Inspector & Studio Panel -->
-                            <div class="capcut-inspector-box">
-                                <!-- Tab Navigation Bar -->
-                                <div class="capcut-inspector-tab-nav">
-                                    <button type="button" class="capcut-tab-nav-btn active" id="capcutTabBtnInspector">
-                                        ✂️ Clip Narration
-                                    </button>
-                                    <button type="button" class="capcut-tab-nav-btn" id="capcutTabBtnAutoSync">
-                                        ⚡ Auto-Sync
-                                    </button>
-                                    <button type="button" class="capcut-tab-nav-btn" id="capcutTabBtnProTools">
-                                        🎨 B-Roll & Style
-                                    </button>
-                                </div>
-
-                                <!-- Tab 1: Clip Inspector -->
-                                <div class="capcut-tab-panel" id="capcutPanelInspector">
-                                    <div class="capcut-inspector-header">
-                                        <div class="capcut-inspector-title">
-                                            <span>🎬</span>
-                                            <span id="capcutInspectorHeader">Scene 1</span>
-                                        </div>
-                                        <button type="button" id="capcutSaveTextBtn" class="btn-secondary btn-xs" style="padding: 4px 10px; background: rgba(0, 230, 255, 0.15); color: #00e6ff; border: 1px solid rgba(0, 230, 255, 0.3); font-weight: 700; border-radius: 4px; cursor: pointer;">
-                                            💾 Save Text
-                                        </button>
-                                    </div>
-
-                                    <div class="capcut-inspector-body">
-                                        <div>
-                                            <label class="capcut-field-label">Spoken Narration</label>
-                                            <textarea id="capcutInspectorText" class="capcut-inspector-textarea" rows="2" placeholder="Spoken line for this scene..."></textarea>
-                                        </div>
-
-                                        <div>
-                                            <label class="capcut-field-label">Clip Timing</label>
-                                            <div class="capcut-duration-row">
-                                                <button type="button" id="capcutDurMinusBtn" class="capcut-duration-btn">- 0.5s</button>
-                                                <input type="number" id="capcutDurationInput" class="capcut-duration-input" step="0.1" min="0.8" value="3.0">
-                                                <button type="button" id="capcutDurPlusBtn" class="capcut-duration-btn">+ 0.5s</button>
-                                                <span style="font-size: 11px; color: #94a3b8;">Seconds</span>
-                                            </div>
-                                        </div>
-
-                                        <div>
-                                            <label class="capcut-field-label">Visual Media Tools</label>
-                                            <div class="capcut-tool-btn-grid">
-                                                <button type="button" id="capcutFindVideoBtn" class="capcut-tool-btn btn-primary-tool" title="Search vertical stock clips on Pexels">
-                                                    <span>🎬 Stock Video</span>
-                                                </button>
-                                                <button type="button" id="capcutGenFluxBtn" class="capcut-tool-btn" title="Generate AI Image via FLUX">
-                                                    <span>🎨 AI Art</span>
-                                                </button>
-                                                <button type="button" id="capcutUploadBtn" class="capcut-tool-btn" title="Upload custom MP4 or image">
-                                                    <span>📁 Upload</span>
-                                                </button>
-                                                <input type="file" id="capcutUploadInput" accept="image/*,video/*" style="display: none;">
-                                                <button type="button" id="capcutSplitBtn" class="capcut-tool-btn" title="Split scene at specific word">
-                                                    <span>✂️ Split Word</span>
-                                                </button>
-                                                <button type="button" id="capcutClearMediaBtn" class="capcut-tool-btn" title="Remove assigned visual">
-                                                    <span>🗑️ Clear</span>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Tab 2: Smart Auto-Sync -->
-                                <div class="capcut-tab-panel hidden" id="capcutPanelAutoSync">
-                                    <div class="capcut-pro-header">
-                                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
-                                            <h4 style="margin: 0; font-size: 13px; font-weight: 800; color: #fff;">
-                                                ⚡ Retention & Auto-Sync
-                                            </h4>
-                                            <span class="capcut-pill-badge" id="capcutRetentionBadge">Retention: High</span>
-                                        </div>
-                                        <p style="margin: 3px 0 0 0; font-size: 11px; color: #94a3b8;">
-                                            Sync voiceover with visual pacing to maintain maximum viewer attention.
-                                        </p>
-                                    </div>
-
-                                    <div class="capcut-pro-body">
-                                        <!-- Feature 1: Snap Visuals to Spoken Audio -->
-                                        <div class="capcut-pro-card">
-                                            <div class="capcut-pro-card-title">
-                                                <span>🎙️ 1. Lock Visuals to Voice</span>
-                                                <span class="capcut-tag-pill">Zero Lag</span>
-                                            </div>
-                                            <p class="capcut-pro-card-desc">
-                                                Conforms visual clip durations strictly to spoken narration boundaries.
-                                            </p>
-                                            <button type="button" id="capcutVoiceLockBtn" class="capcut-action-btn btn-cyan">
-                                                ⚡ Snap Visuals to Voiceover
-                                            </button>
-                                        </div>
-
-                                        <!-- Feature 2: Viral Retention Pacing Sub-Cuts -->
-                                        <div class="capcut-pro-card">
-                                            <div class="capcut-pro-card-title">
-                                                <span>✂️ 2. Retention Anti-Boredom Pacing</span>
-                                                <span class="capcut-tag-pill">Hook Guard</span>
-                                            </div>
-                                            <p class="capcut-pro-card-desc">
-                                                Auto-subcuts long scenes at natural pauses so visuals stay dynamic.
-                                            </p>
-                                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 4px 0;">
-                                                <label style="font-size: 11px; color: #cbd5e1; font-weight: 600;">Max Clip Pacing:</label>
-                                                <select id="capcutMaxCutSelect" class="capcut-select-dropdown">
-                                                    <option value="1.8">🔥 Hyper Pacing (1.8s)</option>
-                                                    <option value="2.8" selected>⚡ Viral Standard (2.8s)</option>
-                                                    <option value="3.5">🎬 Cinematic Flow (3.5s)</option>
-                                                </select>
-                                            </div>
-                                            <button type="button" id="capcutViralPaceBtn" class="capcut-action-btn btn-purple">
-                                                ✂️ Auto-Subcut Long Scenes
-                                            </button>
-                                        </div>
-
-                                        <!-- Timeline Health & Retention Stats -->
-                                        <div class="capcut-health-box" id="capcutPacingHealthBox">
-                                            <div class="health-stat">
-                                                <span class="stat-label">Total Time</span>
-                                                <span class="stat-val" id="capcutStatTotalDur">0.0s</span>
-                                            </div>
-                                            <div class="health-stat">
-                                                <span class="stat-label">Scenes</span>
-                                                <span class="stat-val" id="capcutStatSceneCount">0</span>
-                                            </div>
-                                            <div class="health-stat">
-                                                <span class="stat-label">Avg Pace</span>
-                                                <span class="stat-val" id="capcutStatAvgPace">0.0s</span>
-                                            </div>
-                                            <div class="health-stat">
-                                                <span class="stat-label">Longest</span>
-                                                <span class="stat-val" id="capcutStatLongest">0.0s</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Tab 3: Pro Tools & LUTs -->
-                                <div class="capcut-tab-panel hidden" id="capcutPanelProTools">
-                                    <div class="capcut-pro-header">
-                                        <h4 style="margin: 0; font-size: 13px; font-weight: 800; color: #fff;">
-                                            🎨 B-Roll & Style Studio
-                                        </h4>
-                                        <p style="margin: 3px 0 0 0; font-size: 11px; color: #94a3b8;">
-                                            Fast automated tools to polish your Short in seconds.
-                                        </p>
-                                    </div>
-
-                                    <div class="capcut-pro-body">
-                                        <!-- 1-Click Smart Match All B-Roll -->
-                                        <div class="capcut-pro-card">
-                                            <div class="capcut-pro-card-title">
-                                                <span>🤖 Smart Match All Visuals</span>
-                                                <span class="capcut-tag-pill">Pexels 1-Click</span>
-                                            </div>
-                                            <p class="capcut-pro-card-desc">
-                                                Auto-scans narration and assigns matching vertical clips for all scenes.
-                                            </p>
-                                            <div style="display: flex; align-items: center; gap: 8px; margin: 4px 0;">
-                                                <input type="checkbox" id="capcutForceMatchAllCheck" style="cursor: pointer;">
-                                                <label for="capcutForceMatchAllCheck" style="font-size: 11px; color: #cbd5e1; cursor: pointer;">
-                                                    Replace existing clips
-                                                </label>
-                                            </div>
-                                            <button type="button" id="capcutSmartMatchAllBtn" class="capcut-action-btn btn-purple">
-                                                🤖 Auto-Match All B-Roll Clips
-                                            </button>
-                                        </div>
-
-                                        <!-- Cinematic Color LUTs -->
-                                        <div class="capcut-pro-card">
-                                            <div class="capcut-pro-card-title">
-                                                <span>🎨 Cinematic LUT / Color Grade</span>
-                                                <span class="capcut-tag-pill">Instant 60fps</span>
-                                            </div>
-                                            <p class="capcut-pro-card-desc">
-                                                Real-time color grade on canvas; baked into final video stitch.
-                                            </p>
-                                            <select id="capcutColorFilterSelect" class="capcut-select-dropdown" style="width: 100%; margin-top: 4px;">
-                                                <option value="none">Original (Natural Clean)</option>
-                                                <option value="viral_punch">⚡ Viral Punch (+18% Contrast, +25% Saturation)</option>
-                                                <option value="moody_noir">🎬 Moody Noir (Dramatic High-Contrast B&W)</option>
-                                                <option value="teal_orange">🌅 Teal & Orange (Hollywood Cinema Grade)</option>
-                                                <option value="warm_film">🎞️ Warm 35mm (Vintage Warm Golden Film)</option>
-                                                <option value="cyberpunk">🌌 Cyberpunk Neon (Cool Blue & Electric Magenta)</option>
-                                            </select>
-                                        </div>
-
-                                        <!-- Playhead Split / Magnetic Razor -->
-                                        <div class="capcut-pro-card">
-                                            <div class="capcut-pro-card-title">
-                                                <span>✂️ Split at Playhead (Razor)</span>
-                                                <span class="capcut-hotkey-pill">Shortcut: S</span>
-                                            </div>
-                                            <p class="capcut-pro-card-desc">
-                                                Splits the active scene directly where the red playhead needle is scrubbing.
-                                            </p>
-                                            <button type="button" id="capcutSplitAtPlayheadBtn" class="capcut-action-btn btn-cyan">
-                                                ✂️ Split at Playhead Needle
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Bottom Multi-Track Timeline -->
-                        <div class="capcut-timeline-wrapper">
-                            <!-- Timeline Toolbar -->
-                            <div class="capcut-timeline-toolbar">
-                                <div style="display: flex; align-items: center; gap: 8px;">
-                                    <span style="font-size: 11.5px; font-weight: 700; color: #fff;">Tracks:</span>
-                                    <button type="button" id="capcutToolbarSplitBtn" class="capcut-toolbar-btn" title="Split scene at playhead (Hotkey: S)">
-                                        ✂️ Razor (S)
-                                    </button>
-                                    <button type="button" id="capcutToolbarAutoSyncBtn" class="capcut-toolbar-btn btn-teal-glow" title="Auto-Sync narration with visuals">
-                                        ⚡ Auto-Sync
-                                    </button>
-                                    <button type="button" id="capcutToolbarMatchBtn" class="capcut-toolbar-btn" title="Auto-match vertical B-roll visuals">
-                                        🤖 Match All
-                                    </button>
-                                </div>
-                                <div class="capcut-zoom-controls">
-                                    <span>Zoom:</span>
-                                    <button type="button" id="capcutZoomOutBtn" class="capcut-duration-btn" style="padding: 2px 8px; font-size: 11px;">−</button>
-                                    <button type="button" id="capcutZoomInBtn" class="capcut-duration-btn" style="padding: 2px 8px; font-size: 11px;">+</button>
-                                    <button type="button" id="capcutStitchBtn" class="btn-master btn-sm" style="margin-left: 12px; background: linear-gradient(135deg, #00e6ff 0%, #0077b6 100%); color: #000; font-weight: 800; border: none; padding: 5px 14px; border-radius: 4px; cursor: pointer;">
-                                        ⚡ Stitch & Render Video
-                                    </button>
-                                </div>
-                            </div>
-
-                            <!-- Viewport & Tracks -->
-                            <div class="capcut-timeline-viewport" id="capcutTimelineViewport">
-                                <!-- Red Scrubbing Playhead Needle -->
-                                <div class="capcut-playhead" id="capcutPlayhead">
-                                    <div class="capcut-playhead-cap"></div>
-                                </div>
-
-                                <!-- Track 0: Time Ruler -->
-                                <div class="capcut-ruler-track" id="capcutRulerTrack"></div>
-
-                                <!-- Tracks Container -->
-                                <div class="capcut-tracks-area">
-                                    <!-- Track 1: Visuals (Clips) -->
-                                    <div class="capcut-track-row" id="capcutVisualsTrack" title="Visual Clips Track"></div>
-
-                                    <!-- Track 2: Audio (Voiceover) -->
-                                    <div class="capcut-track-row audio-track" id="capcutAudioTrack" title="Spoken Voiceover Track"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
                     <!-- Step 2 Navigation Footer -->
                     <div class="step-nav-footer">
                         <button class="btn-google-back" id="backToStep1Btn">
@@ -774,11 +411,12 @@
                 <div class="step-panel hidden" id="stepPanel3">
                     <!-- Subtitle Styling -->
                     <div class="card">
-                        <div class="card-header">
+                        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
                             <div class="card-title">
                                 <span class="icon">💬</span>
                                 <h3>Viral Subtitles Presets</h3>
                             </div>
+                            <span class="tag-pill" style="font-size: 11px; padding: 3px 8px; background: rgba(0, 230, 255, 0.12); border: 1px solid rgba(0, 230, 255, 0.35); color: #00e6ff; border-radius: 4px;">Live Typewriter Sync (5-6 words live)</span>
                         </div>
 
                         <div class="subtitle-presets">
@@ -894,27 +532,6 @@
                             <span class="btn-icon">⚡</span>
                             <span class="btn-text">GENERATE VIRAL SHORT (1080x1920)</span>
                         </button>
-
-                        <div class="form-group" style="margin-top: 16px; margin-bottom: 8px;">
-                            <label for="ytChannelSelectStep4" style="font-size: 12px; font-weight: 600; color: #b4b9cc;">Target YouTube Channel</label>
-                            <select id="ytChannelSelectStep4" class="form-select compact-select" style="padding: 8px 12px; width: 100%;">
-                                <option value="">Loading Channels...</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group" style="margin-bottom: 6px;">
-                            <label for="ytPrivacySelectStep4" style="font-size: 12px; font-weight: 600; color: #b4b9cc;">YouTube Upload Privacy</label>
-                            <select id="ytPrivacySelectStep4" class="form-select compact-select" style="padding: 8px 12px; width: 100%;">
-                                <option value="public" selected>Public (Immediate Live)</option>
-                                <option value="unlisted">Unlisted (Review First)</option>
-                                <option value="private">Private</option>
-                            </select>
-                        </div>
-
-                        <button type="button" id="publishProjectToYoutubeBtn" class="btn-master" style="margin-top: 8px; background: linear-gradient(135deg, #ff0033 0%, #cc0029 100%); box-shadow: 0 4px 16px rgba(255, 0, 51, 0.35);">
-                            <span class="btn-icon">▶️</span>
-                            <span class="btn-text">PUBLISH THIS SHORT TO YOUTUBE</span>
-                        </button>
                     </div>
 
                     <!-- Step 4 Navigation Footer -->
@@ -1011,31 +628,7 @@
                             style="flex: 1; padding: 12px; font-size: 13px; font-weight: 600; border-radius: 8px; background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(168, 85, 247, 0.4); color: #c084fc; cursor: pointer; white-space: nowrap;">
                             🔄 Replace Thumbnail
                         </button>
-                        <a id="viewYouTubeBtn" class="btn-download hidden" target="_blank" href="#" style="background: linear-gradient(135deg, #ff0033 0%, #cc0029 100%); flex: 1; text-align: center;">
-                            ▶️ Watch on YouTube
-                        </a>
                     </div>
-
-                    <!-- YouTube Published Short Callout Banner -->
-                    <div id="ytPublishedBanner" class="card hidden" style="border: 2px solid #00e676; background: rgba(0, 230, 118, 0.09); margin-top: 16px; padding: 16px;">
-                        <div class="card-header" style="margin-bottom: 6px;">
-                            <div class="card-title">
-                                <span class="icon">🎉</span>
-                                <h3 style="color: #00e676; font-size: 16px;">Published to YouTube!</h3>
-                            </div>
-                        </div>
-                        <p id="ytPublishedSubtext" style="font-size: 13px; color: #e0e0e0; margin-bottom: 12px;">
-                            Your 60-second vertical Short is live on YouTube.
-                        </p>
-                        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                            <input type="text" id="ytVideoUrlInput" class="seo-input" readonly style="flex: 1; min-width: 180px; font-size: 13px; background: rgba(0,0,0,0.4); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15);">
-                            <button type="button" class="btn-copy" id="copyYtLinkBtn" data-target="ytVideoUrlInput" style="padding: 8px 12px;">📋 Copy</button>
-                            <a id="openYtLinkBtn" class="btn-secondary btn-sm" target="_blank" href="#" style="background: #ff0033; color: #fff; text-decoration: none; padding: 8px 14px; border-radius: 6px; font-weight: 600;">▶️ Open</a>
-                            <a id="editInStudioBtn" class="btn-secondary btn-sm" target="_blank" href="#" style="background: #2563eb; color: #fff; text-decoration: none; padding: 8px 14px; border-radius: 6px; font-weight: 600;">⚙️ Edit in Studio</a>
-                        </div>
-                        <p id="ytPrivacyNotice" style="font-size: 12px; color: #94a3b8; margin-top: 10px; margin-bottom: 0; line-height: 1.4; display: none;"></p>
-                    </div>
-                </div>
 
                 <!-- YouTube Monetization & SEO Kit -->
                 <div id="seoKitCard" class="card seo-card hidden">
@@ -1078,74 +671,9 @@
         </main>
     </div>
 
-    <script type="module" src="/static/js/main.js?v=20261001_v7"></script>
+    <script type="module" src="/static/js/main.js?v=20261010_v1"></script>
 
     <!-- Google Material Toast Notifications Container -->
     <div id="toastContainer" class="google-toast-container"></div>
-
-    <!-- YouTube Channel Manager Modal -->
-    <div id="channelModalOverlay" style="display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.78); backdrop-filter: blur(6px); z-index: 9999; align-items: center; justify-content: center; padding: 16px;">
-        <div class="card" style="width: 100%; max-width: 580px; max-height: 90vh; overflow-y: auto; background: #131726; border: 1px solid rgba(255, 51, 75, 0.4); box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6); border-radius: 14px; padding: 24px; box-sizing: border-box;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 12px;">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <span style="font-size: 24px;">📺</span>
-                    <div>
-                        <h3 style="margin: 0; font-size: 18px; color: #fff; font-weight: 700;">YouTube Channel Manager</h3>
-                        <p style="margin: 2px 0 0 0; font-size: 12px; color: #a0a5b8;">Connect multiple channels, switch accounts, or import/export tokens</p>
-                    </div>
-                </div>
-                <button type="button" id="closeChannelModalBtn" style="background: none; border: none; color: #8f95b2; font-size: 22px; cursor: pointer; padding: 4px 8px; border-radius: 6px;">✕</button>
-            </div>
-
-            <!-- Connected Channels List -->
-            <div style="margin-bottom: 20px;">
-                <h4 style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; color: #b4b9cc; margin-bottom: 10px;">Connected Channels</h4>
-                <div id="channelsListContainer" style="display: flex; flex-direction: column; gap: 8px;">
-                    <div style="text-align: center; padding: 16px; color: #737996; font-size: 13px;">Loading channels...</div>
-                </div>
-            </div>
-
-            <!-- Add Channel Actions -->
-            <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 16px; margin-bottom: 16px;">
-                <h4 style="font-size: 13px; color: #fff; margin: 0 0 10px 0; font-weight: 600;">➕ Connect Another Channel</h4>
-                
-                <div style="display: flex; flex-direction: column; gap: 12px;">
-                    <!-- Option 1: Browser OAuth (1-Click Web Login) -->
-                    <button type="button" id="addNewChannelOAuthBtn" class="btn-secondary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; font-size: 13px; font-weight: 600; background: rgba(255, 51, 75, 0.15); border: 1px solid rgba(255, 51, 75, 0.4); color: #ff5268; cursor: pointer; border-radius: 8px;">
-                        <span>🌐</span> Authorize with Google Account (1-Click Login)
-                    </button>
-
-                    <!-- Option 2: Import Token (Render / Headless) -->
-                    <div style="border-top: 1px solid rgba(255, 255, 255, 0.06); padding-top: 10px;">
-                        <span style="font-size: 12px; color: #b4b9cc; display: block; margin-bottom: 8px;">
-                            <strong>Render / Cloud Deploy:</strong> Import token credentials JSON from your local PC or upload <code style="color: #60a5fa;">token.json</code>
-                        </span>
-                        
-                        <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-                            <input type="file" id="uploadTokenFileInput" accept=".json" style="display: none;">
-                            <button type="button" id="triggerTokenFileUploadBtn" class="btn-secondary btn-sm" style="flex: 1; padding: 8px; font-size: 12px; cursor: pointer; border-radius: 6px;">
-                                📁 Upload token.json File
-                            </button>
-                            <button type="button" id="togglePasteTokenBtn" class="btn-secondary btn-sm" style="flex: 1; padding: 8px; font-size: 12px; cursor: pointer; border-radius: 6px;">
-                                📝 Paste JSON String
-                            </button>
-                        </div>
-
-                        <div id="pasteTokenArea" style="display: none; margin-top: 8px;">
-                            <textarea id="tokenJsonInput" rows="3" style="width: 100%; font-size: 12px; font-family: monospace; padding: 8px; background: rgba(10, 12, 22, 0.85); border: 1px solid rgba(255, 255, 255, 0.15); color: #fff; border-radius: 6px; box-sizing: border-box; resize: vertical;" placeholder='{"token": "ya29...", "refresh_token": "..."}'></textarea>
-                            <button type="button" id="submitImportTokenBtn" class="btn-master" style="width: 100%; margin-top: 6px; padding: 8px; font-size: 13px; cursor: pointer; border-radius: 6px;">
-                                Import & Link Channel
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Render Deploy Guide Note -->
-            <div style="background: rgba(96, 165, 250, 0.08); border: 1px solid rgba(96, 165, 250, 0.25); border-radius: 8px; padding: 12px; font-size: 12px; color: #cbd5e1; line-height: 1.45;">
-                💡 <strong>Render Deploy Tip:</strong> You can link any channel on your local PC, click <strong>"Export"</strong> to copy the credentials, and import them here on Render! You can also paste <code style="color: #93c5fd;">token.json</code> directly in Render's <strong>Secret Files</strong>.
-            </div>
-        </div>
-    </div>
 </body>
 </html>

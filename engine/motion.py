@@ -5,9 +5,10 @@ Handles Ken Burns camera moves, video scene clips, and blank failsafe clips.
 
 import os
 import time
+import re
 import urllib.request
 import subprocess
-from typing import Any, Union
+from typing import Any, Union, Optional
 import imageio_ffmpeg
 
 FFMPEG_EXE = imageio_ffmpeg.get_ffmpeg_exe()
@@ -174,14 +175,43 @@ def make_blank_clip(duration: float, output_path: str, width: int = 1080, height
     return res.returncode == 0 and os.path.exists(output_path)
 
 
+def probe_media_duration(file_path: str) -> Optional[float]:
+    """Measures media duration in seconds via ffmpeg stderr."""
+    if not os.path.exists(file_path):
+        return None
+    try:
+        cmd = [FFMPEG_EXE, "-i", os.path.abspath(file_path)]
+        res = subprocess.run(cmd, capture_output=True, text=True, errors="replace", timeout=8)
+        dur_match = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.\d+)", res.stderr)
+        if dur_match:
+            hours = float(dur_match.group(1))
+            mins = float(dur_match.group(2))
+            secs = float(dur_match.group(3))
+            return hours * 3600.0 + mins * 60.0 + secs
+    except Exception:
+        pass
+    return None
+
+
 def make_video_scene_clip(src_video_path: str, duration: float, output_path: str, width: int = 1080, height: int = 1920) -> bool:
-    """Scales, crops to target dimensions, and trims or loops video to exact duration."""
+    """Scales, crops to target dimensions, and trims, retimes or loops video to exact duration."""
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-    vf = f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},fps=25,format=yuv420p"
+    src_dur = probe_media_duration(src_video_path)
+
+    # Smart 10s Google Flow Retiming:
+    # If source clip is ~10s (6.5s - 13.0s) and requested scene duration is within 5.0s - 15.0s,
+    # smoothly retime via setpts so the entire 10s visual action fits scene duration 100%!
+    if src_dur and 6.5 <= src_dur <= 13.0 and 5.0 <= duration <= 15.0 and abs(duration - src_dur) > 0.3:
+        pts_scale = duration / src_dur
+        vf = f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},setpts={pts_scale:.4f}*PTS,fps=25,format=yuv420p"
+        input_args = ["-i", os.path.abspath(src_video_path)]
+    else:
+        vf = f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},fps=25,format=yuv420p"
+        input_args = ["-stream_loop", "-1", "-i", os.path.abspath(src_video_path)]
+
     cmd = [
         FFMPEG_EXE, "-y",
-        "-stream_loop", "-1",
-        "-i", os.path.abspath(src_video_path),
+        *input_args,
         "-vf", vf,
         "-r", "25",
         "-t", f"{duration:.2f}",
@@ -196,3 +226,4 @@ def make_video_scene_clip(src_video_path: str, duration: float, output_path: str
     ]
     res = subprocess.run(cmd, capture_output=True)
     return res.returncode == 0 and os.path.exists(output_path)
+

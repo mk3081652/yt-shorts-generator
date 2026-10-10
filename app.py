@@ -61,6 +61,7 @@ from engine.project import (
     smart_match_all_visuals,
     apply_color_filter,
     reorder_scene,
+    align_project_to_flow_ten_sec,
     Project,
     Scene
 )
@@ -192,6 +193,7 @@ class CreateProjectRequest(BaseModel):
     start: Optional[str] = "auto"
     manual_delimiter: bool = False
     visual_source: Optional[str] = "video"
+    flow_ten_sec: bool = False
 
 
 class VoicePreviewRequest(BaseModel):
@@ -533,11 +535,22 @@ def api_create_project(req: CreateProjectRequest):
             start=req.start or "auto",
             manual_delimiter=req.manual_delimiter,
             visual_source=req.visual_source or "video",
-            api_key=os.environ.get("GEMINI_API_KEY", None)
+            api_key=os.environ.get("GEMINI_API_KEY", None),
+            flow_ten_sec=bool(req.flow_ten_sec)
         )
         return proj.to_dict()
     except Exception as e:
         log_and_raise_safe(e, "Failed to create project", status_code=500)
+
+
+@app.post("/api/projects/{id}/align_flow_ten_sec")
+def api_align_flow_ten_sec(id: str):
+    """1-Click Google Flow 10s Alignment: Re-segments script to ~10s scenes with Flow prompts."""
+    validate_session_id(id)
+    proj, err, code = align_project_to_flow_ten_sec(id)
+    if err:
+        raise HTTPException(status_code=code, detail=err)
+    return proj.to_dict()
 
 
 @app.post("/api/prepare_scenes")

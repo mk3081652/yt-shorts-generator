@@ -37,8 +37,8 @@ class TestPhase1Foundation(unittest.TestCase):
     def test_config_defaults(self):
         """Test default values of config getters."""
         with patch.dict("os.environ", {}, clear=True):
-            self.assertEqual(config.get_gemini_model(), "gemini-3.8-flash")
-            self.assertEqual(config.get_gemini_fallback_models(), ["gemini-3.7-flash", "gemini-flash-latest"])
+            self.assertEqual(config.get_gemini_model(), "gemini-flash-lite-latest")
+            self.assertEqual(config.get_gemini_fallback_models(), ["gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-3.1-flash-lite-preview"])
             self.assertEqual(config.get_gemini_thinking_level(), "low")
             self.assertEqual(config.get_vision_qa(), 0)
             self.assertEqual(config.get_flux_model(), "@cf/black-forest-labs/flux-1-schnell")

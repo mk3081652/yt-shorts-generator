@@ -330,3 +330,83 @@ def create_rapid_story_beats(
         max_dur=3.2,
         rapid_mode=True
     )
+
+
+def split_into_ten_sec_beats(
+    script_text: str,
+    target_clip_dur: float = 10.0
+) -> List[Tuple[str, float]]:
+    """
+    Aligns ANY script 100% to 10-second video clips (e.g. Google Flow / Veo):
+    - Spoken narration is ~150 words per minute (~2.5 words per second).
+    - A 10.0-second video clip naturally fits ~24 to 26 spoken words.
+    - Breaks any script at natural sentence or clause boundaries closest to the 10-second mark.
+    - Guarantees 100% verbatim script preservation.
+    - Each resulting scene beat is locked to 10.0s for 1:1 alignment with 10s clips.
+    """
+    clean = script_text.strip()
+    if not clean:
+        return []
+
+    words = clean.split()
+    total_words = len(words)
+    if total_words == 0:
+        return []
+
+    # Calculate number of 10s scenes: ~25 words per 10s clip
+    target_words_per_scene = 25
+    num_scenes = max(1, int(round(total_words / target_words_per_scene)))
+
+    # If script is very short (< 18 words), single 10s scene
+    if num_scenes <= 1:
+        return [(clean, target_clip_dur)]
+
+    # Split script into natural sentences and clauses
+    sentence_delims = re.compile(r'([.!?]+(?:\s+|$))')
+    raw_sents = [s.strip() for s in sentence_delims.split(clean) if s.strip()]
+
+    # Recombine delimiter with preceding sentence
+    sentences = []
+    i = 0
+    while i < len(raw_sents):
+        part = raw_sents[i]
+        if i + 1 < len(raw_sents) and sentence_delims.match(raw_sents[i + 1]):
+            part = f"{part}{raw_sents[i + 1].strip()}"
+            i += 2
+        else:
+            i += 1
+        sentences.append(part)
+
+    # Group sentences into chunks of ~target_words_per_scene
+    ideal_w_per_chunk = total_words / float(num_scenes)
+    chunks = []
+    cur_chunk = []
+    cur_words = 0
+
+    for s in sentences:
+        s_w_count = len(s.split())
+        # If adding this sentence would exceed ideal count and we already have words,
+        # decide whether to close chunk or add
+        if cur_words > 0 and (cur_words + s_w_count > ideal_w_per_chunk * 1.3) and len(chunks) < num_scenes - 1:
+            chunks.append(" ".join(cur_chunk).strip())
+            cur_chunk = [s]
+            cur_words = s_w_count
+        else:
+            cur_chunk.append(s)
+            cur_words += s_w_count
+
+    if cur_chunk:
+        chunks.append(" ".join(cur_chunk).strip())
+
+    # Verbatim check
+    joined_check = " ".join(chunks).split()
+    if joined_check != words:
+        # Fallback to direct word slicing if punctuation parsing missed something
+        chunks = []
+        step = max(10, int(round(total_words / float(num_scenes))))
+        for idx in range(0, total_words, step):
+            chunks.append(" ".join(words[idx:idx + step]))
+
+    # Assign 10.0s per scene
+    return [(chunk, target_clip_dur) for chunk in chunks if chunk.strip()]
+

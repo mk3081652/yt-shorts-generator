@@ -413,9 +413,10 @@ def render_shorts_video(
             word_boundaries=word_boundaries,
             output_ass_path=ass_path,
             style_name=subtitle_style,
-            max_words_per_segment=2,
+            max_words_per_segment=5,
             high_impact_words=HIGH_IMPACT_KEYWORDS,
-            hook_banner=hook_banner_cfg
+            hook_banner=hook_banner_cfg,
+            progressive_typing=True
         )
 
         # Target Resolution: Defaults to 720p on Render/cloud for 3x speedup, or 1080p if explicitly specified

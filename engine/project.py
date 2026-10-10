@@ -71,6 +71,7 @@ class Scene:
     selected_reason: Optional[str] = None
     candidate_count: int = 0
     ai_ranking_score: Optional[int] = None
+    google_flow_prompt: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
@@ -139,7 +140,8 @@ class Scene:
             selected_query=data.get("selected_query"),
             selected_reason=data.get("selected_reason"),
             candidate_count=int(data.get("candidate_count", 0)),
-            ai_ranking_score=data.get("ai_ranking_score")
+            ai_ranking_score=data.get("ai_ranking_score"),
+            google_flow_prompt=data.get("google_flow_prompt", "")
         )
 
 
@@ -300,7 +302,8 @@ def create_project(
     start: str = "auto",
     manual_delimiter: bool = False,
     visual_source: str = "video",
-    api_key: Optional[str] = None
+    api_key: Optional[str] = None,
+    flow_ten_sec: bool = False
 ) -> Project:
     """Creates a new Project, runs the Director, and queues generation if mode=auto."""
     p_id = uuid.uuid4().hex
@@ -308,17 +311,23 @@ def create_project(
     total_dur = max(3.0, round(len(words) / 2.7, 2))
 
     # 1. Break into verbatim story beats (honoring user scene breaks & markers)
-    beats = create_story_beats(script, total_dur)
+    if flow_ten_sec:
+        from engine.beats import split_into_ten_sec_beats
+        beats = split_into_ten_sec_beats(script, target_clip_dur=10.0)
+        total_dur = round(len(beats) * 10.0, 2)
+    else:
+        beats = create_story_beats(script, total_dur)
     if not beats:
         beats = [(script.strip(), total_dur)]
 
     # Clean narration text for TTS voiceover & project script
     clean_narration = " ".join(t for t, _ in beats).strip() or script.strip()
     words = clean_narration.split()
-    total_dur = max(3.0, round(len(words) / 2.7, 2))
-    sum_dur = sum(d for _, d in beats)
-    if sum_dur > 0:
-        beats = [(t, max(1.8, round((d / sum_dur) * total_dur, 2))) for t, d in beats]
+    if not flow_ten_sec:
+        total_dur = max(3.0, round(len(words) / 2.7, 2))
+        sum_dur = sum(d for _, d in beats)
+        if sum_dur > 0:
+            beats = [(t, max(1.8, round((d / sum_dur) * total_dur, 2))) for t, d in beats]
 
     # 2. Plan storyboard with director
     plan_dict, is_basic = plan_scenes_with_director(clean_narration, beats, api_key=api_key)
@@ -330,12 +339,13 @@ def create_project(
             text=s_dict.get("text", ""),
             image_prompt=s_dict.get("image_prompt", ""),
             video_prompt=s_dict.get("video_prompt", ""),
+            google_flow_prompt=s_dict.get("google_flow_prompt", ""),
             motion=s_dict.get("camera_motion", "push in"),
             status="empty",
             media_type="blank",
             hold_previous=bool(s_dict.get("hold_previous", False)),
             entities=s_dict.get("entities", []),
-            duration=float(s_dict.get("duration", 3.0)),
+            duration=float(s_dict.get("duration", 10.0 if flow_ten_sec else 3.0)),
             broll_keywords=list(s_dict.get("broll_keywords") or []),
             visual_type=str(s_dict.get("visual_type") or "literal"),
             visual_priority=str(s_dict.get("visual_priority") or "medium"),
@@ -1313,6 +1323,58 @@ def redo_project(project_id: str) -> Tuple[Optional[Project], Optional[str], int
 # CAPCUT TIMELINE PRO SUITE: AUTO-SYNC, MAGNETIC RAZOR, SMART MATCH, COLOR LUTS
 # ==============================================================================
 
+def align_project_to_flow_ten_sec(project_id: str) -> Tuple[Optional[Project], Optional[str], int]:
+    """
+    1-Click Google Flow 10s Alignment:
+    Re-segments the project script into natural ~10-second scenes (~25 spoken words each).
+    Generates tailored Google Flow video prompts for each 10s segment.
+    Sets each scene duration to 10.0s for 100% alignment with 10s Google Flow clips.
+    """
+    project = load_project(project_id)
+    if not project:
+        return None, "Project not found", 404
+
+    from engine.beats import split_into_ten_sec_beats
+    from engine.director import plan_scenes_with_director
+
+    beats = split_into_ten_sec_beats(project.script, target_clip_dur=10.0)
+    if not beats:
+        return None, "Cannot split empty script", 400
+
+    plan_dict, _ = plan_scenes_with_director(project.script, beats)
+    new_scenes = []
+    for s_dict in plan_dict.get("scenes", []):
+        sc = Scene(
+            id=uuid.uuid4().hex,
+            text=s_dict.get("text", ""),
+            image_prompt=s_dict.get("image_prompt", ""),
+            video_prompt=s_dict.get("video_prompt", ""),
+            google_flow_prompt=s_dict.get("google_flow_prompt", ""),
+            motion=s_dict.get("camera_motion", "push in"),
+            status="empty",
+            media_type="blank",
+            duration=10.0,
+            broll_keywords=list(s_dict.get("broll_keywords") or []),
+            visual_type=str(s_dict.get("visual_type") or "literal"),
+            visual_priority=str(s_dict.get("visual_priority") or "medium"),
+            must_show=list(s_dict.get("must_show") or []),
+            should_avoid=list(s_dict.get("should_avoid") or []),
+            search_queries=list(s_dict.get("search_queries") or []),
+            visual_strategy=str(s_dict.get("visual_strategy") or "pexels"),
+            continuity_group=str(s_dict.get("continuity_group") or ""),
+            shot_scale=str(s_dict.get("shot_scale") or "medium"),
+            motion_intensity=str(s_dict.get("motion_intensity") or "medium"),
+            mood=str(s_dict.get("mood") or "cinematic")
+        )
+        new_scenes.append(sc)
+
+    project.snapshot()
+    project.scenes = new_scenes
+    project.total_duration = round(len(new_scenes) * 10.0, 2)
+    save_project(project)
+    return project, None, 200
+
+
 def auto_sync_timeline(
     project_id: str,
     mode: str = "voice_lock",
@@ -1320,13 +1382,13 @@ def auto_sync_timeline(
 ) -> Tuple[Optional[Project], Optional[str], int]:
     """
     Auto-syncs visual scenes with spoken voiceover narration to ensure seamless alignment:
-    - mode="voice_lock": Snaps each scene's duration precisely to its spoken audio timestamp,
-      preventing stretched visuals or premature cutoffs.
-    - mode="rapid_cuts": Also auto-splits long scenes (> max_cut_dur) into dynamic sub-cuts at
-      natural word/pause boundaries to prevent viewer boredom drop-offs.
-    - mode="motion_sync": Calibrates motion parameters (e.g. hook snap zooms, steady pushes)
-      so images feel active throughout the line.
+    - mode="flow_10s": 100% alignment for 10-second Google Flow clips (~25 words per beat).
+    - mode="voice_lock": Snaps each scene's duration precisely to its spoken audio timestamp.
+    - mode="rapid_cuts": Auto-splits long scenes (> max_cut_dur) into dynamic sub-cuts.
     """
+    if mode in ("flow_10s", "ten_sec", "google_flow"):
+        return align_project_to_flow_ten_sec(project_id)
+
     project = load_project(project_id)
     if not project:
         return None, "Project not found", 404

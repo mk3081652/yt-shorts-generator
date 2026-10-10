@@ -163,7 +163,7 @@ export const api = {
     },
 
     // Project Operations
-    async createProject(script, start = "auto", manualDelimiter = false, visualSource = "video") {
+    async createProject(script, start = "auto", manualDelimiter = false, visualSource = "video", flowTenSec = false) {
         return await request("/api/projects", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -171,8 +171,15 @@ export const api = {
                 script,
                 start,
                 manual_delimiter: manualDelimiter,
-                visual_source: visualSource
+                visual_source: visualSource,
+                flow_ten_sec: flowTenSec
             })
+        });
+    },
+
+    async alignFlowTenSec(projectId) {
+        return await request(`/api/projects/${projectId}/align_flow_ten_sec`, {
+            method: "POST"
         });
     },
 

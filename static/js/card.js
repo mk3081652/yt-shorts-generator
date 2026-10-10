@@ -303,6 +303,81 @@ export function createSceneCard(scene, index, totalScenes, callbacks = {}) {
     promptGroup.appendChild(promptArea);
     contentBox.appendChild(promptGroup);
 
+    // Google Flow 10s Video Prompt Box
+    const flowPromptGroup = document.createElement("div");
+    flowPromptGroup.className = "field-group flow-prompt-group";
+    flowPromptGroup.style.marginTop = "8px";
+
+    const flowHeader = document.createElement("div");
+    flowHeader.className = "field-header-row";
+
+    const flowLabel = document.createElement("label");
+    flowLabel.className = "field-label";
+    flowLabel.style.color = "#00e6ff";
+    flowLabel.textContent = "🎬 Google Flow Clip Prompt (10s Alignment):";
+
+    const flowActions = document.createElement("div");
+    flowActions.className = "field-actions";
+
+    const copyFlowBtn = document.createElement("button");
+    copyFlowBtn.type = "button";
+    copyFlowBtn.className = "btn-text-action";
+    copyFlowBtn.style.color = "#00e6ff";
+    copyFlowBtn.style.borderColor = "rgba(0, 230, 255, 0.4)";
+    copyFlowBtn.textContent = "📋 Copy for Flow";
+    copyFlowBtn.title = "Copy prompt to clipboard for Google Flow / Veo";
+
+    const flowPromptVal = scene.google_flow_prompt || scene.video_prompt || scene.image_prompt || "";
+
+    copyFlowBtn.addEventListener("click", async () => {
+        try {
+            await navigator.clipboard.writeText(flowArea.value || flowPromptVal);
+            copyFlowBtn.textContent = "✅ Copied!";
+            setTimeout(() => { copyFlowBtn.textContent = "📋 Copy for Flow"; }, 2000);
+        } catch {
+            // Fallback for older browsers
+            flowArea.select();
+            document.execCommand("copy");
+            copyFlowBtn.textContent = "✅ Copied!";
+            setTimeout(() => { copyFlowBtn.textContent = "📋 Copy for Flow"; }, 2000);
+        }
+    });
+
+    const browseClipBtn = document.createElement("button");
+    browseClipBtn.type = "button";
+    browseClipBtn.className = "btn-text-action";
+    browseClipBtn.textContent = "📁 Browse 10s Clip";
+    browseClipBtn.title = "Select a 10s video clip from your computer for this scene";
+    browseClipBtn.addEventListener("click", () => {
+        fileInput.click();
+    });
+
+    flowActions.appendChild(copyFlowBtn);
+    flowActions.appendChild(browseClipBtn);
+
+    flowHeader.appendChild(flowLabel);
+    flowHeader.appendChild(flowActions);
+
+    const flowArea = document.createElement("textarea");
+    flowArea.className = "scene-prompt-input flow-prompt-input";
+    flowArea.rows = 2;
+    flowArea.value = flowPromptVal;
+    flowArea.placeholder = "Google Flow 10s video generation prompt...";
+    flowArea.style.borderColor = "rgba(0, 230, 255, 0.25)";
+    flowArea.style.background = "rgba(0, 230, 255, 0.04)";
+
+    flowArea.addEventListener("blur", () => {
+        const val = flowArea.value.trim();
+        scene.google_flow_prompt = val;
+        if (callbacks.onEditPrompt) {
+            callbacks.onEditPrompt(scene.id, val, "google_flow");
+        }
+    });
+
+    flowPromptGroup.appendChild(flowHeader);
+    flowPromptGroup.appendChild(flowArea);
+    contentBox.appendChild(flowPromptGroup);
+
     body.appendChild(contentBox);
     card.appendChild(body);
 
