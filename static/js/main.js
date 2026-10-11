@@ -1973,6 +1973,17 @@ document.addEventListener("DOMContentLoaded", async () => {
             showToast(`YouTube OAuth Note: ${oauthErr}`, "warning", 8000);
             window.history.replaceState({}, document.title, window.location.pathname);
         }
+
+        const projectIdParam = urlParams.get("project") || urlParams.get("project_id");
+        if (projectIdParam) {
+            api.getProject(projectIdParam).then(proj => {
+                if (proj && proj.scenes) {
+                    state.setProject(proj);
+                    goToStep(2);
+                    showToast("Loaded 3D Universe Mystery Project!", "success");
+                }
+            }).catch(e => console.warn("Failed to load project from URL param:", e));
+        }
     } catch (e) {
         console.debug("[OAuth URL Params Check]:", e);
     }
